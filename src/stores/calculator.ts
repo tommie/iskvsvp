@@ -13,14 +13,14 @@ export const useCalculatorStore = defineStore('calculator', () => {
   // Input parameters
   const initialCapital = ref(5000000)
   const development = ref(0.08)
-  const developmentStdDev = ref(0.15)
+  const developmentStdDev = ref(0.50) // 5%ile about -5%
   const withdrawalISK = ref(0.03)
   const withdrawalVP = ref(0.03)
   const badYearWithdrawalRate = ref(1.0)
   const iskTaxRate = ref(0.0296)
   const iskTaxRateStdDev = ref(0.005)
   const inflationRate = ref(0.02)
-  const inflationStdDev = ref(0.01)
+  const inflationStdDev = ref(0.07) // 5%ile slightly above zero
   const capitalGainsTax = ref(0.3)
   const startYear = ref(45)
   const yearsLater = ref(36)
