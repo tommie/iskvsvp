@@ -29,7 +29,7 @@ const handleRunSimulation = async () => {
 <template>
   <div class="card mb-4">
     <div class="card-header">
-      <h3>Inmatningsparametrar</h3>
+      <h3>Parametrar</h3>
     </div>
     <div class="card-body">
       <div class="params-grid">

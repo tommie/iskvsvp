@@ -226,7 +226,7 @@ onMounted(() => {
 <template>
   <div class="card mb-4" v-if="timeSeriesData.length > 0">
     <div class="card-header">
-      <h3>Tidsserievisualisering</h3>
+      <h3>Över tid</h3>
       <p class="mb-0 text-muted">
         Punktdiagram som visar kontovärden över tid för alla simuleringar (transparens visar täthet)
       </p>
