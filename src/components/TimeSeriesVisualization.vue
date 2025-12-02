@@ -226,10 +226,9 @@ onMounted(() => {
 <template>
   <div class="card mb-4" v-if="timeSeriesData.length > 0">
     <div class="card-header">
-      <h3>Time Series Visualization</h3>
+      <h3>Tidsserievisualisering</h3>
       <p class="mb-0 text-muted">
-        Dot plot showing account values over time across all simulations (transparency shows
-        density)
+        Punktdiagram som visar kontovärden över tid för alla simuleringar (transparens visar täthet)
       </p>
     </div>
     <div class="card-body">

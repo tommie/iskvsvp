@@ -12,9 +12,9 @@ const { simulationCount } = storeToRefs(store)
 <template>
   <div class="container my-4">
     <header class="mb-4">
-      <h1 class="display-4">ISK vs VP Monte Carlo Simulator</h1>
+      <h1 class="display-4">ISK vs VP Monte Carlo-simulator</h1>
       <p class="lead text-muted">
-        Stochastic simulation comparing ISK (Investeringssparkonto) and VP (Vanlig depå) over time
+        Stokastisk simulering som jämför ISK (Investeringssparkonto) och VP (Vanlig depå) över tid
       </p>
     </header>
 
@@ -24,10 +24,11 @@ const { simulationCount } = storeToRefs(store)
 
     <footer class="mt-5 pt-4 border-top text-muted">
       <p class="small">
-        <strong>Note:</strong> This simulator uses Monte Carlo methods to model uncertainty in
-        returns and inflation. Annual returns and inflation are modeled as normal distributions. The
-        ISK tax rate has a minimum of 1.25% and changes stochastically each year. Results show
-        statistics across {{ simulationCount.toLocaleString('sv-SE') }} simulations.
+        <strong>Observera:</strong> Denna simulator använder Monte Carlo-metoder för att modellera
+        osäkerhet i avkastning och inflation. Årlig avkastning och inflation modelleras som
+        normalfördelningar. ISK-skattesatsen har ett minimum på 1,25% och ändras stokastiskt varje
+        år. Resultaten visar statistik över
+        {{ simulationCount.toLocaleString('sv-SE') }} simuleringar.
       </p>
     </footer>
   </div>

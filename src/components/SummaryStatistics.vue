@@ -41,39 +41,48 @@ const formatPercent = (value: number | undefined): string => {
   }).format(rounded)
 }
 
+// Helper to determine cell class based on which account is better
+// For most metrics, positive = ISK better (blue)
+// For paidTax, negative = ISK paid less tax = ISK better (blue)
+const getDiffClass = (value: number | undefined, invertSign: boolean = false): string => {
+  if (value == null || isNaN(value) || value === 0) return ''
+  const isBetter = invertSign ? value < 0 : value > 0
+  return isBetter ? 'bg-primary-subtle' : 'bg-warning-subtle'
+}
+
 const hasResults = computed(() => statistics.value !== null)
 </script>
 
 <template>
   <div class="card mb-4" v-if="hasResults">
     <div class="card-header">
-      <h3>Summary Statistics</h3>
-      <p class="mb-0 text-muted">Statistics across all simulations</p>
+      <h3>Sammanfattande statistik</h3>
+      <p class="mb-0 text-muted">Statistik över alla simuleringar</p>
     </div>
     <div class="card-body">
       <div class="table-responsive">
         <table class="table table-bordered table-hover">
           <thead class="table-light">
             <tr>
-              <th rowspan="2" class="align-middle">Metric</th>
-              <th rowspan="2" class="align-middle">Account</th>
-              <th colspan="5" class="text-center">Percentiles</th>
-              <th rowspan="2" class="align-middle">Mean</th>
-              <th rowspan="2" class="align-middle">Std Dev</th>
+              <th rowspan="2" class="align-middle">Mått</th>
+              <th rowspan="2" class="align-middle">Konto</th>
+              <th colspan="5">Percentiler</th>
+              <th rowspan="2" class="align-middle">Medel</th>
+              <th rowspan="2" class="align-middle">Stdavv</th>
             </tr>
             <tr>
-              <th class="text-center">5%</th>
-              <th class="text-center">25%</th>
-              <th class="text-center">50%</th>
-              <th class="text-center">75%</th>
-              <th class="text-center">95%</th>
+              <th>5%</th>
+              <th>25%</th>
+              <th>50%</th>
+              <th>75%</th>
+              <th>95%</th>
             </tr>
           </thead>
           <tbody>
             <!-- Liquid Value -->
             <tr>
-              <td rowspan="3" class="align-middle"><strong>Likvidbelopp</strong></td>
-              <td>ISK</td>
+              <th rowspan="3" class="align-middle" scope="row">Likvidbelopp</th>
+              <th scope="row">ISK</th>
               <td>{{ formatNumber(statistics?.percentile5.liquidValueISK) }}</td>
               <td>{{ formatNumber(statistics?.percentile25.liquidValueISK) }}</td>
               <td>{{ formatNumber(statistics?.median.liquidValueISK) }}</td>
@@ -83,7 +92,7 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatNumber(statistics?.stdDev.liquidValueISK) }}</td>
             </tr>
             <tr>
-              <td>VP</td>
+              <th scope="row">VP</th>
               <td>{{ formatNumber(statistics?.percentile5.liquidValueVP) }}</td>
               <td>{{ formatNumber(statistics?.percentile25.liquidValueVP) }}</td>
               <td>{{ formatNumber(statistics?.median.liquidValueVP) }}</td>
@@ -92,21 +101,33 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatNumber(statistics?.mean.liquidValueVP) }}</td>
               <td>{{ formatNumber(statistics?.stdDev.liquidValueVP) }}</td>
             </tr>
-            <tr class="table-info">
-              <td><strong>Fördel ISK</strong></td>
-              <td>{{ formatNumber(statistics?.percentile5.liquidValueDiff) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.liquidValueDiff) }}</td>
-              <td>{{ formatNumber(statistics?.median.liquidValueDiff) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.liquidValueDiff) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.liquidValueDiff) }}</td>
-              <td>{{ formatNumber(statistics?.mean.liquidValueDiff) }}</td>
+            <tr>
+              <th scope="row">Fördel ISK</th>
+              <td :class="getDiffClass(statistics?.percentile5.liquidValueDiff)">
+                {{ formatNumber(statistics?.percentile5.liquidValueDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile25.liquidValueDiff)">
+                {{ formatNumber(statistics?.percentile25.liquidValueDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.median.liquidValueDiff)">
+                {{ formatNumber(statistics?.median.liquidValueDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile75.liquidValueDiff)">
+                {{ formatNumber(statistics?.percentile75.liquidValueDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile95.liquidValueDiff)">
+                {{ formatNumber(statistics?.percentile95.liquidValueDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.mean.liquidValueDiff)">
+                {{ formatNumber(statistics?.mean.liquidValueDiff) }}
+              </td>
               <td>{{ formatNumber(statistics?.stdDev.liquidValueDiff) }}</td>
             </tr>
 
             <!-- Paid Tax -->
             <tr>
-              <td rowspan="3" class="align-middle"><strong>Betald skatt</strong></td>
-              <td>ISK</td>
+              <th rowspan="3" class="align-middle" scope="row">Betald skatt</th>
+              <th scope="row">ISK</th>
               <td>{{ formatNumber(statistics?.percentile5.paidTaxISK) }}</td>
               <td>{{ formatNumber(statistics?.percentile25.paidTaxISK) }}</td>
               <td>{{ formatNumber(statistics?.median.paidTaxISK) }}</td>
@@ -116,7 +137,7 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatNumber(statistics?.stdDev.paidTaxISK) }}</td>
             </tr>
             <tr>
-              <td>VP</td>
+              <th scope="row">VP</th>
               <td>{{ formatNumber(statistics?.percentile5.paidTaxVP) }}</td>
               <td>{{ formatNumber(statistics?.percentile25.paidTaxVP) }}</td>
               <td>{{ formatNumber(statistics?.median.paidTaxVP) }}</td>
@@ -125,21 +146,33 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatNumber(statistics?.mean.paidTaxVP) }}</td>
               <td>{{ formatNumber(statistics?.stdDev.paidTaxVP) }}</td>
             </tr>
-            <tr class="table-warning">
-              <td><strong>Skillnad</strong></td>
-              <td>{{ formatNumber(statistics?.percentile5.paidTaxDiff) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.paidTaxDiff) }}</td>
-              <td>{{ formatNumber(statistics?.median.paidTaxDiff) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.paidTaxDiff) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.paidTaxDiff) }}</td>
-              <td>{{ formatNumber(statistics?.mean.paidTaxDiff) }}</td>
+            <tr>
+              <th scope="row">Fördel ISK</th>
+              <td :class="getDiffClass(statistics?.percentile5.paidTaxDiff, true)">
+                {{ formatNumber(statistics?.percentile5.paidTaxDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile25.paidTaxDiff, true)">
+                {{ formatNumber(statistics?.percentile25.paidTaxDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.median.paidTaxDiff, true)">
+                {{ formatNumber(statistics?.median.paidTaxDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile75.paidTaxDiff, true)">
+                {{ formatNumber(statistics?.percentile75.paidTaxDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile95.paidTaxDiff, true)">
+                {{ formatNumber(statistics?.percentile95.paidTaxDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.mean.paidTaxDiff, true)">
+                {{ formatNumber(statistics?.mean.paidTaxDiff) }}
+              </td>
               <td>{{ formatNumber(statistics?.stdDev.paidTaxDiff) }}</td>
             </tr>
 
             <!-- Taxation Degree -->
             <tr>
-              <td rowspan="3" class="align-middle"><strong>Beskattningsgrad</strong></td>
-              <td>ISK</td>
+              <th rowspan="3" class="align-middle" scope="row">Beskattningsgrad</th>
+              <th scope="row">ISK</th>
               <td>{{ formatPercent(statistics?.percentile5.taxationDegreeISK) }}</td>
               <td>{{ formatPercent(statistics?.percentile25.taxationDegreeISK) }}</td>
               <td>{{ formatPercent(statistics?.median.taxationDegreeISK) }}</td>
@@ -149,7 +182,7 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatPercent(statistics?.stdDev.taxationDegreeISK) }}</td>
             </tr>
             <tr>
-              <td>VP</td>
+              <th scope="row">VP</th>
               <td>{{ formatPercent(statistics?.percentile5.taxationDegreeVP) }}</td>
               <td>{{ formatPercent(statistics?.percentile25.taxationDegreeVP) }}</td>
               <td>{{ formatPercent(statistics?.median.taxationDegreeVP) }}</td>
@@ -158,21 +191,33 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatPercent(statistics?.mean.taxationDegreeVP) }}</td>
               <td>{{ formatPercent(statistics?.stdDev.taxationDegreeVP) }}</td>
             </tr>
-            <tr class="table-warning">
-              <td><strong>Skillnad</strong></td>
-              <td>{{ formatPercent(statistics?.percentile5.taxationDegreeDiff) }}</td>
-              <td>{{ formatPercent(statistics?.percentile25.taxationDegreeDiff) }}</td>
-              <td>{{ formatPercent(statistics?.median.taxationDegreeDiff) }}</td>
-              <td>{{ formatPercent(statistics?.percentile75.taxationDegreeDiff) }}</td>
-              <td>{{ formatPercent(statistics?.percentile95.taxationDegreeDiff) }}</td>
-              <td>{{ formatPercent(statistics?.mean.taxationDegreeDiff) }}</td>
+            <tr>
+              <th scope="row">Fördel ISK</th>
+              <td :class="getDiffClass(statistics?.percentile5.taxationDegreeDiff, true)">
+                {{ formatPercent(statistics?.percentile5.taxationDegreeDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile25.taxationDegreeDiff, true)">
+                {{ formatPercent(statistics?.percentile25.taxationDegreeDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.median.taxationDegreeDiff, true)">
+                {{ formatPercent(statistics?.median.taxationDegreeDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile75.taxationDegreeDiff, true)">
+                {{ formatPercent(statistics?.percentile75.taxationDegreeDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile95.taxationDegreeDiff, true)">
+                {{ formatPercent(statistics?.percentile95.taxationDegreeDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.mean.taxationDegreeDiff, true)">
+                {{ formatPercent(statistics?.mean.taxationDegreeDiff) }}
+              </td>
               <td>{{ formatPercent(statistics?.stdDev.taxationDegreeDiff) }}</td>
             </tr>
 
             <!-- Real Withdrawal -->
             <tr>
-              <td rowspan="3" class="align-middle"><strong>Uttag reellt (sista året)</strong></td>
-              <td>ISK</td>
+              <th rowspan="3" class="align-middle" scope="row">Uttag reellt (sista året)</th>
+              <th scope="row">ISK</th>
               <td>{{ formatNumber(statistics?.percentile5.realWithdrawalISK) }}</td>
               <td>{{ formatNumber(statistics?.percentile25.realWithdrawalISK) }}</td>
               <td>{{ formatNumber(statistics?.median.realWithdrawalISK) }}</td>
@@ -182,7 +227,7 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatNumber(statistics?.stdDev.realWithdrawalISK) }}</td>
             </tr>
             <tr>
-              <td>VP</td>
+              <th scope="row">VP</th>
               <td>{{ formatNumber(statistics?.percentile5.realWithdrawalVP) }}</td>
               <td>{{ formatNumber(statistics?.percentile25.realWithdrawalVP) }}</td>
               <td>{{ formatNumber(statistics?.median.realWithdrawalVP) }}</td>
@@ -191,21 +236,33 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatNumber(statistics?.mean.realWithdrawalVP) }}</td>
               <td>{{ formatNumber(statistics?.stdDev.realWithdrawalVP) }}</td>
             </tr>
-            <tr class="table-info">
-              <td><strong>Fördel ISK</strong></td>
-              <td>{{ formatNumber(statistics?.percentile5.realWithdrawalDiff) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.realWithdrawalDiff) }}</td>
-              <td>{{ formatNumber(statistics?.median.realWithdrawalDiff) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.realWithdrawalDiff) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.realWithdrawalDiff) }}</td>
-              <td>{{ formatNumber(statistics?.mean.realWithdrawalDiff) }}</td>
+            <tr>
+              <th scope="row">Fördel ISK</th>
+              <td :class="getDiffClass(statistics?.percentile5.realWithdrawalDiff)">
+                {{ formatNumber(statistics?.percentile5.realWithdrawalDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile25.realWithdrawalDiff)">
+                {{ formatNumber(statistics?.percentile25.realWithdrawalDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.median.realWithdrawalDiff)">
+                {{ formatNumber(statistics?.median.realWithdrawalDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile75.realWithdrawalDiff)">
+                {{ formatNumber(statistics?.percentile75.realWithdrawalDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile95.realWithdrawalDiff)">
+                {{ formatNumber(statistics?.percentile95.realWithdrawalDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.mean.realWithdrawalDiff)">
+                {{ formatNumber(statistics?.mean.realWithdrawalDiff) }}
+              </td>
               <td>{{ formatNumber(statistics?.stdDev.realWithdrawalDiff) }}</td>
             </tr>
 
             <!-- Annual Averages -->
             <tr class="table-light">
-              <td rowspan="3" class="align-middle"><strong>Genomsnitt per år</strong></td>
-              <td>Avkastning</td>
+              <th rowspan="3" class="align-middle" scope="row">Genomsnitt per år</th>
+              <th scope="row">Avkastning</th>
               <td>{{ formatPercent(statistics?.percentile5.averageDevelopment) }}</td>
               <td>{{ formatPercent(statistics?.percentile25.averageDevelopment) }}</td>
               <td>{{ formatPercent(statistics?.median.averageDevelopment) }}</td>
@@ -215,7 +272,7 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatPercent(statistics?.stdDev.averageDevelopment) }}</td>
             </tr>
             <tr class="table-light">
-              <td>ISK-skattesats</td>
+              <th scope="row">ISK-skattesats</th>
               <td>{{ formatPercent(statistics?.percentile5.averageISKTaxRate) }}</td>
               <td>{{ formatPercent(statistics?.percentile25.averageISKTaxRate) }}</td>
               <td>{{ formatPercent(statistics?.median.averageISKTaxRate) }}</td>
@@ -225,7 +282,7 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatPercent(statistics?.stdDev.averageISKTaxRate) }}</td>
             </tr>
             <tr class="table-light">
-              <td>Inflationstakt</td>
+              <th scope="row">Inflationstakt</th>
               <td>{{ formatPercent(statistics?.percentile5.averageInflationRate) }}</td>
               <td>{{ formatPercent(statistics?.percentile25.averageInflationRate) }}</td>
               <td>{{ formatPercent(statistics?.median.averageInflationRate) }}</td>
@@ -242,6 +299,10 @@ const hasResults = computed(() => statistics.value !== null)
 </template>
 
 <style scoped>
+.table thead th {
+  text-align: center;
+}
+
 .table th {
   font-size: 0.9rem;
   font-weight: 600;
@@ -251,15 +312,7 @@ const hasResults = computed(() => statistics.value !== null)
   font-size: 0.85rem;
 }
 
-.table td:not(:first-child):not(:nth-child(2)) {
+.table td {
   text-align: right;
-}
-
-.table-info {
-  background-color: rgba(13, 202, 240, 0.1);
-}
-
-.table-warning {
-  background-color: rgba(255, 193, 7, 0.1);
 }
 </style>

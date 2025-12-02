@@ -29,195 +29,230 @@ const handleRunSimulation = async () => {
 <template>
   <div class="card mb-4">
     <div class="card-header">
-      <h3>Input Parameters</h3>
+      <h3>Inmatningsparametrar</h3>
     </div>
     <div class="card-body">
-      <div class="row g-3">
-        <div class="col-md-6">
-          <label class="form-label">Initialt kapital</label>
-          <input
-            type="number"
-            class="form-control"
-            v-model.number="initialCapital"
-            :disabled="isRunning"
-          />
-        </div>
+      <div class="params-grid">
+        <div class="params-column">
+          <!-- Basic Parameters -->
+          <div class="param-section">
+            <h5 class="section-title">Grundinställningar</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Initialt kapital</label>
+                <input
+                  type="number"
+                  class="form-control text-end"
+                  v-model.number="initialCapital"
+                  :disabled="isRunning"
+                />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Vinstskatt (VP)</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.1"
+                    class="form-control text-end"
+                    :value="(capitalGainsTax * 100).toFixed(1)"
+                    @input="capitalGainsTax = parseFloat($event.target.value) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        <div class="col-md-6">
-          <label class="form-label">Vinstskatt (VP)</label>
-          <div class="input-group">
-            <input
-              type="number"
-              step="0.1"
-              class="form-control text-end"
-              :value="(capitalGainsTax * 100).toFixed(1)"
-              @input="capitalGainsTax = parseFloat($event.target.value) / 100"
-              :disabled="isRunning"
-            />
-            <span class="input-group-text">%</span>
+          <!-- Annual Return Distribution -->
+          <div class="param-section">
+            <h5 class="section-title">Avkastning (årlig fördelning)</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Medelvärde</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.1"
+                    class="form-control text-end"
+                    :value="(development * 100).toFixed(1)"
+                    @input="development = parseFloat($event.target.value) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Standardavvikelse</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.1"
+                    class="form-control text-end"
+                    :value="(developmentStdDev * 100).toFixed(1)"
+                    @input="developmentStdDev = parseFloat($event.target.value) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="col-md-4">
-          <label class="form-label">Utveckling (medelvärde per år)</label>
-          <div class="input-group">
-            <input
-              type="number"
-              step="0.1"
-              class="form-control text-end"
-              :value="(development * 100).toFixed(1)"
-              @input="development = parseFloat($event.target.value) / 100"
-              :disabled="isRunning"
-            />
-            <span class="input-group-text">%</span>
+        <div class="params-column">
+          <!-- Withdrawal Rates -->
+          <div class="param-section">
+            <h5 class="section-title">Uttag (per år)</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">ISK</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.1"
+                    class="form-control text-end"
+                    :value="(withdrawalISK * 100).toFixed(1)"
+                    @input="withdrawalISK = parseFloat($event.target.value) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">VP</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.1"
+                    class="form-control text-end"
+                    :value="(withdrawalVP * 100).toFixed(1)"
+                    @input="withdrawalVP = parseFloat($event.target.value) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ISK Tax Rate Distribution -->
+          <div class="param-section">
+            <h5 class="section-title">ISK-skattesats</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Initial skattesats</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.01"
+                    class="form-control text-end"
+                    :value="(iskTaxRate * 100).toFixed(2)"
+                    @input="iskTaxRate = parseFloat($event.target.value) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Standardavvikelse för årliga ändringar</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.01"
+                    class="form-control text-end"
+                    :value="(iskTaxRateStdDev * 100).toFixed(2)"
+                    @input="iskTaxRateStdDev = parseFloat($event.target.value) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div class="col-md-4">
-          <label class="form-label">Utveckling (standardavvikelse)</label>
-          <div class="input-group">
-            <input
-              type="number"
-              step="0.1"
-              class="form-control text-end"
-              :value="(developmentStdDev * 100).toFixed(1)"
-              @input="developmentStdDev = parseFloat($event.target.value) / 100"
-              :disabled="isRunning"
-            />
-            <span class="input-group-text">%</span>
+        <div class="params-column">
+          <!-- Inflation Distribution -->
+          <div class="param-section">
+            <h5 class="section-title">Inflation (årlig fördelning)</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Medelvärde</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.1"
+                    class="form-control text-end"
+                    :value="(inflationRate * 100).toFixed(1)"
+                    @input="inflationRate = parseFloat($event.target.value) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Standardavvikelse</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.1"
+                    class="form-control text-end"
+                    :value="(inflationStdDev * 100).toFixed(1)"
+                    @input="inflationStdDev = parseFloat($event.target.value) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div class="col-md-4">
-          <label class="form-label">Uttag ISK (per år)</label>
-          <div class="input-group">
-            <input
-              type="number"
-              step="0.1"
-              class="form-control text-end"
-              :value="(withdrawalISK * 100).toFixed(1)"
-              @input="withdrawalISK = parseFloat($event.target.value) / 100"
-              :disabled="isRunning"
-            />
-            <span class="input-group-text">%</span>
+          <!-- Time Period and Simulation Settings -->
+          <div class="param-section">
+            <h5 class="section-title">Simulering</h5>
+            <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Startår (ålder)</label>
+                <input
+                  type="number"
+                  class="form-control text-end"
+                  v-model.number="startYear"
+                  :disabled="isRunning"
+                />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Antal år</label>
+                <input
+                  type="number"
+                  class="form-control text-end"
+                  v-model.number="yearsLater"
+                  min="1"
+                  max="100"
+                  :disabled="isRunning"
+                />
+              </div>
+              <div class="col-12">
+                <label class="form-label">Antal simuleringar</label>
+                <input
+                  type="number"
+                  class="form-control text-end"
+                  v-model.number="simulationCount"
+                  min="100"
+                  max="100000"
+                  step="100"
+                  :disabled="isRunning"
+                />
+              </div>
+            </div>
           </div>
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label">Uttag VP (per år)</label>
-          <div class="input-group">
-            <input
-              type="number"
-              step="0.1"
-              class="form-control text-end"
-              :value="(withdrawalVP * 100).toFixed(1)"
-              @input="withdrawalVP = parseFloat($event.target.value) / 100"
-              :disabled="isRunning"
-            />
-            <span class="input-group-text">%</span>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label">ISK-skattesats (initial)</label>
-          <div class="input-group">
-            <input
-              type="number"
-              step="0.01"
-              class="form-control text-end"
-              :value="(iskTaxRate * 100).toFixed(2)"
-              @input="iskTaxRate = parseFloat($event.target.value) / 100"
-              :disabled="isRunning"
-            />
-            <span class="input-group-text">%</span>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label">ISK-skattesats (stddev för ändringar)</label>
-          <div class="input-group">
-            <input
-              type="number"
-              step="0.01"
-              class="form-control text-end"
-              :value="(iskTaxRateStdDev * 100).toFixed(2)"
-              @input="iskTaxRateStdDev = parseFloat($event.target.value) / 100"
-              :disabled="isRunning"
-            />
-            <span class="input-group-text">%</span>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label">Inflationstakt (medelvärde)</label>
-          <div class="input-group">
-            <input
-              type="number"
-              step="0.1"
-              class="form-control text-end"
-              :value="(inflationRate * 100).toFixed(1)"
-              @input="inflationRate = parseFloat($event.target.value) / 100"
-              :disabled="isRunning"
-            />
-            <span class="input-group-text">%</span>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label">Inflationstakt (standardavvikelse)</label>
-          <div class="input-group">
-            <input
-              type="number"
-              step="0.1"
-              class="form-control text-end"
-              :value="(inflationStdDev * 100).toFixed(1)"
-              @input="inflationStdDev = parseFloat($event.target.value) / 100"
-              :disabled="isRunning"
-            />
-            <span class="input-group-text">%</span>
-          </div>
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label">Startår (ålder)</label>
-          <input
-            type="number"
-            class="form-control"
-            v-model.number="startYear"
-            :disabled="isRunning"
-          />
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label">Antal år</label>
-          <input
-            type="number"
-            class="form-control"
-            v-model.number="yearsLater"
-            min="1"
-            max="100"
-            :disabled="isRunning"
-          />
-        </div>
-
-        <div class="col-md-4">
-          <label class="form-label">Antal simuleringar</label>
-          <input
-            type="number"
-            class="form-control"
-            v-model.number="simulationCount"
-            min="100"
-            max="100000"
-            step="100"
-            :disabled="isRunning"
-          />
         </div>
       </div>
 
       <div class="mt-4">
         <button class="btn btn-primary btn-lg" @click="handleRunSimulation" :disabled="isRunning">
           <span v-if="isRunning" class="spinner-border spinner-border-sm me-2"></span>
-          {{ isRunning ? 'Running simulation...' : 'Run Monte Carlo Simulation' }}
+          {{ isRunning ? 'Kör simulering...' : 'Kör Monte Carlo-simulering' }}
         </button>
 
         <div v-if="isRunning" class="mt-3">
@@ -243,5 +278,51 @@ const handleRunSimulation = async () => {
 .form-label {
   font-weight: 500;
   font-size: 0.9rem;
+}
+
+.params-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+@media (min-width: 768px) {
+  .params-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  .params-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 2rem;
+  }
+}
+
+.params-column {
+  display: flex;
+  flex-direction: column;
+}
+
+.param-section {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.param-section:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #e9ecef;
 }
 </style>
