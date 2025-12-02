@@ -294,6 +294,14 @@ const hasResults = computed(() => statistics.value !== null)
           </tbody>
         </table>
       </div>
+      <div class="card-footer text-muted">
+        <p class="small mb-0">
+          <strong>Observera:</strong> Percentilerna för "Fördel ISK" visar fördelningen av
+          skillnader mellan ISK och VP över alla simuleringar. Dessa motsvarar därför inte
+          skillnaden mellan ISK:s och VP:s percentilvärden (t.ex. 5% percentilen för "Fördel ISK" är
+          inte ISK 5% minus VP 5%).
+        </p>
+      </div>
     </div>
   </div>
 </template>
