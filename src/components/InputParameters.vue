@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
+import { ref } from 'vue'
 
 const store = useCalculatorStore()
 const {
@@ -21,6 +22,32 @@ const {
   isRunning,
   progress,
 } = storeToRefs(store)
+
+const rorPreset = ref('')
+
+interface RORPreset {
+  label: string
+  mean: number
+  stdDev: number
+}
+
+const rorPresets: RORPreset[] = [
+  { label: 'AMF Aktiefond Europa', mean: 0.077744, stdDev: 0.192562 },
+  { label: 'Carnegie Sverigefond A', mean: 0.1446, stdDev: 0.2283 },
+  { label: 'Handelsbanken Nordiska Småb (A1 SEK)', mean: 0.154126, stdDev: 0.30111 },
+  { label: 'Länsförsäkringar Fastighetsfond A', mean: 0.184636, stdDev: 0.282252 },
+  { label: 'Länsförsäkringar Lång Räntefond A', mean: 0.044307, stdDev: 0.05498 },
+  { label: 'Storebrand USA A SEK', mean: 0.090752, stdDev: 0.168028 },
+  { label: 'Swebank Robur Globalfond A', mean: 0.1299, stdDev: 0.202 },
+]
+
+const applyRORPreset = () => {
+  const preset = rorPresets.find((p) => p.label === rorPreset.value)
+  if (preset) {
+    development.value = preset.mean
+    developmentStdDev.value = preset.stdDev
+  }
+}
 
 const handleRunSimulation = async () => {
   await store.runSimulation()
@@ -69,6 +96,20 @@ const handleRunSimulation = async () => {
           <div class="param-section">
             <h5 class="section-title">Avkastning (årlig fördelning)</h5>
             <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Förinställning</label>
+                <select
+                  class="form-select"
+                  v-model="rorPreset"
+                  @change="applyRORPreset"
+                  :disabled="isRunning"
+                >
+                  <option value="">-- Välj fond --</option>
+                  <option v-for="preset in rorPresets" :key="preset.label" :value="preset.label">
+                    {{ preset.label }}
+                  </option>
+                </select>
+              </div>
               <div class="col-12">
                 <label class="form-label">Medelvärde</label>
                 <div class="input-group">

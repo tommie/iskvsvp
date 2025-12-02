@@ -13,7 +13,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   // Input parameters
   const initialCapital = ref(5000000)
   const development = ref(0.1299) // Swedbank Robur Globalfond A
-  const developmentStdDev = ref(0.2020) // Swedbank Robur Globalfond A
+  const developmentStdDev = ref(0.202) // Swedbank Robur Globalfond A
   const withdrawalISK = ref(0.03)
   const withdrawalVP = ref(0.03)
   const badYearWithdrawalRate = ref(1.0)
