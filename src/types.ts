@@ -61,6 +61,11 @@ export interface Summary {
   realWithdrawalVP: number
   realWithdrawalDiff: number
   realWithdrawalDiffPercent: number
+  firstYearWithdrawalISK: number
+  firstYearWithdrawalVP: number
+  accumulatedRealWithdrawalISK: number
+  accumulatedRealWithdrawalVP: number
+  accumulatedRealWithdrawalDiff: number
   averageISKTaxRate: number
   averageInflationRate: number
   averageDevelopment: number

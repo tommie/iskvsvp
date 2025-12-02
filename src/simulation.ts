@@ -32,6 +32,8 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
   let currentISKTaxRate = params.iskTaxRate
   let previousAmountISK = params.initialCapital
   let previousAmountVP = params.initialCapital
+  let accumulatedRealWithdrawalISK = 0
+  let accumulatedRealWithdrawalVP = 0
 
   for (let i = 0; i < params.yearsLater; i++) {
     const year = params.startYear + i
@@ -88,6 +90,10 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
     const iskMinusVP = amountISK - vpLiquidValue
     const iskMinusVPReal = iskMinusVP / cumulativeInflation
 
+    // Accumulate real withdrawals
+    accumulatedRealWithdrawalISK += withdrawnISKReal
+    accumulatedRealWithdrawalVP += withdrawnVPReal
+
     yearlyData.push({
       year,
       development,
@@ -127,6 +133,7 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
   }
 
   const lastYear = yearlyData[yearlyData.length - 1]!
+  const firstYear = yearlyData[0]!
 
   // Calculate averages across all years
   const averageISKTaxRate =
@@ -165,6 +172,11 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
       lastYear.withdrawnISKReal !== 0
         ? (lastYear.withdrawnISKReal - lastYear.withdrawnVPReal) / lastYear.withdrawnISKReal
         : 0,
+    firstYearWithdrawalISK: firstYear.withdrawnISKReal,
+    firstYearWithdrawalVP: firstYear.withdrawnVPReal,
+    accumulatedRealWithdrawalISK,
+    accumulatedRealWithdrawalVP,
+    accumulatedRealWithdrawalDiff: accumulatedRealWithdrawalISK - accumulatedRealWithdrawalVP,
     averageISKTaxRate,
     averageInflationRate,
     averageDevelopment,
@@ -243,6 +255,11 @@ export function calculateStatistics(results: SimulationResult[]): SimulationStat
     'realWithdrawalVP',
     'realWithdrawalDiff',
     'realWithdrawalDiffPercent',
+    'firstYearWithdrawalISK',
+    'firstYearWithdrawalVP',
+    'accumulatedRealWithdrawalISK',
+    'accumulatedRealWithdrawalVP',
+    'accumulatedRealWithdrawalDiff',
     'averageISKTaxRate',
     'averageInflationRate',
     'averageDevelopment',

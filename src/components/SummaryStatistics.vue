@@ -68,7 +68,7 @@ const hasResults = computed(() => statistics.value !== null)
               <th rowspan="2" class="align-middle">Konto</th>
               <th colspan="5">Percentiler</th>
               <th rowspan="2" class="align-middle">Medel</th>
-              <th rowspan="2" class="align-middle">Stdavv</th>
+              <th rowspan="2" class="align-middle">SD</th>
             </tr>
             <tr>
               <th>5%</th>
@@ -214,7 +214,30 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatPercent(statistics?.stdDev.taxationDegreeDiff) }}</td>
             </tr>
 
-            <!-- Real Withdrawal -->
+            <!-- First Year Withdrawal -->
+            <tr>
+              <th rowspan="2" class="align-middle" scope="row">Uttag reellt (första året)</th>
+              <th scope="row">ISK</th>
+              <td>{{ formatNumber(statistics?.percentile5.firstYearWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.percentile25.firstYearWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.median.firstYearWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.percentile75.firstYearWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.percentile95.firstYearWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.mean.firstYearWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.stdDev.firstYearWithdrawalISK) }}</td>
+            </tr>
+            <tr>
+              <th scope="row">VP</th>
+              <td>{{ formatNumber(statistics?.percentile5.firstYearWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.percentile25.firstYearWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.median.firstYearWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.percentile75.firstYearWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.percentile95.firstYearWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.mean.firstYearWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.stdDev.firstYearWithdrawalVP) }}</td>
+            </tr>
+
+            <!-- Real Withdrawal Last Year -->
             <tr>
               <th rowspan="3" class="align-middle" scope="row">Uttag reellt (sista året)</th>
               <th scope="row">ISK</th>
@@ -257,6 +280,51 @@ const hasResults = computed(() => statistics.value !== null)
                 {{ formatNumber(statistics?.mean.realWithdrawalDiff) }}
               </td>
               <td>{{ formatNumber(statistics?.stdDev.realWithdrawalDiff) }}</td>
+            </tr>
+
+            <!-- Accumulated Real Withdrawal -->
+            <tr>
+              <th rowspan="3" class="align-middle" scope="row">Ackumulerat uttag reellt</th>
+              <th scope="row">ISK</th>
+              <td>{{ formatNumber(statistics?.percentile5.accumulatedRealWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.percentile25.accumulatedRealWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.median.accumulatedRealWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.percentile75.accumulatedRealWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.percentile95.accumulatedRealWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.mean.accumulatedRealWithdrawalISK) }}</td>
+              <td>{{ formatNumber(statistics?.stdDev.accumulatedRealWithdrawalISK) }}</td>
+            </tr>
+            <tr>
+              <th scope="row">VP</th>
+              <td>{{ formatNumber(statistics?.percentile5.accumulatedRealWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.percentile25.accumulatedRealWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.median.accumulatedRealWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.percentile75.accumulatedRealWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.percentile95.accumulatedRealWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.mean.accumulatedRealWithdrawalVP) }}</td>
+              <td>{{ formatNumber(statistics?.stdDev.accumulatedRealWithdrawalVP) }}</td>
+            </tr>
+            <tr>
+              <th scope="row">Fördel ISK</th>
+              <td :class="getDiffClass(statistics?.percentile5.accumulatedRealWithdrawalDiff)">
+                {{ formatNumber(statistics?.percentile5.accumulatedRealWithdrawalDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile25.accumulatedRealWithdrawalDiff)">
+                {{ formatNumber(statistics?.percentile25.accumulatedRealWithdrawalDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.median.accumulatedRealWithdrawalDiff)">
+                {{ formatNumber(statistics?.median.accumulatedRealWithdrawalDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile75.accumulatedRealWithdrawalDiff)">
+                {{ formatNumber(statistics?.percentile75.accumulatedRealWithdrawalDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.percentile95.accumulatedRealWithdrawalDiff)">
+                {{ formatNumber(statistics?.percentile95.accumulatedRealWithdrawalDiff) }}
+              </td>
+              <td :class="getDiffClass(statistics?.mean.accumulatedRealWithdrawalDiff)">
+                {{ formatNumber(statistics?.mean.accumulatedRealWithdrawalDiff) }}
+              </td>
+              <td>{{ formatNumber(statistics?.stdDev.accumulatedRealWithdrawalDiff) }}</td>
             </tr>
 
             <!-- Annual Averages -->
