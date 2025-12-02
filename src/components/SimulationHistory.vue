@@ -2,12 +2,15 @@
 import { useHistoryStore } from '../stores/history'
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
-import { ref } from 'vue'
+import { ref, useId } from 'vue'
 import type { HistoryRecord } from '../stores/history'
 
 const historyStore = useHistoryStore()
 const calculatorStore = useCalculatorStore()
 const { records } = storeToRefs(historyStore)
+
+const clearAllPopoverId = useId()
+const getDeletePopoverId = (recordId: string) => `delete-popover-${recordId}`
 
 const editingId = ref<string | null>(null)
 const editingTitle = ref('')
@@ -59,6 +62,34 @@ const loadRecord = (record: HistoryRecord) => {
   // Scroll to top to show the loaded parameters
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
+
+const confirmDelete = (recordId: string, event: Event) => {
+  historyStore.removeRecord(recordId)
+  // Close the popover
+  const popover = (event.target as HTMLElement).closest('[popover]') as HTMLElement
+  if (popover) popover.hidePopover()
+}
+
+const confirmClearAll = (event: Event) => {
+  historyStore.clearAll()
+  // Close the popover
+  const popover = (event.target as HTMLElement).closest('[popover]') as HTMLElement
+  if (popover) popover.hidePopover()
+}
+
+const positionPopover = (popoverId: string, anchorId: string) => {
+  const popover = document.getElementById(popoverId)
+  const anchor = document.getElementById(anchorId)
+
+  if (!popover || !anchor) return
+
+  const anchorRect = anchor.getBoundingClientRect()
+
+  // Position below the anchor
+  popover.style.position = 'fixed'
+  popover.style.top = `${anchorRect.bottom + 4}px`
+  popover.style.left = `${anchorRect.left}px`
+}
 </script>
 
 <template>
@@ -68,9 +99,33 @@ const loadRecord = (record: HistoryRecord) => {
         <h3>Simuleringshistorik</h3>
         <p class="mb-0 text-muted">Tidigare simuleringar ({{ records.length }} st)</p>
       </div>
-      <button class="btn btn-sm btn-outline-danger" @click="historyStore.clearAll">
-        Rensa alla
-      </button>
+      <div>
+        <button
+          :id="`clear-all-btn-${clearAllPopoverId}`"
+          class="btn btn-sm btn-outline-danger"
+          :popovertarget="clearAllPopoverId"
+        >
+          Rensa alla
+        </button>
+        <div
+          :id="clearAllPopoverId"
+          popover
+          class="confirm-popover-content"
+          @beforetoggle="
+            (e: any) =>
+              e.newState === 'open' &&
+              positionPopover(clearAllPopoverId, `clear-all-btn-${clearAllPopoverId}`)
+          "
+        >
+          <p class="mb-2 small">Ta bort alla {{ records.length }} simuleringar?</p>
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-danger" @click="confirmClearAll">Ta bort</button>
+            <button class="btn btn-sm btn-secondary" :popovertarget="clearAllPopoverId">
+              Avbryt
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
     <div class="card-body">
       <div class="history-grid">
@@ -106,12 +161,36 @@ const loadRecord = (record: HistoryRecord) => {
                   ✎
                 </button>
                 <button
+                  :id="`delete-btn-${record.id}`"
                   class="btn btn-sm btn-link p-0 text-danger"
-                  @click="historyStore.removeRecord(record.id)"
+                  :popovertarget="getDeletePopoverId(record.id)"
                   title="Ta bort"
                 >
                   ✕
                 </button>
+                <div
+                  :id="getDeletePopoverId(record.id)"
+                  popover
+                  class="confirm-popover-content"
+                  @beforetoggle="
+                    (e: any) =>
+                      e.newState === 'open' &&
+                      positionPopover(getDeletePopoverId(record.id), `delete-btn-${record.id}`)
+                  "
+                >
+                  <p class="mb-2 small">Ta bort denna simulering?</p>
+                  <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-danger" @click="confirmDelete(record.id, $event)">
+                      Ta bort
+                    </button>
+                    <button
+                      class="btn btn-sm btn-secondary"
+                      :popovertarget="getDeletePopoverId(record.id)"
+                    >
+                      Avbryt
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -244,6 +323,25 @@ const loadRecord = (record: HistoryRecord) => {
 
 .edit-title-form input {
   flex: 1;
+}
+
+.confirm-popover-content {
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+  padding: 0.75rem;
+  box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.15);
+  min-width: 200px;
+  margin: 0.5rem 0 0 0;
+  inset: unset;
+}
+
+.confirm-popover-content::backdrop {
+  background: transparent;
+}
+
+.confirm-popover-content p {
+  margin: 0;
+  color: #212529;
 }
 
 .history-card-body {
