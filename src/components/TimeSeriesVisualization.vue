@@ -114,40 +114,40 @@ const drawChart = () => {
     .attr('fill', '#dc3545')
     .attr('opacity', 0.03)
 
-  // Calculate average values by year (using valid data only)
+  // Calculate median values by year (using valid data only)
   const yearGroups = d3.group(validData, (d) => d.year)
-  const averageData = Array.from(yearGroups, ([year, values]) => ({
+  const medianData = Array.from(yearGroups, ([year, values]) => ({
     year,
-    avgISK: d3.mean(values, (d) => d.iskValue) ?? 0,
-    avgVP: d3.mean(values, (d) => d.vpValue) ?? 0,
+    medianISK: d3.median(values, (d) => d.iskValue) ?? 0,
+    medianVP: d3.median(values, (d) => d.vpValue) ?? 0,
   })).sort((a, b) => a.year - b.year)
 
   // Create line generators
   const iskLine = d3
-    .line<{ year: number; avgISK: number; avgVP: number }>()
+    .line<{ year: number; medianISK: number; medianVP: number }>()
     .x((d) => xScale(d.year))
-    .y((d) => yScale(d.avgISK))
+    .y((d) => yScale(d.medianISK))
 
   const vpLine = d3
-    .line<{ year: number; avgISK: number; avgVP: number }>()
+    .line<{ year: number; medianISK: number; medianVP: number }>()
     .x((d) => xScale(d.year))
-    .y((d) => yScale(d.avgVP))
+    .y((d) => yScale(d.medianVP))
 
-  // Draw ISK average line
+  // Draw ISK median line
   svg
     .append('path')
-    .datum(averageData)
-    .attr('class', 'line-isk-avg')
+    .datum(medianData)
+    .attr('class', 'line-isk-median')
     .attr('fill', 'none')
     .attr('stroke', '#0d6efd')
     .attr('stroke-width', 3)
     .attr('d', iskLine)
 
-  // Draw VP average line
+  // Draw VP median line
   svg
     .append('path')
-    .datum(averageData)
-    .attr('class', 'line-vp-avg')
+    .datum(medianData)
+    .attr('class', 'line-vp-median')
     .attr('fill', 'none')
     .attr('stroke', '#dc3545')
     .attr('stroke-width', 3)
@@ -191,9 +191,9 @@ const drawChart = () => {
     .attr('stroke', '#0d6efd')
     .attr('stroke-width', 3)
 
-  legend.append('text').attr('x', 15).attr('y', 55).style('font-size', '11px').text('ISK (medel)')
+  legend.append('text').attr('x', 15).attr('y', 55).style('font-size', '11px').text('ISK (median)')
 
-  // VP average line
+  // VP median line
   legend
     .append('line')
     .attr('x1', -8)
@@ -203,7 +203,7 @@ const drawChart = () => {
     .attr('stroke', '#dc3545')
     .attr('stroke-width', 3)
 
-  legend.append('text').attr('x', 15).attr('y', 80).style('font-size', '11px').text('VP (medel)')
+  legend.append('text').attr('x', 15).attr('y', 80).style('font-size', '11px').text('VP (median)')
 }
 
 // Watch for data changes
