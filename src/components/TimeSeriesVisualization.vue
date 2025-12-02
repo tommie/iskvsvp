@@ -83,10 +83,15 @@ const drawChart = () => {
     .style('font-weight', 'bold')
     .text('Monte Carlo Simulation: ISK vs VP över tid (logaritmisk skala)')
 
+  // Filter out invalid data points (NaN, Infinity, values <= 0)
+  const validData = timeSeriesData.value.filter(
+    (d) => isFinite(d.iskValue) && isFinite(d.vpValue) && d.iskValue > 0 && d.vpValue > 0,
+  )
+
   // Draw ISK points
   svg
     .selectAll('.dot-isk')
-    .data(timeSeriesData.value)
+    .data(validData)
     .enter()
     .append('circle')
     .attr('class', 'dot-isk')
@@ -99,7 +104,7 @@ const drawChart = () => {
   // Draw VP points
   svg
     .selectAll('.dot-vp')
-    .data(timeSeriesData.value)
+    .data(validData)
     .enter()
     .append('circle')
     .attr('class', 'dot-vp')
@@ -109,8 +114,8 @@ const drawChart = () => {
     .attr('fill', '#dc3545')
     .attr('opacity', 0.03)
 
-  // Calculate average values by year
-  const yearGroups = d3.group(timeSeriesData.value, (d) => d.year)
+  // Calculate average values by year (using valid data only)
+  const yearGroups = d3.group(validData, (d) => d.year)
   const averageData = Array.from(yearGroups, ([year, values]) => ({
     year,
     avgISK: d3.mean(values, (d) => d.iskValue) ?? 0,
