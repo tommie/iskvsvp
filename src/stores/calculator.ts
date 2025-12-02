@@ -7,6 +7,7 @@ import type {
   TimeSeriesPoint,
 } from '../types'
 import { runMonteCarloSimulation, calculateStatistics, extractTimeSeriesData } from '../simulation'
+import { useHistoryStore } from './history'
 
 export const useCalculatorStore = defineStore('calculator', () => {
   // Input parameters
@@ -67,6 +68,12 @@ export const useCalculatorStore = defineStore('calculator', () => {
 
       statistics.value = calculateStatistics(results.value)
       timeSeriesData.value = extractTimeSeriesData(results.value)
+
+      // Save to history
+      if (statistics.value) {
+        const historyStore = useHistoryStore()
+        historyStore.addRecord(parameters.value, statistics.value)
+      }
     } finally {
       isRunning.value = false
       progress.value = 100
@@ -81,6 +88,26 @@ export const useCalculatorStore = defineStore('calculator', () => {
     statistics.value = null
     timeSeriesData.value = []
     progress.value = 0
+  }
+
+  /**
+   * Load parameters from a saved configuration.
+   */
+  function loadParameters(params: InputParameters) {
+    initialCapital.value = params.initialCapital
+    development.value = params.development
+    developmentStdDev.value = params.developmentStdDev
+    withdrawalISK.value = params.withdrawalISK
+    withdrawalVP.value = params.withdrawalVP
+    badYearWithdrawalRate.value = params.badYearWithdrawalRate
+    iskTaxRate.value = params.iskTaxRate
+    iskTaxRateStdDev.value = params.iskTaxRateStdDev
+    inflationRate.value = params.inflationRate
+    inflationStdDev.value = params.inflationStdDev
+    capitalGainsTax.value = params.capitalGainsTax
+    startYear.value = params.startYear
+    yearsLater.value = params.yearsLater
+    simulationCount.value = params.simulationCount
   }
 
   return {
@@ -111,5 +138,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     // Actions
     runSimulation,
     resetResults,
+    loadParameters,
   }
 })

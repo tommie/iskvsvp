@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import InputParameters from './components/InputParameters.vue'
 import SummaryStatistics from './components/SummaryStatistics.vue'
 import TimeSeriesVisualization from './components/TimeSeriesVisualization.vue'
+import SimulationHistory from './components/SimulationHistory.vue'
 
 const store = useCalculatorStore()
 const { simulationCount } = storeToRefs(store)
@@ -21,6 +22,7 @@ const { simulationCount } = storeToRefs(store)
     <InputParameters />
     <SummaryStatistics />
     <TimeSeriesVisualization />
+    <SimulationHistory />
 
     <footer class="mt-5 pt-4 border-top text-muted">
       <p class="small">
