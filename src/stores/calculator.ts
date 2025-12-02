@@ -13,7 +13,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   // Input parameters
   const initialCapital = ref(5000000)
   const development = ref(0.08)
-  const developmentStdDev = ref(0.50) // 5%ile about -5%
+  const developmentStdDev = ref(0.5) // 5%ile about -5%
   const withdrawalISK = ref(0.03)
   const withdrawalVP = ref(0.03)
   const badYearWithdrawalRate = ref(1.0)

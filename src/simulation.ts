@@ -42,9 +42,12 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
     const development = randomNormal(params.development, params.developmentStdDev)
     const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev)
 
-    // ISK tax rate changes with drift=0, but has minimum of 1.25%
+    // ISK tax rate changes with drift=0, but has minimum of 1.25% and maximum of 100%
     const iskTaxRateChange = randomNormal(0, params.iskTaxRateStdDev)
-    currentISKTaxRate = Math.max(ISK_TAX_RATE_MIN, currentISKTaxRate + iskTaxRateChange)
+    currentISKTaxRate = Math.max(
+      ISK_TAX_RATE_MIN,
+      Math.min(1.0, currentISKTaxRate + iskTaxRateChange),
+    )
 
     // Check if previous year had no net increase (bad year)
     const isBadYearISK = i > 0 && amountISK <= previousAmountISK
@@ -127,9 +130,9 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
     previousAmountISK = amountISK
     previousAmountVP = amountVP
 
-    // Update amounts for next year
-    amountISK = amountISK * (1 + development - withdrawalRateISK) - taxISK
-    amountVP = amountVP * (1 + development - withdrawalRateVP)
+    // Update amounts for next year, ensure non-negative
+    amountISK = Math.max(0, amountISK * (1 + development - withdrawalRateISK) - taxISK)
+    amountVP = Math.max(0, amountVP * (1 + development - withdrawalRateVP))
   }
 
   const lastYear = yearlyData[yearlyData.length - 1]!
