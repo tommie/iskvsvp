@@ -8,19 +8,37 @@ const { statistics } = storeToRefs(store)
 
 const formatNumber = (value: number | undefined): string => {
   if (value == null || isNaN(value)) return '-'
+
+  // Round to 2 significant digits
+  const absValue = Math.abs(value)
+  if (absValue === 0) return '0'
+
+  const magnitude = Math.floor(Math.log10(absValue))
+  const scale = Math.pow(10, magnitude - 1)
+  const rounded = Math.round(value / scale) * scale
+
   return new Intl.NumberFormat('sv-SE', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value)
+    maximumSignificantDigits: 2,
+    minimumSignificantDigits: 2,
+  }).format(rounded)
 }
 
 const formatPercent = (value: number | undefined): string => {
   if (value == null || isNaN(value)) return '-'
+
+  // Round to 2 significant digits
+  const absValue = Math.abs(value)
+  if (absValue === 0) return '0,0 %'
+
+  const magnitude = Math.floor(Math.log10(absValue))
+  const scale = Math.pow(10, magnitude - 1)
+  const rounded = Math.round(value / scale) * scale
+
   return new Intl.NumberFormat('sv-SE', {
     style: 'percent',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  }).format(value)
+    maximumSignificantDigits: 2,
+    minimumSignificantDigits: 2,
+  }).format(rounded)
 }
 
 const hasResults = computed(() => statistics.value !== null)
@@ -231,6 +249,10 @@ const hasResults = computed(() => statistics.value !== null)
 
 .table td {
   font-size: 0.85rem;
+}
+
+.table td:not(:first-child):not(:nth-child(2)) {
+  text-align: right;
 }
 
 .table-info {
