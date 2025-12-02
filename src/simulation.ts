@@ -30,6 +30,8 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
   let cumulativePaidTaxVP = 0
   let cumulativeInflation = 1
   let currentISKTaxRate = params.iskTaxRate
+  let previousAmountISK = params.initialCapital
+  let previousAmountVP = params.initialCapital
 
   for (let i = 0; i < params.yearsLater; i++) {
     const year = params.startYear + i
@@ -42,9 +44,21 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
     const iskTaxRateChange = randomNormal(0, params.iskTaxRateStdDev)
     currentISKTaxRate = Math.max(ISK_TAX_RATE_MIN, currentISKTaxRate + iskTaxRateChange)
 
+    // Check if previous year had no net increase (bad year)
+    const isBadYearISK = i > 0 && amountISK <= previousAmountISK
+    const isBadYearVP = i > 0 && amountVP <= previousAmountVP
+
+    // Calculate withdrawal rates (reduced in bad years)
+    const withdrawalRateISK = isBadYearISK
+      ? params.withdrawalISK * params.badYearWithdrawalRate
+      : params.withdrawalISK
+    const withdrawalRateVP = isBadYearVP
+      ? params.withdrawalVP * params.badYearWithdrawalRate
+      : params.withdrawalVP
+
     // Calculate withdrawals
-    const withdrawnISK = amountISK * params.withdrawalISK
-    const withdrawnVP = amountVP * params.withdrawalVP
+    const withdrawnISK = amountISK * withdrawalRateISK
+    const withdrawnVP = amountVP * withdrawalRateVP
 
     // Calculate capital gain for VP (relative to initial capital)
     const capitalGainVP = amountVP * (1 + development) - params.initialCapital
@@ -77,8 +91,8 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
     yearlyData.push({
       year,
       development,
-      withdrawalISK: params.withdrawalISK,
-      withdrawalVP: params.withdrawalVP,
+      withdrawalISK: withdrawalRateISK,
+      withdrawalVP: withdrawalRateVP,
       iskTaxRate: currentISKTaxRate,
       inflationRate,
       capitalGainsTax: params.capitalGainsTax,
@@ -103,9 +117,13 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
       advantageISKPercent: vpLiquidValue !== 0 ? iskMinusVP / vpLiquidValue : 0,
     })
 
+    // Store current amounts for next year's bad year check
+    previousAmountISK = amountISK
+    previousAmountVP = amountVP
+
     // Update amounts for next year
-    amountISK = amountISK * (1 + development - params.withdrawalISK) - taxISK
-    amountVP = amountVP * (1 + development - params.withdrawalVP)
+    amountISK = amountISK * (1 + development - withdrawalRateISK) - taxISK
+    amountVP = amountVP * (1 + development - withdrawalRateVP)
   }
 
   const lastYear = yearlyData[yearlyData.length - 1]!

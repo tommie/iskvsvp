@@ -9,6 +9,7 @@ const {
   developmentStdDev,
   withdrawalISK,
   withdrawalVP,
+  badYearWithdrawalRate,
   iskTaxRate,
   iskTaxRateStdDev,
   inflationRate,
@@ -131,6 +132,24 @@ const handleRunSimulation = async () => {
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Uttagsgrad vid dåliga år</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.1"
+                    class="form-control text-end"
+                    :value="(badYearWithdrawalRate * 100).toFixed(1)"
+                    @input="badYearWithdrawalRate = parseFloat($event.target.value) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+                <div class="form-text">
+                  Multiplikator för uttag när portföljvärdet inte ökade föregående år (100% =
+                  normalt uttag)
                 </div>
               </div>
             </div>

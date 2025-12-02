@@ -4,6 +4,7 @@ export interface InputParameters {
   developmentStdDev: number
   withdrawalISK: number
   withdrawalVP: number
+  badYearWithdrawalRate: number
   iskTaxRate: number
   iskTaxRateStdDev: number
   inflationRate: number
