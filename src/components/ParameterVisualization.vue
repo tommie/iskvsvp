@@ -139,12 +139,16 @@ const drawAllCharts = () => {
   const parameterData: ParameterPoint[] = []
   results.value.forEach((result, simulationId) => {
     result.yearlyData.forEach((yearData) => {
+      // Get ISK scenario data
+      const iskScenario = yearData.scenarios['ISK']
+      if (!iskScenario) return
+
       parameterData.push({
         simulationId,
         year: yearData.year,
-        development: yearData.development,
-        iskTaxRate: yearData.iskTaxRate,
-        inflationRate: yearData.inflationRate,
+        development: iskScenario.development,
+        iskTaxRate: iskScenario.taxRate,
+        inflationRate: iskScenario.inflationRate,
       })
     })
   })

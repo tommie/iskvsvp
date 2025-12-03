@@ -2,9 +2,22 @@
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
+import type { Summary } from '../types'
 
 const store = useCalculatorStore()
 const { statistics, showStochasticParameters, yearsLater } = storeToRefs(store)
+
+// Get scenario names dynamically
+const scenarioNames = computed(() => {
+  if (!statistics.value?.median?.scenarios) return []
+  return Object.keys(statistics.value.median.scenarios)
+})
+
+// Helper to get scenario value from a Summary
+const getScenario = (summary: Summary | undefined, scenarioName: string, key: string): number => {
+  if (!summary?.scenarios?.[scenarioName]) return 0
+  return (summary.scenarios[scenarioName] as any)[key] ?? 0
+}
 
 const formatNumber = (value: number | undefined): string => {
   if (value == null || isNaN(value)) return '-'
@@ -41,13 +54,44 @@ const formatPercent = (value: number | undefined): string => {
   }).format(rounded)
 }
 
-// Helper to determine cell class based on which account is better
-// For most metrics, positive = ISK better (blue)
-// For paidTax, negative = ISK paid less tax = ISK better (blue)
-const getDiffClass = (value: number | undefined, invertSign: boolean = false): string => {
-  if (value == null || isNaN(value) || value === 0) return ''
-  const isBetter = invertSign ? value < 0 : value > 0
-  return isBetter ? 'bg-primary-subtle' : 'bg-warning-subtle'
+// Helper to determine which scenario is best for a given metric
+// Returns scenario name or null if tie/no clear winner
+const getBestScenario = (
+  summary: Summary | undefined,
+  field: string,
+  higherIsBetter: boolean,
+): string | null => {
+  if (!summary?.scenarios) return null
+
+  const values = Object.entries(summary.scenarios).map(([name, data]) => ({
+    name,
+    value: (data as any)[field] ?? 0,
+  }))
+
+  if (values.length === 0) return null
+
+  const sorted = values.sort((a, b) => (higherIsBetter ? b.value - a.value : a.value - b.value))
+
+  // Check if there's a clear winner (not a tie)
+  if (sorted.length > 1 && Math.abs(sorted[0]!.value - sorted[1]!.value) < 0.0001) {
+    return null // Tie
+  }
+
+  return sorted[0]!.name
+}
+
+// Helper to get cell class based on whether this scenario is the best
+const getCellClass = (
+  summary: Summary | undefined,
+  scenarioName: string,
+  field: string,
+  higherIsBetter: boolean,
+): string => {
+  const best = getBestScenario(summary, field, higherIsBetter)
+  if (!best || best !== scenarioName) return ''
+
+  // Color based on scenario name
+  return scenarioName === 'ISK' ? 'bg-primary-subtle' : 'bg-warning-subtle'
 }
 
 const hasResults = computed(() => statistics.value !== null)
@@ -57,7 +101,9 @@ const hasResults = computed(() => statistics.value !== null)
   <div class="card mb-4" v-if="hasResults">
     <div class="card-header">
       <h3>Sammanfattande statistik</h3>
-      <p class="mb-0 text-muted">Statistik över alla simuleringar</p>
+      <p class="mb-0 text-muted">
+        Statistik över alla simuleringar. Bästa värden i varje kolumn är markerade.
+      </p>
     </div>
     <div class="card-body">
       <div class="table-responsive">
@@ -65,7 +111,7 @@ const hasResults = computed(() => statistics.value !== null)
           <thead class="table-light">
             <tr>
               <th rowspan="2" class="align-middle">Mått</th>
-              <th rowspan="2" class="align-middle">Konto</th>
+              <th rowspan="2" class="align-middle">Scenario</th>
               <th colspan="5">Percentiler</th>
               <th rowspan="2" class="align-middle">Medel</th>
               <th rowspan="2" class="align-middle">SD</th>
@@ -80,380 +126,502 @@ const hasResults = computed(() => statistics.value !== null)
           </thead>
           <tbody>
             <!-- Liquid Value -->
-            <tr>
-              <th rowspan="3" class="align-middle" scope="row">Likvidvärde</th>
-              <th scope="row">ISK</th>
-              <td>{{ formatNumber(statistics?.percentile5.liquidValueISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.liquidValueISK) }}</td>
-              <td>{{ formatNumber(statistics?.median.liquidValueISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.liquidValueISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.liquidValueISK) }}</td>
-              <td>{{ formatNumber(statistics?.mean.liquidValueISK) }}</td>
-              <td>{{ formatNumber(statistics?.stdDev.liquidValueISK) }}</td>
-            </tr>
-            <tr>
-              <th scope="row">VP</th>
-              <td>{{ formatNumber(statistics?.percentile5.liquidValueVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.liquidValueVP) }}</td>
-              <td>{{ formatNumber(statistics?.median.liquidValueVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.liquidValueVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.liquidValueVP) }}</td>
-              <td>{{ formatNumber(statistics?.mean.liquidValueVP) }}</td>
-              <td>{{ formatNumber(statistics?.stdDev.liquidValueVP) }}</td>
-            </tr>
-            <tr>
-              <th scope="row">Fördel ISK</th>
-              <td :class="getDiffClass(statistics?.percentile5.liquidValueDiff)">
-                {{ formatNumber(statistics?.percentile5.liquidValueDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile25.liquidValueDiff)">
-                {{ formatNumber(statistics?.percentile25.liquidValueDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.median.liquidValueDiff)">
-                {{ formatNumber(statistics?.median.liquidValueDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile75.liquidValueDiff)">
-                {{ formatNumber(statistics?.percentile75.liquidValueDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile95.liquidValueDiff)">
-                {{ formatNumber(statistics?.percentile95.liquidValueDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.mean.liquidValueDiff)">
-                {{ formatNumber(statistics?.mean.liquidValueDiff) }}
-              </td>
-              <td>{{ formatNumber(statistics?.stdDev.liquidValueDiff) }}</td>
-            </tr>
+            <template
+              v-for="(scenarioName, index) in scenarioNames"
+              :key="`liquidValue-${scenarioName}`"
+            >
+              <tr>
+                <th
+                  v-if="index === 0"
+                  :rowspan="scenarioNames.length"
+                  class="align-middle"
+                  scope="row"
+                >
+                  Likvidvärde
+                </th>
+                <th scope="row">{{ scenarioName }}</th>
+                <td
+                  :class="getCellClass(statistics?.percentile5, scenarioName, 'liquidValue', true)"
+                >
+                  {{
+                    formatNumber(getScenario(statistics?.percentile5, scenarioName, 'liquidValue'))
+                  }}
+                </td>
+                <td
+                  :class="getCellClass(statistics?.percentile25, scenarioName, 'liquidValue', true)"
+                >
+                  {{
+                    formatNumber(getScenario(statistics?.percentile25, scenarioName, 'liquidValue'))
+                  }}
+                </td>
+                <td :class="getCellClass(statistics?.median, scenarioName, 'liquidValue', true)">
+                  {{ formatNumber(getScenario(statistics?.median, scenarioName, 'liquidValue')) }}
+                </td>
+                <td
+                  :class="getCellClass(statistics?.percentile75, scenarioName, 'liquidValue', true)"
+                >
+                  {{
+                    formatNumber(getScenario(statistics?.percentile75, scenarioName, 'liquidValue'))
+                  }}
+                </td>
+                <td
+                  :class="getCellClass(statistics?.percentile95, scenarioName, 'liquidValue', true)"
+                >
+                  {{
+                    formatNumber(getScenario(statistics?.percentile95, scenarioName, 'liquidValue'))
+                  }}
+                </td>
+                <td :class="getCellClass(statistics?.mean, scenarioName, 'liquidValue', true)">
+                  {{ formatNumber(getScenario(statistics?.mean, scenarioName, 'liquidValue')) }}
+                </td>
+                <td :class="getCellClass(statistics?.stdDev, scenarioName, 'liquidValue', true)">
+                  {{ formatNumber(getScenario(statistics?.stdDev, scenarioName, 'liquidValue')) }}
+                </td>
+              </tr>
+            </template>
 
             <!-- Paid Tax -->
-            <tr>
-              <th rowspan="3" class="align-middle" scope="row">Betald skatt</th>
-              <th scope="row">ISK</th>
-              <td>{{ formatNumber(statistics?.percentile5.paidTaxISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.paidTaxISK) }}</td>
-              <td>{{ formatNumber(statistics?.median.paidTaxISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.paidTaxISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.paidTaxISK) }}</td>
-              <td>{{ formatNumber(statistics?.mean.paidTaxISK) }}</td>
-              <td>{{ formatNumber(statistics?.stdDev.paidTaxISK) }}</td>
-            </tr>
-            <tr>
-              <th scope="row">VP</th>
-              <td>{{ formatNumber(statistics?.percentile5.paidTaxVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.paidTaxVP) }}</td>
-              <td>{{ formatNumber(statistics?.median.paidTaxVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.paidTaxVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.paidTaxVP) }}</td>
-              <td>{{ formatNumber(statistics?.mean.paidTaxVP) }}</td>
-              <td>{{ formatNumber(statistics?.stdDev.paidTaxVP) }}</td>
-            </tr>
-            <tr>
-              <th scope="row">Fördel ISK</th>
-              <td :class="getDiffClass(statistics?.percentile5.paidTaxDiff, true)">
-                {{ formatNumber(statistics?.percentile5.paidTaxDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile25.paidTaxDiff, true)">
-                {{ formatNumber(statistics?.percentile25.paidTaxDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.median.paidTaxDiff, true)">
-                {{ formatNumber(statistics?.median.paidTaxDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile75.paidTaxDiff, true)">
-                {{ formatNumber(statistics?.percentile75.paidTaxDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile95.paidTaxDiff, true)">
-                {{ formatNumber(statistics?.percentile95.paidTaxDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.mean.paidTaxDiff, true)">
-                {{ formatNumber(statistics?.mean.paidTaxDiff) }}
-              </td>
-              <td>{{ formatNumber(statistics?.stdDev.paidTaxDiff) }}</td>
-            </tr>
+            <template
+              v-for="(scenarioName, index) in scenarioNames"
+              :key="`paidTax-${scenarioName}`"
+            >
+              <tr>
+                <th
+                  v-if="index === 0"
+                  :rowspan="scenarioNames.length"
+                  class="align-middle"
+                  scope="row"
+                >
+                  Betald skatt
+                </th>
+                <th scope="row">{{ scenarioName }}</th>
+                <td :class="getCellClass(statistics?.percentile5, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.percentile5, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.percentile25, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.percentile25, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.median, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.median, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.percentile75, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.percentile75, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.percentile95, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.percentile95, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.mean, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.mean, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.stdDev, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.stdDev, scenarioName, 'paidTax')) }}
+                </td>
+              </tr>
+            </template>
 
             <!-- Taxation Degree -->
-            <tr>
-              <th rowspan="3" class="align-middle" scope="row">Beskattningsgrad</th>
-              <th scope="row">ISK</th>
-              <td>{{ formatPercent(statistics?.percentile5.taxationDegreeISK) }}</td>
-              <td>{{ formatPercent(statistics?.percentile25.taxationDegreeISK) }}</td>
-              <td>{{ formatPercent(statistics?.median.taxationDegreeISK) }}</td>
-              <td>{{ formatPercent(statistics?.percentile75.taxationDegreeISK) }}</td>
-              <td>{{ formatPercent(statistics?.percentile95.taxationDegreeISK) }}</td>
-              <td>{{ formatPercent(statistics?.mean.taxationDegreeISK) }}</td>
-              <td>{{ formatPercent(statistics?.stdDev.taxationDegreeISK) }}</td>
-            </tr>
-            <tr>
-              <th scope="row">VP</th>
-              <td>{{ formatPercent(statistics?.percentile5.taxationDegreeVP) }}</td>
-              <td>{{ formatPercent(statistics?.percentile25.taxationDegreeVP) }}</td>
-              <td>{{ formatPercent(statistics?.median.taxationDegreeVP) }}</td>
-              <td>{{ formatPercent(statistics?.percentile75.taxationDegreeVP) }}</td>
-              <td>{{ formatPercent(statistics?.percentile95.taxationDegreeVP) }}</td>
-              <td>{{ formatPercent(statistics?.mean.taxationDegreeVP) }}</td>
-              <td>{{ formatPercent(statistics?.stdDev.taxationDegreeVP) }}</td>
-            </tr>
-            <tr>
-              <th scope="row">Fördel ISK</th>
-              <td :class="getDiffClass(statistics?.percentile5.taxationDegreeDiff, true)">
-                {{ formatPercent(statistics?.percentile5.taxationDegreeDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile25.taxationDegreeDiff, true)">
-                {{ formatPercent(statistics?.percentile25.taxationDegreeDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.median.taxationDegreeDiff, true)">
-                {{ formatPercent(statistics?.median.taxationDegreeDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile75.taxationDegreeDiff, true)">
-                {{ formatPercent(statistics?.percentile75.taxationDegreeDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile95.taxationDegreeDiff, true)">
-                {{ formatPercent(statistics?.percentile95.taxationDegreeDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.mean.taxationDegreeDiff, true)">
-                {{ formatPercent(statistics?.mean.taxationDegreeDiff) }}
-              </td>
-              <td>{{ formatPercent(statistics?.stdDev.taxationDegreeDiff) }}</td>
-            </tr>
+            <template
+              v-for="(scenarioName, index) in scenarioNames"
+              :key="`taxationDegree-${scenarioName}`"
+            >
+              <tr>
+                <th
+                  v-if="index === 0"
+                  :rowspan="scenarioNames.length"
+                  class="align-middle"
+                  scope="row"
+                >
+                  Beskattningsgrad
+                </th>
+                <th scope="row">{{ scenarioName }}</th>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile5, scenarioName, 'taxationDegree', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile5, scenarioName, 'taxationDegree'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile25, scenarioName, 'taxationDegree', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile25, scenarioName, 'taxationDegree'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="getCellClass(statistics?.median, scenarioName, 'taxationDegree', false)"
+                >
+                  {{
+                    formatPercent(getScenario(statistics?.median, scenarioName, 'taxationDegree'))
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile75, scenarioName, 'taxationDegree', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile75, scenarioName, 'taxationDegree'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile95, scenarioName, 'taxationDegree', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile95, scenarioName, 'taxationDegree'),
+                    )
+                  }}
+                </td>
+                <td :class="getCellClass(statistics?.mean, scenarioName, 'taxationDegree', false)">
+                  {{ formatPercent(getScenario(statistics?.mean, scenarioName, 'taxationDegree')) }}
+                </td>
+                <td
+                  :class="getCellClass(statistics?.stdDev, scenarioName, 'taxationDegree', false)"
+                >
+                  {{
+                    formatPercent(getScenario(statistics?.stdDev, scenarioName, 'taxationDegree'))
+                  }}
+                </td>
+              </tr>
+            </template>
 
             <!-- First Year Withdrawal -->
-            <tr>
-              <th rowspan="2" class="align-middle" scope="row">Uttag reellt (första året)</th>
-              <th scope="row">ISK</th>
-              <td>{{ formatNumber(statistics?.percentile5.firstYearWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.firstYearWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.median.firstYearWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.firstYearWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.firstYearWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.mean.firstYearWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.stdDev.firstYearWithdrawalISK) }}</td>
-            </tr>
-            <tr>
-              <th scope="row">VP</th>
-              <td>{{ formatNumber(statistics?.percentile5.firstYearWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.firstYearWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.median.firstYearWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.firstYearWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.firstYearWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.mean.firstYearWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.stdDev.firstYearWithdrawalVP) }}</td>
-            </tr>
+            <template
+              v-for="(scenarioName, index) in scenarioNames"
+              :key="`firstYearWithdrawal-${scenarioName}`"
+            >
+              <tr>
+                <th
+                  v-if="index === 0"
+                  :rowspan="scenarioNames.length"
+                  class="align-middle"
+                  scope="row"
+                >
+                  Uttag reellt (första året)
+                </th>
+                <th scope="row">{{ scenarioName }}</th>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile5, scenarioName, 'firstYearWithdrawal', true)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile5, scenarioName, 'firstYearWithdrawal'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(
+                      statistics?.percentile25,
+                      scenarioName,
+                      'firstYearWithdrawal',
+                      true,
+                    )
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile25, scenarioName, 'firstYearWithdrawal'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.median, scenarioName, 'firstYearWithdrawal', true)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.median, scenarioName, 'firstYearWithdrawal'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(
+                      statistics?.percentile75,
+                      scenarioName,
+                      'firstYearWithdrawal',
+                      true,
+                    )
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile75, scenarioName, 'firstYearWithdrawal'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(
+                      statistics?.percentile95,
+                      scenarioName,
+                      'firstYearWithdrawal',
+                      true,
+                    )
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile95, scenarioName, 'firstYearWithdrawal'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="getCellClass(statistics?.mean, scenarioName, 'firstYearWithdrawal', true)"
+                >
+                  {{
+                    formatNumber(getScenario(statistics?.mean, scenarioName, 'firstYearWithdrawal'))
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.stdDev, scenarioName, 'firstYearWithdrawal', true)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.stdDev, scenarioName, 'firstYearWithdrawal'),
+                    )
+                  }}
+                </td>
+              </tr>
+            </template>
 
             <!-- Real Withdrawal Last Year -->
-            <tr>
-              <th rowspan="3" class="align-middle" scope="row">Uttag reellt (sista året)</th>
-              <th scope="row">ISK</th>
-              <td>{{ formatNumber(statistics?.percentile5.realWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.realWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.median.realWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.realWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.realWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.mean.realWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.stdDev.realWithdrawalISK) }}</td>
-            </tr>
-            <tr>
-              <th scope="row">VP</th>
-              <td>{{ formatNumber(statistics?.percentile5.realWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.realWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.median.realWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.realWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.realWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.mean.realWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.stdDev.realWithdrawalVP) }}</td>
-            </tr>
-            <tr>
-              <th scope="row">Fördel ISK</th>
-              <td :class="getDiffClass(statistics?.percentile5.realWithdrawalDiff)">
-                {{ formatNumber(statistics?.percentile5.realWithdrawalDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile25.realWithdrawalDiff)">
-                {{ formatNumber(statistics?.percentile25.realWithdrawalDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.median.realWithdrawalDiff)">
-                {{ formatNumber(statistics?.median.realWithdrawalDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile75.realWithdrawalDiff)">
-                {{ formatNumber(statistics?.percentile75.realWithdrawalDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.percentile95.realWithdrawalDiff)">
-                {{ formatNumber(statistics?.percentile95.realWithdrawalDiff) }}
-              </td>
-              <td :class="getDiffClass(statistics?.mean.realWithdrawalDiff)">
-                {{ formatNumber(statistics?.mean.realWithdrawalDiff) }}
-              </td>
-              <td>{{ formatNumber(statistics?.stdDev.realWithdrawalDiff) }}</td>
-            </tr>
+            <template
+              v-for="(scenarioName, index) in scenarioNames"
+              :key="`realWithdrawal-${scenarioName}`"
+            >
+              <tr>
+                <th
+                  v-if="index === 0"
+                  :rowspan="scenarioNames.length"
+                  class="align-middle"
+                  scope="row"
+                >
+                  Uttag reellt (sista året)
+                </th>
+                <th scope="row">{{ scenarioName }}</th>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile5, scenarioName, 'realWithdrawal', true)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile5, scenarioName, 'realWithdrawal'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile25, scenarioName, 'realWithdrawal', true)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile25, scenarioName, 'realWithdrawal'),
+                    )
+                  }}
+                </td>
+                <td :class="getCellClass(statistics?.median, scenarioName, 'realWithdrawal', true)">
+                  {{
+                    formatNumber(getScenario(statistics?.median, scenarioName, 'realWithdrawal'))
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile75, scenarioName, 'realWithdrawal', true)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile75, scenarioName, 'realWithdrawal'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile95, scenarioName, 'realWithdrawal', true)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile95, scenarioName, 'realWithdrawal'),
+                    )
+                  }}
+                </td>
+                <td :class="getCellClass(statistics?.mean, scenarioName, 'realWithdrawal', true)">
+                  {{ formatNumber(getScenario(statistics?.mean, scenarioName, 'realWithdrawal')) }}
+                </td>
+                <td :class="getCellClass(statistics?.stdDev, scenarioName, 'realWithdrawal', true)">
+                  {{
+                    formatNumber(getScenario(statistics?.stdDev, scenarioName, 'realWithdrawal'))
+                  }}
+                </td>
+              </tr>
+            </template>
 
             <!-- Average Annual Real Withdrawal -->
-            <tr>
-              <th rowspan="3" class="align-middle" scope="row">
-                Genomsnittligt uttag reellt per år
-              </th>
-              <th scope="row">ISK</th>
-              <td>
-                {{
-                  formatNumber(
-                    (statistics?.percentile5.accumulatedRealWithdrawalISK ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber(
-                    (statistics?.percentile25.accumulatedRealWithdrawalISK ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber((statistics?.median.accumulatedRealWithdrawalISK ?? 0) / yearsLater)
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber(
-                    (statistics?.percentile75.accumulatedRealWithdrawalISK ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber(
-                    (statistics?.percentile95.accumulatedRealWithdrawalISK ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber((statistics?.mean.accumulatedRealWithdrawalISK ?? 0) / yearsLater)
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber((statistics?.stdDev.accumulatedRealWithdrawalISK ?? 0) / yearsLater)
-                }}
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">VP</th>
-              <td>
-                {{
-                  formatNumber(
-                    (statistics?.percentile5.accumulatedRealWithdrawalVP ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber(
-                    (statistics?.percentile25.accumulatedRealWithdrawalVP ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber((statistics?.median.accumulatedRealWithdrawalVP ?? 0) / yearsLater)
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber(
-                    (statistics?.percentile75.accumulatedRealWithdrawalVP ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber(
-                    (statistics?.percentile95.accumulatedRealWithdrawalVP ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td>
-                {{ formatNumber((statistics?.mean.accumulatedRealWithdrawalVP ?? 0) / yearsLater) }}
-              </td>
-              <td>
-                {{
-                  formatNumber((statistics?.stdDev.accumulatedRealWithdrawalVP ?? 0) / yearsLater)
-                }}
-              </td>
-            </tr>
-            <tr>
-              <th scope="row">Fördel ISK</th>
-              <td
-                :class="
-                  getDiffClass(
-                    (statistics?.percentile5.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
-                  )
-                "
-              >
-                {{
-                  formatNumber(
-                    (statistics?.percentile5.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td
-                :class="
-                  getDiffClass(
-                    (statistics?.percentile25.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
-                  )
-                "
-              >
-                {{
-                  formatNumber(
-                    (statistics?.percentile25.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td
-                :class="
-                  getDiffClass((statistics?.median.accumulatedRealWithdrawalDiff ?? 0) / yearsLater)
-                "
-              >
-                {{
-                  formatNumber((statistics?.median.accumulatedRealWithdrawalDiff ?? 0) / yearsLater)
-                }}
-              </td>
-              <td
-                :class="
-                  getDiffClass(
-                    (statistics?.percentile75.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
-                  )
-                "
-              >
-                {{
-                  formatNumber(
-                    (statistics?.percentile75.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td
-                :class="
-                  getDiffClass(
-                    (statistics?.percentile95.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
-                  )
-                "
-              >
-                {{
-                  formatNumber(
-                    (statistics?.percentile95.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
-                  )
-                }}
-              </td>
-              <td
-                :class="
-                  getDiffClass((statistics?.mean.accumulatedRealWithdrawalDiff ?? 0) / yearsLater)
-                "
-              >
-                {{
-                  formatNumber((statistics?.mean.accumulatedRealWithdrawalDiff ?? 0) / yearsLater)
-                }}
-              </td>
-              <td>
-                {{
-                  formatNumber((statistics?.stdDev.accumulatedRealWithdrawalDiff ?? 0) / yearsLater)
-                }}
-              </td>
-            </tr>
+            <template
+              v-for="(scenarioName, index) in scenarioNames"
+              :key="`avgWithdrawal-${scenarioName}`"
+            >
+              <tr>
+                <th
+                  v-if="index === 0"
+                  :rowspan="scenarioNames.length"
+                  class="align-middle"
+                  scope="row"
+                >
+                  Genomsnittligt uttag reellt per år
+                </th>
+                <th scope="row">{{ scenarioName }}</th>
+                <td
+                  :class="
+                    getCellClass(
+                      statistics?.percentile5,
+                      scenarioName,
+                      'accumulatedRealWithdrawal',
+                      true,
+                    )
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(
+                        statistics?.percentile5,
+                        scenarioName,
+                        'accumulatedRealWithdrawal',
+                      ) / yearsLater,
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(
+                      statistics?.percentile25,
+                      scenarioName,
+                      'accumulatedRealWithdrawal',
+                      true,
+                    )
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(
+                        statistics?.percentile25,
+                        scenarioName,
+                        'accumulatedRealWithdrawal',
+                      ) / yearsLater,
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(
+                      statistics?.median,
+                      scenarioName,
+                      'accumulatedRealWithdrawal',
+                      true,
+                    )
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.median, scenarioName, 'accumulatedRealWithdrawal') /
+                        yearsLater,
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(
+                      statistics?.percentile75,
+                      scenarioName,
+                      'accumulatedRealWithdrawal',
+                      true,
+                    )
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(
+                        statistics?.percentile75,
+                        scenarioName,
+                        'accumulatedRealWithdrawal',
+                      ) / yearsLater,
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(
+                      statistics?.percentile95,
+                      scenarioName,
+                      'accumulatedRealWithdrawal',
+                      true,
+                    )
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(
+                        statistics?.percentile95,
+                        scenarioName,
+                        'accumulatedRealWithdrawal',
+                      ) / yearsLater,
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.mean, scenarioName, 'accumulatedRealWithdrawal', true)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.mean, scenarioName, 'accumulatedRealWithdrawal') /
+                        yearsLater,
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(
+                      statistics?.stdDev,
+                      scenarioName,
+                      'accumulatedRealWithdrawal',
+                      true,
+                    )
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.stdDev, scenarioName, 'accumulatedRealWithdrawal') /
+                        yearsLater,
+                    )
+                  }}
+                </td>
+              </tr>
+            </template>
 
             <!-- Annual Averages -->
             <template v-if="showStochasticParameters">
@@ -468,16 +636,57 @@ const hasResults = computed(() => statistics.value !== null)
                 <td>{{ formatPercent(statistics?.mean.averageDevelopment) }}</td>
                 <td>{{ formatPercent(statistics?.stdDev.averageDevelopment) }}</td>
               </tr>
-              <tr class="table-light">
-                <th scope="row">ISK-skattesats</th>
-                <td>{{ formatPercent(statistics?.percentile5.averageISKTaxRate) }}</td>
-                <td>{{ formatPercent(statistics?.percentile25.averageISKTaxRate) }}</td>
-                <td>{{ formatPercent(statistics?.median.averageISKTaxRate) }}</td>
-                <td>{{ formatPercent(statistics?.percentile75.averageISKTaxRate) }}</td>
-                <td>{{ formatPercent(statistics?.percentile95.averageISKTaxRate) }}</td>
-                <td>{{ formatPercent(statistics?.mean.averageISKTaxRate) }}</td>
-                <td>{{ formatPercent(statistics?.stdDev.averageISKTaxRate) }}</td>
-              </tr>
+              <template
+                v-for="scenarioName in scenarioNames.filter((n) => n === 'ISK')"
+                :key="`iskTax-${scenarioName}`"
+              >
+                <tr class="table-light">
+                  <th scope="row">ISK-skattesats</th>
+                  <td>
+                    {{
+                      formatPercent(
+                        getScenario(statistics?.percentile5, scenarioName, 'averageTaxRate'),
+                      )
+                    }}
+                  </td>
+                  <td>
+                    {{
+                      formatPercent(
+                        getScenario(statistics?.percentile25, scenarioName, 'averageTaxRate'),
+                      )
+                    }}
+                  </td>
+                  <td>
+                    {{
+                      formatPercent(getScenario(statistics?.median, scenarioName, 'averageTaxRate'))
+                    }}
+                  </td>
+                  <td>
+                    {{
+                      formatPercent(
+                        getScenario(statistics?.percentile75, scenarioName, 'averageTaxRate'),
+                      )
+                    }}
+                  </td>
+                  <td>
+                    {{
+                      formatPercent(
+                        getScenario(statistics?.percentile95, scenarioName, 'averageTaxRate'),
+                      )
+                    }}
+                  </td>
+                  <td>
+                    {{
+                      formatPercent(getScenario(statistics?.mean, scenarioName, 'averageTaxRate'))
+                    }}
+                  </td>
+                  <td>
+                    {{
+                      formatPercent(getScenario(statistics?.stdDev, scenarioName, 'averageTaxRate'))
+                    }}
+                  </td>
+                </tr>
+              </template>
               <tr class="table-light">
                 <th scope="row">Inflationstakt</th>
                 <td>{{ formatPercent(statistics?.percentile5.averageInflationRate) }}</td>
@@ -494,10 +703,8 @@ const hasResults = computed(() => statistics.value !== null)
       </div>
       <div class="card-footer text-muted">
         <p class="small mb-0">
-          <strong>Observera:</strong> Percentilerna för "Fördel ISK" visar fördelningen av
-          skillnader mellan ISK och VP över alla simuleringar. Dessa motsvarar därför inte
-          skillnaden mellan ISK:s och VP:s percentilvärden (t.ex. 5% percentilen för "Fördel ISK" är
-          inte ISK 5% minus VP 5%).
+          <strong>Observera:</strong> Celler med bästa värdet för varje mått och percentil är
+          markerade med färg.
         </p>
       </div>
     </div>

@@ -1,72 +1,59 @@
-export interface InputParameters {
-  initialCapital: number
+export interface ScenarioConfig {
+  name: string
+  withdrawalRate: number
+  badYearWithdrawalRate: number
   development: number
   developmentStdDev: number
-  withdrawalISK: number
-  withdrawalVP: number
-  badYearWithdrawalRate: number
-  iskTaxRate: number
-  iskTaxRateStdDev: number
   inflationRate: number
   inflationStdDev: number
-  capitalGainsTax: number
+  capitalGainsTax: number // Capital gains tax rate (used by both ISK and VP)
+  iskTaxRate?: number // ISK basis rate (only for ISK scenarios)
+  iskTaxRateStdDev?: number // ISK basis rate volatility (only for ISK scenarios)
+  isISK: boolean // Whether this scenario uses ISK tax model
+}
+
+export interface InputParameters {
+  initialCapital: number
   startYear: number
   yearsLater: number
   simulationCount: number
+  scenarios: ScenarioConfig[]
+}
+
+export interface ScenarioYearlyData {
+  amount: number
+  withdrawn: number
+  tax: number
+  paidTax: number
+  liquidValue: number
+  taxationDegree: number
+  withdrawnReal: number
+  withdrawalRate: number
+  taxRate: number // Current tax rate (for ISK varies, for VP constant)
+  development: number // Actual development this year for this scenario
+  inflationRate: number // Shared inflation rate (same across scenarios)
 }
 
 export interface YearlyData {
   year: number
   development: number
-  withdrawalISK: number
-  withdrawalVP: number
-  iskTaxRate: number
   inflationRate: number
-  capitalGainsTax: number
-  amountISK: number
-  amountVP: number
-  withdrawnISK: number
-  withdrawnVP: number
-  taxBasisVP: number
-  taxISK: number
-  taxVP: number
-  futureTaxVP: number
-  vpLiquidValue: number
-  paidTaxISK: number
-  paidTaxVP: number
-  taxationDegreeISK: number
-  taxationDegreeVP: number
   inflation: number
-  iskMinusVP: number
-  iskMinusVPReal: number
-  withdrawnISKReal: number
-  withdrawnVPReal: number
-  advantageISKPercent: number
+  scenarios: Record<string, ScenarioYearlyData>
+}
+
+export interface ScenarioSummary {
+  liquidValue: number
+  paidTax: number
+  taxationDegree: number
+  realWithdrawal: number
+  firstYearWithdrawal: number
+  accumulatedRealWithdrawal: number
+  averageTaxRate: number
 }
 
 export interface Summary {
-  liquidValueISK: number
-  liquidValueVP: number
-  liquidValueDiff: number
-  liquidValueDiffPercent: number
-  paidTaxISK: number
-  paidTaxVP: number
-  paidTaxDiff: number
-  paidTaxDiffPercent: number
-  taxationDegreeISK: number
-  taxationDegreeVP: number
-  taxationDegreeDiff: number
-  taxationDegreeDiffPercent: number
-  realWithdrawalISK: number
-  realWithdrawalVP: number
-  realWithdrawalDiff: number
-  realWithdrawalDiffPercent: number
-  firstYearWithdrawalISK: number
-  firstYearWithdrawalVP: number
-  accumulatedRealWithdrawalISK: number
-  accumulatedRealWithdrawalVP: number
-  accumulatedRealWithdrawalDiff: number
-  averageISKTaxRate: number
+  scenarios: Record<string, ScenarioSummary>
   averageInflationRate: number
   averageDevelopment: number
 }
@@ -89,6 +76,5 @@ export interface SimulationStatistics {
 export interface TimeSeriesPoint {
   simulationId: number
   year: number
-  iskValue: number
-  vpValue: number
+  scenarios: Record<string, number> // scenario name -> value
 }

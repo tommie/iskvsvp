@@ -16,6 +16,12 @@ const drawChart = () => {
   // Clear previous chart
   d3.select(svgRef.value).selectAll('*').remove()
 
+  // Get scenario names from first data point
+  const scenarioNames = Object.keys(timeSeriesData.value[0]?.scenarios ?? {})
+  if (scenarioNames.length === 0) return
+
+  const colors = ['#0d6efd', '#dc3545', '#198754', '#ffc107', '#6f42c1', '#fd7e14']
+
   // Get container dimensions
   const containerWidth = containerRef.value.clientWidth
   const margin = { top: 40, right: 120, bottom: 60, left: 80 }
@@ -31,18 +37,20 @@ const drawChart = () => {
 
   // Get data extent
   const xExtent = d3.extent(timeSeriesData.value, (d) => d.year) as [number, number]
-  const yExtentISK = d3.extent(timeSeriesData.value, (d) => d.iskValue) as [number, number]
-  const yExtentVP = d3.extent(timeSeriesData.value, (d) => d.vpValue) as [number, number]
-  const yExtent: [number, number] = [
-    Math.min(yExtentISK[0], yExtentVP[0]),
-    Math.max(yExtentISK[1], yExtentVP[1]),
+
+  // Get y extent across all scenarios
+  const allScenarioValues = timeSeriesData.value.flatMap((d) =>
+    scenarioNames.map((name) => d.scenarios[name] ?? 0),
+  )
+  const yExtent = d3.extent(allScenarioValues.filter((v) => isFinite(v) && v > 0)) as [
+    number,
+    number,
   ]
 
   // Create scales
   const xScale = d3.scaleLinear().domain(xExtent).range([0, width])
 
   // Use log scale for y-axis to better show distribution
-  // Ensure we have positive values for log scale
   const yMin = Math.max(yExtent[0], 1)
   const yMax = yExtent[1]
   const yScale = d3.scaleLog().domain([yMin, yMax]).range([height, 0]).nice()
@@ -81,77 +89,56 @@ const drawChart = () => {
     .attr('text-anchor', 'middle')
     .style('font-size', '16px')
     .style('font-weight', 'bold')
-    .text('Monte Carlo Simulation: ISK vs VP över tid (logaritmisk skala)')
+    .text('Monte Carlo Simulation över tid (logaritmisk skala)')
 
-  // Filter out invalid data points (NaN, Infinity, values <= 0)
-  const validData = timeSeriesData.value.filter(
-    (d) => isFinite(d.iskValue) && isFinite(d.vpValue) && d.iskValue > 0 && d.vpValue > 0,
-  )
+  // Draw points and median lines for each scenario
+  scenarioNames.forEach((scenarioName, i) => {
+    const color = colors[i % colors.length]!
 
-  // Draw ISK points
-  svg
-    .selectAll('.dot-isk')
-    .data(validData)
-    .enter()
-    .append('circle')
-    .attr('class', 'dot-isk')
-    .attr('cx', (d) => xScale(d.year))
-    .attr('cy', (d) => yScale(d.iskValue))
-    .attr('r', 1.5)
-    .attr('fill', '#0d6efd')
-    .attr('opacity', 0.03)
+    // Filter valid data for this scenario
+    const validData = timeSeriesData.value.filter((d) => {
+      const value = d.scenarios[scenarioName] ?? 0
+      return isFinite(value) && value > 0
+    })
 
-  // Draw VP points
-  svg
-    .selectAll('.dot-vp')
-    .data(validData)
-    .enter()
-    .append('circle')
-    .attr('class', 'dot-vp')
-    .attr('cx', (d) => xScale(d.year))
-    .attr('cy', (d) => yScale(d.vpValue))
-    .attr('r', 1.5)
-    .attr('fill', '#dc3545')
-    .attr('opacity', 0.03)
+    // Draw points
+    svg
+      .selectAll(`.dot-${scenarioName}`)
+      .data(validData)
+      .enter()
+      .append('circle')
+      .attr('class', `dot-${scenarioName}`)
+      .attr('cx', (d) => xScale(d.year))
+      .attr('cy', (d) => yScale(d.scenarios[scenarioName] ?? 0))
+      .attr('r', 1.5)
+      .attr('fill', color)
+      .attr('opacity', 0.03)
 
-  // Calculate median values by year (using valid data only)
-  const yearGroups = d3.group(validData, (d) => d.year)
-  const medianData = Array.from(yearGroups, ([year, values]) => ({
-    year,
-    medianISK: d3.median(values, (d) => d.iskValue) ?? 0,
-    medianVP: d3.median(values, (d) => d.vpValue) ?? 0,
-  })).sort((a, b) => a.year - b.year)
+    // Calculate median values by year
+    const yearGroups = d3.group(validData, (d) => d.year)
+    const medianData = Array.from(yearGroups, ([year, values]) => ({
+      year,
+      median: d3.median(values, (d) => d.scenarios[scenarioName] ?? 0) ?? 0,
+    }))
+      .filter((d) => isFinite(d.median) && d.median > 0)
+      .sort((a, b) => a.year - b.year)
 
-  // Create line generators
-  const iskLine = d3
-    .line<{ year: number; medianISK: number; medianVP: number }>()
-    .x((d) => xScale(d.year))
-    .y((d) => yScale(d.medianISK))
+    // Create line generator
+    const line = d3
+      .line<{ year: number; median: number }>()
+      .x((d) => xScale(d.year))
+      .y((d) => yScale(d.median))
 
-  const vpLine = d3
-    .line<{ year: number; medianISK: number; medianVP: number }>()
-    .x((d) => xScale(d.year))
-    .y((d) => yScale(d.medianVP))
-
-  // Draw ISK median line
-  svg
-    .append('path')
-    .datum(medianData)
-    .attr('class', 'line-isk-median')
-    .attr('fill', 'none')
-    .attr('stroke', '#0d6efd')
-    .attr('stroke-width', 3)
-    .attr('d', iskLine)
-
-  // Draw VP median line
-  svg
-    .append('path')
-    .datum(medianData)
-    .attr('class', 'line-vp-median')
-    .attr('fill', 'none')
-    .attr('stroke', '#dc3545')
-    .attr('stroke-width', 3)
-    .attr('d', vpLine)
+    // Draw median line
+    svg
+      .append('path')
+      .datum(medianData)
+      .attr('class', `line-${scenarioName}-median`)
+      .attr('fill', 'none')
+      .attr('stroke', color)
+      .attr('stroke-width', 3)
+      .attr('d', line)
+  })
 
   // Add legend
   const legend = svg
@@ -159,51 +146,43 @@ const drawChart = () => {
     .attr('class', 'legend')
     .attr('transform', `translate(${width + 10}, 0)`)
 
-  // ISK simulation dots
-  legend
-    .append('circle')
-    .attr('cx', 0)
-    .attr('cy', 0)
-    .attr('r', 4)
-    .attr('fill', '#0d6efd')
-    .attr('opacity', 0.3)
+  scenarioNames.forEach((scenarioName, i) => {
+    const color = colors[i % colors.length]!
+    const yOffset = i * 50
 
-  legend.append('text').attr('x', 15).attr('y', 5).style('font-size', '11px').text('ISK (sim.)')
+    // Simulation dots
+    legend
+      .append('circle')
+      .attr('cx', 0)
+      .attr('cy', yOffset)
+      .attr('r', 4)
+      .attr('fill', color)
+      .attr('opacity', 0.3)
 
-  // VP simulation dots
-  legend
-    .append('circle')
-    .attr('cx', 0)
-    .attr('cy', 25)
-    .attr('r', 4)
-    .attr('fill', '#dc3545')
-    .attr('opacity', 0.3)
+    legend
+      .append('text')
+      .attr('x', 15)
+      .attr('y', yOffset + 5)
+      .style('font-size', '11px')
+      .text(`${scenarioName} (sim.)`)
 
-  legend.append('text').attr('x', 15).attr('y', 30).style('font-size', '11px').text('VP (sim.)')
+    // Median line
+    legend
+      .append('line')
+      .attr('x1', -8)
+      .attr('x2', 8)
+      .attr('y1', yOffset + 25)
+      .attr('y2', yOffset + 25)
+      .attr('stroke', color)
+      .attr('stroke-width', 3)
 
-  // ISK average line
-  legend
-    .append('line')
-    .attr('x1', -8)
-    .attr('x2', 8)
-    .attr('y1', 50)
-    .attr('y2', 50)
-    .attr('stroke', '#0d6efd')
-    .attr('stroke-width', 3)
-
-  legend.append('text').attr('x', 15).attr('y', 55).style('font-size', '11px').text('ISK (median)')
-
-  // VP median line
-  legend
-    .append('line')
-    .attr('x1', -8)
-    .attr('x2', 8)
-    .attr('y1', 75)
-    .attr('y2', 75)
-    .attr('stroke', '#dc3545')
-    .attr('stroke-width', 3)
-
-  legend.append('text').attr('x', 15).attr('y', 80).style('font-size', '11px').text('VP (median)')
+    legend
+      .append('text')
+      .attr('x', 15)
+      .attr('y', yOffset + 30)
+      .style('font-size', '11px')
+      .text(`${scenarioName} (median)`)
+  })
 }
 
 // Watch for data changes

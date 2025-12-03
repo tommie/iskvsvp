@@ -5,6 +5,9 @@ import type {
   Summary,
   YearlyData,
   TimeSeriesPoint,
+  ScenarioConfig,
+  ScenarioYearlyData,
+  ScenarioSummary,
 } from './types'
 
 const ISK_TAX_RATE_MIN = 0.0125
@@ -19,168 +22,176 @@ function randomNormal(mean: number, stdDev: number): number {
   return mean + z0 * stdDev
 }
 
+interface ScenarioState {
+  amount: number
+  previousAmount: number
+  cumulativePaidTax: number
+  accumulatedRealWithdrawal: number
+  currentTaxRate: number
+}
+
 /**
- * Run a single simulation with stochastic parameters.
+ * Run a single simulation with stochastic parameters for multiple scenarios.
  */
 export function runSingleSimulation(params: InputParameters): SimulationResult {
   const yearlyData: YearlyData[] = []
-  let amountISK = params.initialCapital
-  let amountVP = params.initialCapital
-  let cumulativePaidTaxISK = 0
-  let cumulativePaidTaxVP = 0
+
+  // Initialize state for each scenario
+  const scenarioStates: Record<string, ScenarioState> = {}
+  for (const scenario of params.scenarios) {
+    scenarioStates[scenario.name] = {
+      amount: params.initialCapital,
+      previousAmount: params.initialCapital,
+      cumulativePaidTax: 0,
+      accumulatedRealWithdrawal: 0,
+      currentTaxRate: scenario.iskTaxRate ?? 0, // ISK basis rate (or 0 for VP)
+    }
+  }
+
   let cumulativeInflation = 1
-  let currentISKTaxRate = params.iskTaxRate
-  let previousAmountISK = params.initialCapital
-  let previousAmountVP = params.initialCapital
-  let accumulatedRealWithdrawalISK = 0
-  let accumulatedRealWithdrawalVP = 0
+  const firstYearData: Record<string, { withdrawnReal: number }> = {}
 
   for (let i = 0; i < params.yearsLater; i++) {
     const year = params.startYear + i
 
-    // Generate stochastic parameters for this year
-    const development = randomNormal(params.development, params.developmentStdDev)
-    const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev)
-
-    // ISK tax rate changes with drift=0, but has minimum of 1.25% and maximum of 100%
-    const iskTaxRateChange = randomNormal(0, params.iskTaxRateStdDev)
-    currentISKTaxRate = Math.max(
-      ISK_TAX_RATE_MIN,
-      Math.min(1.0, currentISKTaxRate + iskTaxRateChange),
-    )
-
-    // Check if previous year had no net increase (bad year)
-    const isBadYearISK = i > 0 && amountISK <= previousAmountISK
-    const isBadYearVP = i > 0 && amountVP <= previousAmountVP
-
-    // Calculate withdrawal rates (reduced in bad years)
-    const withdrawalRateISK = isBadYearISK
-      ? params.withdrawalISK * params.badYearWithdrawalRate
-      : params.withdrawalISK
-    const withdrawalRateVP = isBadYearVP
-      ? params.withdrawalVP * params.badYearWithdrawalRate
-      : params.withdrawalVP
-
-    // Calculate withdrawals
-    const withdrawnISK = amountISK * withdrawalRateISK
-    const withdrawnVP = amountVP * withdrawalRateVP
-
-    // Calculate capital gain for VP (relative to initial capital)
-    const capitalGainVP = amountVP * (1 + development) - params.initialCapital
-
-    // Calculate ISK tax (on the notional return)
-    const taxISK = amountISK * currentISKTaxRate * params.capitalGainsTax
-
-    // Calculate VP tax (on the withdrawal from capital gains)
-    const taxVP = Math.max(0, capitalGainVP) * params.withdrawalVP * params.capitalGainsTax
-
-    // Calculate future tax VP (total tax if liquidated)
-    const futureTaxVP = Math.max(0, capitalGainVP) * params.capitalGainsTax
-
-    // Update cumulative taxes
-    cumulativePaidTaxISK += taxISK
-    cumulativePaidTaxVP += taxVP
-
-    // Calculate VP liquid value (after future tax)
-    const vpLiquidValue = amountVP - futureTaxVP / (1 + development)
-
-    // Update cumulative inflation
+    // Generate shared inflation for this year (same across all scenarios for fair comparison)
+    // Use first scenario's inflation parameters
+    const firstScenario = params.scenarios[0]!
+    const inflationRate = randomNormal(firstScenario.inflationRate, firstScenario.inflationStdDev)
     cumulativeInflation *= 1 + inflationRate
 
-    // Real values adjusted for inflation
-    const withdrawnISKReal = withdrawnISK / cumulativeInflation
-    const withdrawnVPReal = withdrawnVP / cumulativeInflation
-    const iskMinusVP = amountISK - vpLiquidValue
-    const iskMinusVPReal = iskMinusVP / cumulativeInflation
+    const scenarioYearlyData: Record<string, ScenarioYearlyData> = {}
 
-    // Accumulate real withdrawals
-    accumulatedRealWithdrawalISK += withdrawnISKReal
-    accumulatedRealWithdrawalVP += withdrawnVPReal
+    // Process each scenario
+    for (const scenario of params.scenarios) {
+      const state = scenarioStates[scenario.name]!
+
+      // Generate stochastic development for this scenario this year
+      const development = randomNormal(scenario.development, scenario.developmentStdDev)
+
+      // Update ISK basis rate if ISK (random walk)
+      if (scenario.isISK && scenario.iskTaxRateStdDev) {
+        const taxRateChange = randomNormal(0, scenario.iskTaxRateStdDev)
+        state.currentTaxRate = Math.max(
+          ISK_TAX_RATE_MIN,
+          Math.min(1.0, state.currentTaxRate + taxRateChange),
+        )
+      }
+
+      // Check if previous year had no net increase (bad year)
+      const isBadYear = i > 0 && state.amount <= state.previousAmount
+
+      // Calculate withdrawal rate (reduced in bad years)
+      const withdrawalRate = isBadYear
+        ? scenario.withdrawalRate * scenario.badYearWithdrawalRate
+        : scenario.withdrawalRate
+
+      // Calculate withdrawal
+      const withdrawn = state.amount * withdrawalRate
+
+      // Calculate tax
+      let tax: number
+      let liquidValue: number
+
+      if (scenario.isISK) {
+        // ISK: tax is ISK basis rate × capital gains tax rate, applied to account value
+        // currentTaxRate is the ISK basis rate (e.g., 2.96%)
+        tax = state.amount * state.currentTaxRate * scenario.capitalGainsTax
+        liquidValue = state.amount
+      } else {
+        // VP: capital gains tax applied to actual capital gains
+        const capitalGain = state.amount * (1 + development) - params.initialCapital
+        tax = Math.max(0, capitalGain) * withdrawalRate * scenario.capitalGainsTax
+
+        // Calculate future tax if liquidated
+        const futureTaxVP = Math.max(0, capitalGain) * scenario.capitalGainsTax
+        liquidValue = state.amount - futureTaxVP / (1 + development)
+      }
+
+      // Update cumulative taxes
+      state.cumulativePaidTax += tax
+
+      // Calculate taxation degree
+      const taxationDegree = liquidValue > 0 ? state.cumulativePaidTax / liquidValue : 0
+
+      // Real withdrawal adjusted for inflation
+      const withdrawnReal = withdrawn / cumulativeInflation
+
+      // Accumulate real withdrawals
+      state.accumulatedRealWithdrawal += withdrawnReal
+
+      // Store first year data
+      if (i === 0) {
+        firstYearData[scenario.name] = { withdrawnReal }
+      }
+
+      scenarioYearlyData[scenario.name] = {
+        amount: state.amount,
+        withdrawn,
+        tax,
+        paidTax: state.cumulativePaidTax,
+        liquidValue,
+        taxationDegree,
+        withdrawnReal,
+        withdrawalRate,
+        taxRate: state.currentTaxRate,
+        development, // Store per-scenario
+        inflationRate, // Shared but stored for reference
+      }
+
+      // Store current amount for next year's bad year check
+      state.previousAmount = state.amount
+
+      // Update amount for next year, ensure non-negative
+      if (scenario.isISK) {
+        state.amount = Math.max(0, state.amount * (1 + development - withdrawalRate) - tax)
+      } else {
+        state.amount = Math.max(0, state.amount * (1 + development - withdrawalRate))
+      }
+    }
 
     yearlyData.push({
       year,
-      development,
-      withdrawalISK: withdrawalRateISK,
-      withdrawalVP: withdrawalRateVP,
-      iskTaxRate: currentISKTaxRate,
+      development: firstScenario.development, // Store first scenario's parameter for reference
       inflationRate,
-      capitalGainsTax: params.capitalGainsTax,
-      amountISK,
-      amountVP,
-      withdrawnISK,
-      withdrawnVP,
-      taxBasisVP: Math.max(0, capitalGainVP),
-      taxISK,
-      taxVP,
-      futureTaxVP,
-      vpLiquidValue,
-      paidTaxISK: cumulativePaidTaxISK,
-      paidTaxVP: cumulativePaidTaxVP,
-      taxationDegreeISK: amountISK > 0 ? cumulativePaidTaxISK / amountISK : 0,
-      taxationDegreeVP: vpLiquidValue > 0 ? cumulativePaidTaxVP / vpLiquidValue : 0,
       inflation: cumulativeInflation,
-      iskMinusVP,
-      iskMinusVPReal,
-      withdrawnISKReal,
-      withdrawnVPReal,
-      advantageISKPercent: vpLiquidValue !== 0 ? iskMinusVP / vpLiquidValue : 0,
+      scenarios: scenarioYearlyData,
     })
-
-    // Store current amounts for next year's bad year check
-    previousAmountISK = amountISK
-    previousAmountVP = amountVP
-
-    // Update amounts for next year, ensure non-negative
-    amountISK = Math.max(0, amountISK * (1 + development - withdrawalRateISK) - taxISK)
-    amountVP = Math.max(0, amountVP * (1 + development - withdrawalRateVP))
   }
 
   const lastYear = yearlyData[yearlyData.length - 1]!
-  const firstYear = yearlyData[0]!
 
   // Calculate averages across all years
-  const averageISKTaxRate =
-    yearlyData.reduce((sum, year) => sum + year.iskTaxRate, 0) / yearlyData.length
   const averageInflationRate =
     yearlyData.reduce((sum, year) => sum + year.inflationRate, 0) / yearlyData.length
   const averageDevelopment =
     yearlyData.reduce((sum, year) => sum + year.development, 0) / yearlyData.length
 
+  // Build scenario summaries
+  const scenarioSummaries: Record<string, ScenarioSummary> = {}
+  for (const scenario of params.scenarios) {
+    const lastYearData = lastYear.scenarios[scenario.name]!
+    const firstYearWithdrawal = firstYearData[scenario.name]!.withdrawnReal
+    const state = scenarioStates[scenario.name]!
+
+    // Calculate average tax rate across all years
+    const averageTaxRate =
+      yearlyData.reduce((sum, year) => sum + year.scenarios[scenario.name]!.taxRate, 0) /
+      yearlyData.length
+
+    scenarioSummaries[scenario.name] = {
+      liquidValue: lastYearData.liquidValue,
+      paidTax: lastYearData.paidTax,
+      taxationDegree: lastYearData.taxationDegree,
+      realWithdrawal: lastYearData.withdrawnReal,
+      firstYearWithdrawal,
+      accumulatedRealWithdrawal: state.accumulatedRealWithdrawal,
+      averageTaxRate,
+    }
+  }
+
   const summary: Summary = {
-    liquidValueISK: lastYear.amountISK,
-    liquidValueVP: lastYear.vpLiquidValue,
-    liquidValueDiff: lastYear.amountISK - lastYear.vpLiquidValue,
-    liquidValueDiffPercent:
-      lastYear.amountISK !== 0
-        ? (lastYear.amountISK - lastYear.vpLiquidValue) / lastYear.amountISK
-        : 0,
-    paidTaxISK: lastYear.paidTaxISK,
-    paidTaxVP: lastYear.paidTaxVP,
-    paidTaxDiff: lastYear.paidTaxVP - lastYear.paidTaxISK,
-    paidTaxDiffPercent:
-      lastYear.paidTaxISK !== 0
-        ? (lastYear.paidTaxVP - lastYear.paidTaxISK) / lastYear.paidTaxISK
-        : 0,
-    taxationDegreeISK: lastYear.taxationDegreeISK,
-    taxationDegreeVP: lastYear.taxationDegreeVP,
-    taxationDegreeDiff: lastYear.taxationDegreeVP - lastYear.taxationDegreeISK,
-    taxationDegreeDiffPercent:
-      lastYear.taxationDegreeISK !== 0
-        ? (lastYear.taxationDegreeVP - lastYear.taxationDegreeISK) / lastYear.taxationDegreeISK
-        : 0,
-    realWithdrawalISK: lastYear.withdrawnISKReal,
-    realWithdrawalVP: lastYear.withdrawnVPReal,
-    realWithdrawalDiff: lastYear.withdrawnISKReal - lastYear.withdrawnVPReal,
-    realWithdrawalDiffPercent:
-      lastYear.withdrawnISKReal !== 0
-        ? (lastYear.withdrawnISKReal - lastYear.withdrawnVPReal) / lastYear.withdrawnISKReal
-        : 0,
-    firstYearWithdrawalISK: firstYear.withdrawnISKReal,
-    firstYearWithdrawalVP: firstYear.withdrawnVPReal,
-    accumulatedRealWithdrawalISK,
-    accumulatedRealWithdrawalVP,
-    accumulatedRealWithdrawalDiff: accumulatedRealWithdrawalISK - accumulatedRealWithdrawalVP,
-    averageISKTaxRate,
+    scenarios: scenarioSummaries,
     averageInflationRate,
     averageDevelopment,
   }
@@ -218,80 +229,140 @@ export function runMonteCarloSimulation(
 export function calculateStatistics(results: SimulationResult[]): SimulationStatistics {
   const summaries = results.map((r) => r.summary)
 
-  const getSummaryField = (field: keyof Summary): number[] =>
-    summaries.map((s) => s[field] as number)
-
-  const calculateFieldStats = (field: keyof Summary) => {
-    const values = getSummaryField(field).sort((a, b) => a - b)
-    const n = values.length
+  const calculateStats = (values: number[]) => {
+    const sorted = values.slice().sort((a, b) => a - b)
+    const n = sorted.length
+    const mean = sorted.reduce((a, b) => a + b, 0) / n
 
     return {
-      mean: values.reduce((a, b) => a + b, 0) / n,
-      stdDev: Math.sqrt(
-        values.reduce(
-          (sum, val) => sum + Math.pow(val - values.reduce((a, b) => a + b, 0) / n, 2),
-          0,
-        ) / n,
-      ),
-      percentile5: values[Math.floor(n * 0.05)] ?? 0,
-      percentile25: values[Math.floor(n * 0.25)] ?? 0,
-      median: values[Math.floor(n * 0.5)] ?? 0,
-      percentile75: values[Math.floor(n * 0.75)] ?? 0,
-      percentile95: values[Math.floor(n * 0.95)] ?? 0,
+      mean,
+      stdDev: Math.sqrt(sorted.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / n),
+      percentile5: sorted[Math.floor(n * 0.05)] ?? 0,
+      percentile25: sorted[Math.floor(n * 0.25)] ?? 0,
+      median: sorted[Math.floor(n * 0.5)] ?? 0,
+      percentile75: sorted[Math.floor(n * 0.75)] ?? 0,
+      percentile95: sorted[Math.floor(n * 0.95)] ?? 0,
     }
   }
 
-  const fields: (keyof Summary)[] = [
-    'liquidValueISK',
-    'liquidValueVP',
-    'liquidValueDiff',
-    'liquidValueDiffPercent',
-    'paidTaxISK',
-    'paidTaxVP',
-    'paidTaxDiff',
-    'paidTaxDiffPercent',
-    'taxationDegreeISK',
-    'taxationDegreeVP',
-    'taxationDegreeDiff',
-    'taxationDegreeDiffPercent',
-    'realWithdrawalISK',
-    'realWithdrawalVP',
-    'realWithdrawalDiff',
-    'realWithdrawalDiffPercent',
-    'firstYearWithdrawalISK',
-    'firstYearWithdrawalVP',
-    'accumulatedRealWithdrawalISK',
-    'accumulatedRealWithdrawalVP',
-    'accumulatedRealWithdrawalDiff',
-    'averageISKTaxRate',
-    'averageInflationRate',
-    'averageDevelopment',
-  ]
+  // Get all scenario names from first result
+  const scenarioNames = Object.keys(summaries[0]?.scenarios ?? {})
 
-  const stats = fields.reduce(
-    (acc, field) => {
-      const fieldStats = calculateFieldStats(field)
-      acc.mean[field] = fieldStats.mean
-      acc.stdDev[field] = fieldStats.stdDev
-      acc.percentile5[field] = fieldStats.percentile5
-      acc.percentile25[field] = fieldStats.percentile25
-      acc.median[field] = fieldStats.median
-      acc.percentile75[field] = fieldStats.percentile75
-      acc.percentile95[field] = fieldStats.percentile95
-      return acc
-    },
+  // Calculate statistics for each scenario
+  const scenarioStats: Record<
+    string,
     {
-      mean: {} as Summary,
-      stdDev: {} as Summary,
-      percentile5: {} as Summary,
-      percentile25: {} as Summary,
-      median: {} as Summary,
-      percentile75: {} as Summary,
-      percentile95: {} as Summary,
-    },
-  )
+      mean: ScenarioSummary
+      stdDev: ScenarioSummary
+      percentile5: ScenarioSummary
+      percentile25: ScenarioSummary
+      median: ScenarioSummary
+      percentile75: ScenarioSummary
+      percentile95: ScenarioSummary
+    }
+  > = {}
 
-  return stats
+  for (const scenarioName of scenarioNames) {
+    const scenarioSummaries = summaries.map((s) => s.scenarios[scenarioName]!)
+
+    // Get all fields from scenario summary
+    const fields: (keyof ScenarioSummary)[] = [
+      'liquidValue',
+      'paidTax',
+      'taxationDegree',
+      'realWithdrawal',
+      'firstYearWithdrawal',
+      'accumulatedRealWithdrawal',
+      'averageTaxRate',
+    ]
+
+    const meanScenario = {} as ScenarioSummary
+    const stdDevScenario = {} as ScenarioSummary
+    const percentile5Scenario = {} as ScenarioSummary
+    const percentile25Scenario = {} as ScenarioSummary
+    const medianScenario = {} as ScenarioSummary
+    const percentile75Scenario = {} as ScenarioSummary
+    const percentile95Scenario = {} as ScenarioSummary
+
+    for (const field of fields) {
+      const values = scenarioSummaries.map((s) => s[field])
+      const stats = calculateStats(values)
+
+      meanScenario[field] = stats.mean
+      stdDevScenario[field] = stats.stdDev
+      percentile5Scenario[field] = stats.percentile5
+      percentile25Scenario[field] = stats.percentile25
+      medianScenario[field] = stats.median
+      percentile75Scenario[field] = stats.percentile75
+      percentile95Scenario[field] = stats.percentile95
+    }
+
+    scenarioStats[scenarioName] = {
+      mean: meanScenario,
+      stdDev: stdDevScenario,
+      percentile5: percentile5Scenario,
+      percentile25: percentile25Scenario,
+      median: medianScenario,
+      percentile75: percentile75Scenario,
+      percentile95: percentile95Scenario,
+    }
+  }
+
+  // Calculate statistics for top-level fields
+  const avgInflationStats = calculateStats(summaries.map((s) => s.averageInflationRate))
+  const avgDevelopmentStats = calculateStats(summaries.map((s) => s.averageDevelopment))
+
+  return {
+    mean: {
+      scenarios: Object.fromEntries(
+        Object.entries(scenarioStats).map(([name, stats]) => [name, stats.mean]),
+      ),
+      averageInflationRate: avgInflationStats.mean,
+      averageDevelopment: avgDevelopmentStats.mean,
+    },
+    stdDev: {
+      scenarios: Object.fromEntries(
+        Object.entries(scenarioStats).map(([name, stats]) => [name, stats.stdDev]),
+      ),
+      averageInflationRate: avgInflationStats.stdDev,
+      averageDevelopment: avgDevelopmentStats.stdDev,
+    },
+    percentile5: {
+      scenarios: Object.fromEntries(
+        Object.entries(scenarioStats).map(([name, stats]) => [name, stats.percentile5]),
+      ),
+      averageInflationRate: avgInflationStats.percentile5,
+      averageDevelopment: avgDevelopmentStats.percentile5,
+    },
+    percentile25: {
+      scenarios: Object.fromEntries(
+        Object.entries(scenarioStats).map(([name, stats]) => [name, stats.percentile25]),
+      ),
+      averageInflationRate: avgInflationStats.percentile25,
+      averageDevelopment: avgDevelopmentStats.percentile25,
+    },
+    median: {
+      scenarios: Object.fromEntries(
+        Object.entries(scenarioStats).map(([name, stats]) => [name, stats.median]),
+      ),
+      averageInflationRate: avgInflationStats.median,
+      averageDevelopment: avgDevelopmentStats.median,
+    },
+    percentile75: {
+      scenarios: Object.fromEntries(
+        Object.entries(scenarioStats).map(([name, stats]) => [name, stats.percentile75]),
+      ),
+      averageInflationRate: avgInflationStats.percentile75,
+      averageDevelopment: avgDevelopmentStats.percentile75,
+    },
+    percentile95: {
+      scenarios: Object.fromEntries(
+        Object.entries(scenarioStats).map(([name, stats]) => [name, stats.percentile95]),
+      ),
+      averageInflationRate: avgInflationStats.percentile95,
+      averageDevelopment: avgDevelopmentStats.percentile95,
+    },
+  }
 }
 
 /**
@@ -305,8 +376,9 @@ export function extractTimeSeriesData(results: SimulationResult[]): TimeSeriesPo
       points.push({
         simulationId,
         year: yearData.year,
-        iskValue: yearData.amountISK,
-        vpValue: yearData.vpLiquidValue,
+        scenarios: Object.fromEntries(
+          Object.entries(yearData.scenarios).map(([name, data]) => [name, data.liquidValue]),
+        ),
       })
     })
   })

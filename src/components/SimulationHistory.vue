@@ -39,7 +39,8 @@ const formatNumber = (value: number): string => {
   }).format(value)
 }
 
-const formatPercent = (value: number): string => {
+const formatPercent = (value: number | undefined): string => {
+  if (value == null) return 'N/A'
   return new Intl.NumberFormat('sv-SE', {
     style: 'percent',
     minimumFractionDigits: 1,
@@ -47,14 +48,33 @@ const formatPercent = (value: number): string => {
   }).format(value)
 }
 
-const getWinner = (record: HistoryRecord): 'ISK' | 'VP' => {
-  const iskMedian = record.statistics.median.realWithdrawalISK
-  const vpMedian = record.statistics.median.realWithdrawalVP
-  return iskMedian > vpMedian ? 'ISK' : 'VP'
+const getWinner = (record: HistoryRecord): string => {
+  const scenarios = record.statistics.median.scenarios ?? {}
+  const scenarioNames = Object.keys(scenarios)
+
+  if (scenarioNames.length === 0) return 'N/A'
+
+  let bestScenario = scenarioNames[0]!
+  let bestValue = scenarios[bestScenario]?.realWithdrawal ?? 0
+
+  for (const name of scenarioNames) {
+    const value = scenarios[name]?.realWithdrawal ?? 0
+    if (value > bestValue) {
+      bestValue = value
+      bestScenario = name
+    }
+  }
+
+  return bestScenario
 }
 
-const getWinnerClass = (winner: 'ISK' | 'VP'): string => {
-  return winner === 'ISK' ? 'text-primary' : 'text-warning'
+const getWinnerClass = (winner: string): string => {
+  // Map specific scenario names to colors
+  const colorMap: Record<string, string> = {
+    ISK: 'text-primary',
+    VP: 'text-warning',
+  }
+  return colorMap[winner] ?? 'text-success'
 }
 
 const loadRecord = (record: HistoryRecord) => {
@@ -211,26 +231,49 @@ const positionPopover = (popoverId: string, anchorId: string) => {
               <div class="param-row">
                 <span class="param-label">Uttag:</span>
                 <span class="param-value">
-                  ISK {{ formatPercent(record.parameters.withdrawalISK) }}, VP
-                  {{ formatPercent(record.parameters.withdrawalVP) }}
+                  <template
+                    v-for="(scenario, idx) in record.parameters.scenarios"
+                    :key="scenario.name"
+                  >
+                    <span v-if="idx > 0">, </span>
+                    {{ scenario.name }}
+                    {{ formatPercent(scenario.withdrawalRate) }}
+                  </template>
                 </span>
               </div>
               <div class="param-row">
                 <span class="param-label">Avkastning:</span>
                 <span class="param-value">
-                  {{ formatPercent(record.parameters.development) }}, SD
-                  {{ formatPercent(record.parameters.developmentStdDev) }}
+                  {{ formatPercent(record.parameters.scenarios[0]?.development) }}, SD
+                  {{ formatPercent(record.parameters.scenarios[0]?.developmentStdDev) }}
                 </span>
               </div>
-              <div class="param-row">
+              <div
+                class="param-row"
+                v-if="record.parameters.scenarios.some((s) => s.isISK && s.iskTaxRate)"
+              >
                 <span class="param-label">ISK-skatt:</span>
-                <span class="param-value">{{ formatPercent(record.parameters.iskTaxRate) }}</span>
+                <span class="param-value">{{
+                  formatPercent(record.parameters.scenarios.find((s) => s.isISK)?.iskTaxRate)
+                }}</span>
               </div>
               <div class="param-row">
                 <span class="param-label">Beskattningsgrad (median):</span>
                 <span class="param-value">
-                  ISK {{ formatPercent(record.statistics.median.taxationDegreeISK) }}, VP
-                  {{ formatPercent(record.statistics.median.taxationDegreeVP) }}
+                  <template
+                    v-for="(scenarioName, idx) in Object.keys(
+                      record.statistics.median.scenarios ?? {},
+                    )"
+                    :key="scenarioName"
+                  >
+                    <span v-if="idx > 0">, </span>
+                    {{ scenarioName }}
+                    {{
+                      formatPercent(
+                        record.statistics.median.scenarios?.[scenarioName]?.taxationDegree,
+                      )
+                    }}
+                  </template>
                 </span>
               </div>
               <div class="param-row">

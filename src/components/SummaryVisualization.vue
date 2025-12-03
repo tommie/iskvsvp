@@ -52,8 +52,11 @@ const drawChart = (
 
   const width = containerWidth - margin.left - margin.right
 
-  // Get x extent across all series
-  const allValues = series.flatMap((s) => s.values)
+  // Get x extent across all series, filtering out invalid values
+  const allValues = series.flatMap((s) => s.values).filter((v) => isFinite(v) && v > 0)
+
+  if (allValues.length === 0) return // No valid data to display
+
   const xExtent = d3.extent(allValues) as [number, number]
 
   // Ensure positive values for log scale
@@ -100,10 +103,11 @@ const drawChart = (
       .style('font-weight', '500')
       .text(s.label)
 
-    // Draw dots
+    // Draw dots (filter out invalid values)
+    const validValues = s.values.filter((v) => isFinite(v) && v > 0)
     svg
       .selectAll(`.dot-series-${i}`)
-      .data(s.values)
+      .data(validValues)
       .enter()
       .append('circle')
       .attr('class', `dot-series-${i}`)
@@ -113,29 +117,31 @@ const drawChart = (
       .attr('fill', s.color)
       .attr('opacity', 0.1)
 
-    // Draw median line (last year)
-    svg
-      .append('line')
-      .attr('x1', xScale(s.median))
-      .attr('x2', xScale(s.median))
-      .attr('y1', yPosition - 20)
-      .attr('y2', yPosition + 20)
-      .attr('stroke', s.color)
-      .attr('stroke-width', 3)
+    // Draw median line (last year) - only if valid
+    if (isFinite(s.median) && s.median > 0) {
+      svg
+        .append('line')
+        .attr('x1', xScale(s.median))
+        .attr('x2', xScale(s.median))
+        .attr('y1', yPosition - 20)
+        .attr('y2', yPosition + 20)
+        .attr('stroke', s.color)
+        .attr('stroke-width', 3)
 
-    // Draw median label (last year)
-    svg
-      .append('text')
-      .attr('x', xScale(s.median))
-      .attr('y', yPosition - 25)
-      .attr('text-anchor', 'middle')
-      .style('font-size', '11px')
-      .style('font-weight', 'bold')
-      .style('fill', s.color)
-      .text(formatValue(s.median))
+      // Draw median label (last year)
+      svg
+        .append('text')
+        .attr('x', xScale(s.median))
+        .attr('y', yPosition - 25)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '11px')
+        .style('font-weight', 'bold')
+        .style('fill', s.color)
+        .text(formatValue(s.median))
+    }
 
-    // Draw first year median line if provided (dashed)
-    if (s.firstYearMedian !== undefined) {
+    // Draw first year median line if provided (dashed) - only if valid
+    if (s.firstYearMedian !== undefined && isFinite(s.firstYearMedian) && s.firstYearMedian > 0) {
       svg
         .append('line')
         .attr('x1', xScale(s.firstYearMedian))
@@ -172,92 +178,67 @@ const drawAllCharts = () => {
   // Extract data from results
   const summaries = results.value.map((r) => r.summary)
 
-  // Liquid Value
-  const liquidValueISK = summaries.map((s) => s.liquidValueISK)
-  const liquidValueVP = summaries.map((s) => s.liquidValueVP)
-  const liquidValueMedianISK = d3.median(liquidValueISK) ?? 0
-  const liquidValueMedianVP = d3.median(liquidValueVP) ?? 0
+  // Get scenario names from first summary
+  const scenarioNames = Object.keys(summaries[0]?.scenarios ?? {})
+  const colors = ['#0d6efd', '#dc3545', '#198754', '#ffc107', '#6f42c1', '#fd7e14']
 
+  // Helper to build series for a field
+  const buildSeries = (field: string) => {
+    return scenarioNames.map((name, i) => {
+      const values = summaries.map((s) => (s.scenarios[name] as any)?.[field] ?? 0)
+      return {
+        label: name,
+        values,
+        median: d3.median(values) ?? 0,
+        color: colors[i % colors.length]!,
+      }
+    })
+  }
+
+  // Liquid Value
   drawChart(
     liquidValueSvgRef.value,
     liquidValueContainerRef.value,
-    [
-      { label: 'ISK', values: liquidValueISK, median: liquidValueMedianISK, color: '#0d6efd' },
-      { label: 'VP', values: liquidValueVP, median: liquidValueMedianVP, color: '#dc3545' },
-    ],
+    buildSeries('liquidValue'),
     'Likvidvärde',
     (d) => d3.format(',.0f')(d) + ' kr',
   )
 
   // Paid Tax
-  const paidTaxISK = summaries.map((s) => s.paidTaxISK)
-  const paidTaxVP = summaries.map((s) => s.paidTaxVP)
-  const paidTaxMedianISK = d3.median(paidTaxISK) ?? 0
-  const paidTaxMedianVP = d3.median(paidTaxVP) ?? 0
-
   drawChart(
     paidTaxSvgRef.value,
     paidTaxContainerRef.value,
-    [
-      { label: 'ISK', values: paidTaxISK, median: paidTaxMedianISK, color: '#0d6efd' },
-      { label: 'VP', values: paidTaxVP, median: paidTaxMedianVP, color: '#dc3545' },
-    ],
+    buildSeries('paidTax'),
     'Betald skatt',
     (d) => d3.format(',.0f')(d) + ' kr',
   )
 
   // Taxation Degree
-  const taxationDegreeISK = summaries.map((s) => s.taxationDegreeISK)
-  const taxationDegreeVP = summaries.map((s) => s.taxationDegreeVP)
-  const taxationDegreeMedianISK = d3.median(taxationDegreeISK) ?? 0
-  const taxationDegreeMedianVP = d3.median(taxationDegreeVP) ?? 0
-
   drawChart(
     taxationDegreeSvgRef.value,
     taxationDegreeContainerRef.value,
-    [
-      {
-        label: 'ISK',
-        values: taxationDegreeISK,
-        median: taxationDegreeMedianISK,
-        color: '#0d6efd',
-      },
-      { label: 'VP', values: taxationDegreeVP, median: taxationDegreeMedianVP, color: '#dc3545' },
-    ],
+    buildSeries('taxationDegree'),
     'Beskattningsgrad',
     (d) => d3.format('.1%')(d),
   )
 
   // Withdrawals (Real) - Last Year and First Year
-  const realWithdrawalISK = summaries.map((s) => s.realWithdrawalISK)
-  const realWithdrawalVP = summaries.map((s) => s.realWithdrawalVP)
-  const realWithdrawalMedianISK = d3.median(realWithdrawalISK) ?? 0
-  const realWithdrawalMedianVP = d3.median(realWithdrawalVP) ?? 0
-
-  const firstYearWithdrawalISK = summaries.map((s) => s.firstYearWithdrawalISK)
-  const firstYearWithdrawalVP = summaries.map((s) => s.firstYearWithdrawalVP)
-  const firstYearWithdrawalMedianISK = d3.median(firstYearWithdrawalISK) ?? 0
-  const firstYearWithdrawalMedianVP = d3.median(firstYearWithdrawalVP) ?? 0
+  const withdrawalSeries = scenarioNames.map((name, i) => {
+    const realValues = summaries.map((s) => s.scenarios[name]?.realWithdrawal ?? 0)
+    const firstYearValues = summaries.map((s) => s.scenarios[name]?.firstYearWithdrawal ?? 0)
+    return {
+      label: name,
+      values: realValues,
+      median: d3.median(realValues) ?? 0,
+      firstYearMedian: d3.median(firstYearValues) ?? 0,
+      color: colors[i % colors.length]!,
+    }
+  })
 
   drawChart(
     withdrawalSvgRef.value,
     withdrawalContainerRef.value,
-    [
-      {
-        label: 'ISK',
-        values: realWithdrawalISK,
-        median: realWithdrawalMedianISK,
-        firstYearMedian: firstYearWithdrawalMedianISK,
-        color: '#0d6efd',
-      },
-      {
-        label: 'VP',
-        values: realWithdrawalVP,
-        median: realWithdrawalMedianVP,
-        firstYearMedian: firstYearWithdrawalMedianVP,
-        color: '#dc3545',
-      },
-    ],
+    withdrawalSeries,
     'Uttag reellt (sista året)',
     (d) => d3.format(',.0f')(d) + ' kr',
     4, // tick count
@@ -266,28 +247,20 @@ const drawAllCharts = () => {
 
   // Average Annual Real Withdrawal
   const years = yearsLater.value
-  const averageAnnualWithdrawalISK = summaries.map((s) => s.accumulatedRealWithdrawalISK / years)
-  const averageAnnualWithdrawalVP = summaries.map((s) => s.accumulatedRealWithdrawalVP / years)
-  const averageAnnualWithdrawalMedianISK = d3.median(averageAnnualWithdrawalISK) ?? 0
-  const averageAnnualWithdrawalMedianVP = d3.median(averageAnnualWithdrawalVP) ?? 0
+  const avgWithdrawalSeries = scenarioNames.map((name, i) => {
+    const values = summaries.map((s) => (s.scenarios[name]?.accumulatedRealWithdrawal ?? 0) / years)
+    return {
+      label: name,
+      values,
+      median: d3.median(values) ?? 0,
+      color: colors[i % colors.length]!,
+    }
+  })
 
   drawChart(
     accumulatedWithdrawalSvgRef.value,
     accumulatedWithdrawalContainerRef.value,
-    [
-      {
-        label: 'ISK',
-        values: averageAnnualWithdrawalISK,
-        median: averageAnnualWithdrawalMedianISK,
-        color: '#0d6efd',
-      },
-      {
-        label: 'VP',
-        values: averageAnnualWithdrawalVP,
-        median: averageAnnualWithdrawalMedianVP,
-        color: '#dc3545',
-      },
-    ],
+    avgWithdrawalSeries,
     'Genomsnittligt uttag reellt per år',
     (d) => d3.format(',.0f')(d) + ' kr',
     3, // Fewer ticks for this chart with narrower range
