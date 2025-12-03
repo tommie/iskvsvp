@@ -20,7 +20,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const iskTaxRate = ref(0.0296)
   const iskTaxRateStdDev = ref(0.005)
   const inflationRate = ref(0.02)
-  const inflationStdDev = ref(0.07) // 5%ile slightly above zero
+  const inflationStdDev = ref(0.009) // Barely any negative years
   const capitalGainsTax = ref(0.3)
   const startYear = ref(45)
   const yearsLater = ref(36)
