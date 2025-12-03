@@ -220,6 +220,7 @@ const drawAllCharts = () => {
     buildSeries('taxationDegree'),
     'Beskattningsgrad',
     (d) => d3.format('.1%')(d),
+    3, // Fewer ticks for percentage scale
   )
 
   // Withdrawals (Real) - Last Year and First Year

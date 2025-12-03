@@ -71,7 +71,7 @@ const drawChart = () => {
   // Add Y axis
   svg
     .append('g')
-    .call(d3.axisLeft(yScale).tickFormat(d3.format('.2s')))
+    .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format('.2s')))
     .append('text')
     .attr('transform', 'rotate(-90)')
     .attr('x', -height / 2)
