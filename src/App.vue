@@ -17,7 +17,8 @@ const { simulationCount } = storeToRefs(store)
     <header class="mb-4">
       <h1 class="display-4">ISK vs VP Monte Carlo-simulator</h1>
       <p class="lead text-muted">
-        Stokastisk simulering som jämför ISK (Investeringssparkonto) och VP (Vanlig depå) över tid
+        Stokastisk simulering som jämför ISK (Investeringssparkonto) och VP (Värdepappersdepå) över
+        tid
       </p>
     </header>
 

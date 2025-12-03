@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 
 const store = useCalculatorStore()
 const {
@@ -57,6 +57,27 @@ const handleRunSimulation = async () => {
 const getTargetValue = (event: UIEvent) => {
   return parseFloat((event.target as HTMLInputElement)?.value)
 }
+
+const expectedTotalWithdrawalRate = computed(() => {
+  const b = balanceWithdrawalRate.value
+  const p = profitWithdrawalRate.value
+  const d = development.value
+  const n = profitLookbackYears.value
+
+  // Balance-based component
+  const balanceComponent = b
+
+  // Profit-based component (steady state approximation)
+  // Net growth rate after balance withdrawals
+  const netGrowth = d - b
+
+  // Growth factor over lookback period with net growth
+  // [(1 + netGrowth)^n - 1] / [n × (1 + netGrowth)^n]
+  const growthFactor = Math.pow(1 + netGrowth, n)
+  const profitComponent = (p * (growthFactor - 1)) / (n * growthFactor)
+
+  return balanceComponent + profitComponent
+})
 </script>
 
 <template>
@@ -80,79 +101,14 @@ const getTargetValue = (event: UIEvent) => {
                   :disabled="isRunning"
                 />
               </div>
-              <div class="col-12">
-                <label class="form-label">Vinstskatt (VP)</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="0.1"
-                    class="form-control text-end"
-                    :value="(capitalGainsTax * 100).toFixed(1)"
-                    @input="capitalGainsTax = getTargetValue($event) / 100"
-                    :disabled="isRunning"
-                  />
-                  <span class="input-group-text">%</span>
-                </div>
-              </div>
             </div>
           </div>
 
-          <!-- Annual Return Distribution -->
-          <div class="param-section">
-            <h5 class="section-title">Avkastning (årlig fördelning)</h5>
-            <div class="row g-3">
-              <div class="col-12">
-                <label class="form-label">Förinställning</label>
-                <select
-                  class="form-select"
-                  v-model="rorPreset"
-                  @change="applyRORPreset"
-                  :disabled="isRunning"
-                >
-                  <option value="">-- Välj fond --</option>
-                  <option v-for="preset in rorPresets" :key="preset.label" :value="preset.label">
-                    {{ preset.label }}
-                  </option>
-                </select>
-              </div>
-              <div class="col-12">
-                <label class="form-label">Medelvärde</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="0.1"
-                    class="form-control text-end"
-                    :value="(development * 100).toFixed(1)"
-                    @input="development = getTargetValue($event) / 100"
-                    :disabled="isRunning"
-                  />
-                  <span class="input-group-text">%</span>
-                </div>
-              </div>
-              <div class="col-12">
-                <label class="form-label">Standardavvikelse</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="0.1"
-                    class="form-control text-end"
-                    :value="(developmentStdDev * 100).toFixed(1)"
-                    @input="developmentStdDev = getTargetValue($event) / 100"
-                    :disabled="isRunning"
-                  />
-                  <span class="input-group-text">%</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="params-column">
           <!-- Withdrawal Rates -->
           <div class="param-section">
             <h5 class="section-title">Uttag (per år)</h5>
             <div class="row g-3">
-              <div class="col-12">
+              <div class="col-12 col-md-6">
                 <label class="form-label">Värdebaserad uttagsgrad</label>
                 <div class="input-group">
                   <input
@@ -166,7 +122,20 @@ const getTargetValue = (event: UIEvent) => {
                   <span class="input-group-text">%</span>
                 </div>
               </div>
-              <div class="col-12">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Förväntad total uttagsgrad</label>
+                <div class="input-group">
+                  <input
+                    type="text"
+                    class="form-control text-end"
+                    :value="(expectedTotalWithdrawalRate * 100).toFixed(1)"
+                    readonly
+                    disabled
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+              </div>
+              <div class="col-12 col-md-6">
                 <label class="form-label">Vinstbaserad uttagsgrad</label>
                 <div class="input-group">
                   <input
@@ -180,7 +149,7 @@ const getTargetValue = (event: UIEvent) => {
                   <span class="input-group-text">%</span>
                 </div>
               </div>
-              <div class="col-12">
+              <div class="col-12 col-md-6">
                 <label class="form-label">Lookback-period (vinst)</label>
                 <div class="input-group">
                   <input
@@ -196,38 +165,96 @@ const getTargetValue = (event: UIEvent) => {
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- ISK Tax Rate Distribution -->
+        <div class="params-column">
+          <!-- Annual Return Distribution -->
           <div class="param-section">
-            <h5 class="section-title">ISK-skattesats</h5>
+            <h5 class="section-title">Avkastning (per år)</h5>
             <div class="row g-3">
               <div class="col-12">
-                <label class="form-label">Initial skattesats</label>
+                <label class="form-label">Förinställning</label>
+                <select
+                  class="form-select"
+                  v-model="rorPreset"
+                  @change="applyRORPreset"
+                  :disabled="isRunning"
+                >
+                  <option value="">-- Välj fond --</option>
+                  <option v-for="preset in rorPresets" :key="preset.label" :value="preset.label">
+                    {{ preset.label }}
+                  </option>
+                </select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Medelvärde</label>
                 <div class="input-group">
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.1"
                     class="form-control text-end"
-                    :value="(iskTaxRate * 100).toFixed(2)"
-                    @input="iskTaxRate = getTargetValue($event) / 100"
+                    :value="(development * 100).toFixed(1)"
+                    @input="development = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
                 </div>
               </div>
-              <div class="col-12">
-                <label class="form-label">Standardavvikelse för årliga ändringar</label>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Standardavvikelse</label>
                 <div class="input-group">
                   <input
                     type="number"
-                    step="0.01"
+                    step="0.1"
                     class="form-control text-end"
-                    :value="(iskTaxRateStdDev * 100).toFixed(2)"
-                    @input="iskTaxRateStdDev = getTargetValue($event) / 100"
+                    :value="(developmentStdDev * 100).toFixed(1)"
+                    @input="developmentStdDev = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Time Period and Simulation Settings -->
+          <div class="param-section">
+            <h5 class="section-title">Simulering</h5>
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Startår (ålder)</label>
+                <input
+                  type="number"
+                  class="form-control text-end"
+                  v-model.number="startYear"
+                  :disabled="isRunning"
+                />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Antal år</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    class="form-control text-end"
+                    v-model.number="yearsLater"
+                    min="1"
+                    max="100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">år</span>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Antal simuleringar</label>
+                <input
+                  type="number"
+                  class="form-control text-end"
+                  v-model.number="simulationCount"
+                  min="100"
+                  max="100000"
+                  step="100"
+                  :disabled="isRunning"
+                />
               </div>
             </div>
           </div>
@@ -236,9 +263,9 @@ const getTargetValue = (event: UIEvent) => {
         <div class="params-column">
           <!-- Inflation Distribution -->
           <div class="param-section">
-            <h5 class="section-title">Inflation (årlig fördelning)</h5>
+            <h5 class="section-title">Inflation (per år)</h5>
             <div class="row g-3">
-              <div class="col-12">
+              <div class="col-12 col-md-6">
                 <label class="form-label">Medelvärde</label>
                 <div class="input-group">
                   <input
@@ -252,7 +279,7 @@ const getTargetValue = (event: UIEvent) => {
                   <span class="input-group-text">%</span>
                 </div>
               </div>
-              <div class="col-12">
+              <div class="col-12 col-md-6">
                 <label class="form-label">Standardavvikelse</label>
                 <div class="input-group">
                   <input
@@ -269,41 +296,53 @@ const getTargetValue = (event: UIEvent) => {
             </div>
           </div>
 
-          <!-- Time Period and Simulation Settings -->
+          <!-- Tax Rate Distribution -->
           <div class="param-section">
-            <h5 class="section-title">Simulering</h5>
+            <h5 class="section-title">Skatt</h5>
             <div class="row g-3">
               <div class="col-12">
-                <label class="form-label">Startår (ålder)</label>
-                <input
-                  type="number"
-                  class="form-control text-end"
-                  v-model.number="startYear"
-                  :disabled="isRunning"
-                />
+                <label class="form-label">Vinstskatt</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.1"
+                    class="form-control text-end"
+                    :value="(capitalGainsTax * 100).toFixed(1)"
+                    @input="capitalGainsTax = getTargetValue($event) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
               </div>
-              <div class="col-12">
-                <label class="form-label">Antal år</label>
-                <input
-                  type="number"
-                  class="form-control text-end"
-                  v-model.number="yearsLater"
-                  min="1"
-                  max="100"
-                  :disabled="isRunning"
-                />
+              <div class="col-12 col-md-6">
+                <label class="form-label">Schablonskattesats</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.01"
+                    class="form-control text-end"
+                    :value="(iskTaxRate * 100).toFixed(2)"
+                    @input="iskTaxRate = getTargetValue($event) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+                <small class="form-text text-muted">Första året.</small>
               </div>
-              <div class="col-12">
-                <label class="form-label">Antal simuleringar</label>
-                <input
-                  type="number"
-                  class="form-control text-end"
-                  v-model.number="simulationCount"
-                  min="100"
-                  max="100000"
-                  step="100"
-                  :disabled="isRunning"
-                />
+              <div class="col-12 col-md-6">
+                <label class="form-label">Standardavvikelse (ISK)</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.01"
+                    class="form-control text-end"
+                    :value="(iskTaxRateStdDev * 100).toFixed(2)"
+                    @input="iskTaxRateStdDev = getTargetValue($event) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+                <small class="form-text text-muted">För årlig förändring av schablonskatt.</small>
               </div>
             </div>
           </div>
@@ -377,7 +416,6 @@ const getTargetValue = (event: UIEvent) => {
 .param-section {
   margin-bottom: 1.5rem;
   padding-bottom: 1.5rem;
-  border-bottom: 1px solid #dee2e6;
 }
 
 .param-section:last-child {
