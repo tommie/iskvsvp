@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 
 const store = useCalculatorStore()
-const { statistics, showStochasticParameters } = storeToRefs(store)
+const { statistics, showStochasticParameters, yearsLater } = storeToRefs(store)
 
 const formatNumber = (value: number | undefined): string => {
   if (value == null || isNaN(value)) return '-'
@@ -81,7 +81,7 @@ const hasResults = computed(() => statistics.value !== null)
           <tbody>
             <!-- Liquid Value -->
             <tr>
-              <th rowspan="3" class="align-middle" scope="row">Likvidbelopp</th>
+              <th rowspan="3" class="align-middle" scope="row">Likvidvärde</th>
               <th scope="row">ISK</th>
               <td>{{ formatNumber(statistics?.percentile5.liquidValueISK) }}</td>
               <td>{{ formatNumber(statistics?.percentile25.liquidValueISK) }}</td>
@@ -282,49 +282,177 @@ const hasResults = computed(() => statistics.value !== null)
               <td>{{ formatNumber(statistics?.stdDev.realWithdrawalDiff) }}</td>
             </tr>
 
-            <!-- Accumulated Real Withdrawal -->
+            <!-- Average Annual Real Withdrawal -->
             <tr>
-              <th rowspan="3" class="align-middle" scope="row">Ackumulerat uttag reellt</th>
+              <th rowspan="3" class="align-middle" scope="row">
+                Genomsnittligt uttag reellt per år
+              </th>
               <th scope="row">ISK</th>
-              <td>{{ formatNumber(statistics?.percentile5.accumulatedRealWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.accumulatedRealWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.median.accumulatedRealWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.accumulatedRealWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.accumulatedRealWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.mean.accumulatedRealWithdrawalISK) }}</td>
-              <td>{{ formatNumber(statistics?.stdDev.accumulatedRealWithdrawalISK) }}</td>
+              <td>
+                {{
+                  formatNumber(
+                    (statistics?.percentile5.accumulatedRealWithdrawalISK ?? 0) / yearsLater,
+                  )
+                }}
+              </td>
+              <td>
+                {{
+                  formatNumber(
+                    (statistics?.percentile25.accumulatedRealWithdrawalISK ?? 0) / yearsLater,
+                  )
+                }}
+              </td>
+              <td>
+                {{
+                  formatNumber((statistics?.median.accumulatedRealWithdrawalISK ?? 0) / yearsLater)
+                }}
+              </td>
+              <td>
+                {{
+                  formatNumber(
+                    (statistics?.percentile75.accumulatedRealWithdrawalISK ?? 0) / yearsLater,
+                  )
+                }}
+              </td>
+              <td>
+                {{
+                  formatNumber(
+                    (statistics?.percentile95.accumulatedRealWithdrawalISK ?? 0) / yearsLater,
+                  )
+                }}
+              </td>
+              <td>
+                {{
+                  formatNumber((statistics?.mean.accumulatedRealWithdrawalISK ?? 0) / yearsLater)
+                }}
+              </td>
+              <td>
+                {{
+                  formatNumber((statistics?.stdDev.accumulatedRealWithdrawalISK ?? 0) / yearsLater)
+                }}
+              </td>
             </tr>
             <tr>
               <th scope="row">VP</th>
-              <td>{{ formatNumber(statistics?.percentile5.accumulatedRealWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile25.accumulatedRealWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.median.accumulatedRealWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile75.accumulatedRealWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.percentile95.accumulatedRealWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.mean.accumulatedRealWithdrawalVP) }}</td>
-              <td>{{ formatNumber(statistics?.stdDev.accumulatedRealWithdrawalVP) }}</td>
+              <td>
+                {{
+                  formatNumber(
+                    (statistics?.percentile5.accumulatedRealWithdrawalVP ?? 0) / yearsLater,
+                  )
+                }}
+              </td>
+              <td>
+                {{
+                  formatNumber(
+                    (statistics?.percentile25.accumulatedRealWithdrawalVP ?? 0) / yearsLater,
+                  )
+                }}
+              </td>
+              <td>
+                {{
+                  formatNumber((statistics?.median.accumulatedRealWithdrawalVP ?? 0) / yearsLater)
+                }}
+              </td>
+              <td>
+                {{
+                  formatNumber(
+                    (statistics?.percentile75.accumulatedRealWithdrawalVP ?? 0) / yearsLater,
+                  )
+                }}
+              </td>
+              <td>
+                {{
+                  formatNumber(
+                    (statistics?.percentile95.accumulatedRealWithdrawalVP ?? 0) / yearsLater,
+                  )
+                }}
+              </td>
+              <td>
+                {{ formatNumber((statistics?.mean.accumulatedRealWithdrawalVP ?? 0) / yearsLater) }}
+              </td>
+              <td>
+                {{
+                  formatNumber((statistics?.stdDev.accumulatedRealWithdrawalVP ?? 0) / yearsLater)
+                }}
+              </td>
             </tr>
             <tr>
               <th scope="row">Fördel ISK</th>
-              <td :class="getDiffClass(statistics?.percentile5.accumulatedRealWithdrawalDiff)">
-                {{ formatNumber(statistics?.percentile5.accumulatedRealWithdrawalDiff) }}
+              <td
+                :class="
+                  getDiffClass(
+                    (statistics?.percentile5.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
+                  )
+                "
+              >
+                {{
+                  formatNumber(
+                    (statistics?.percentile5.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
+                  )
+                }}
               </td>
-              <td :class="getDiffClass(statistics?.percentile25.accumulatedRealWithdrawalDiff)">
-                {{ formatNumber(statistics?.percentile25.accumulatedRealWithdrawalDiff) }}
+              <td
+                :class="
+                  getDiffClass(
+                    (statistics?.percentile25.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
+                  )
+                "
+              >
+                {{
+                  formatNumber(
+                    (statistics?.percentile25.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
+                  )
+                }}
               </td>
-              <td :class="getDiffClass(statistics?.median.accumulatedRealWithdrawalDiff)">
-                {{ formatNumber(statistics?.median.accumulatedRealWithdrawalDiff) }}
+              <td
+                :class="
+                  getDiffClass((statistics?.median.accumulatedRealWithdrawalDiff ?? 0) / yearsLater)
+                "
+              >
+                {{
+                  formatNumber((statistics?.median.accumulatedRealWithdrawalDiff ?? 0) / yearsLater)
+                }}
               </td>
-              <td :class="getDiffClass(statistics?.percentile75.accumulatedRealWithdrawalDiff)">
-                {{ formatNumber(statistics?.percentile75.accumulatedRealWithdrawalDiff) }}
+              <td
+                :class="
+                  getDiffClass(
+                    (statistics?.percentile75.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
+                  )
+                "
+              >
+                {{
+                  formatNumber(
+                    (statistics?.percentile75.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
+                  )
+                }}
               </td>
-              <td :class="getDiffClass(statistics?.percentile95.accumulatedRealWithdrawalDiff)">
-                {{ formatNumber(statistics?.percentile95.accumulatedRealWithdrawalDiff) }}
+              <td
+                :class="
+                  getDiffClass(
+                    (statistics?.percentile95.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
+                  )
+                "
+              >
+                {{
+                  formatNumber(
+                    (statistics?.percentile95.accumulatedRealWithdrawalDiff ?? 0) / yearsLater,
+                  )
+                }}
               </td>
-              <td :class="getDiffClass(statistics?.mean.accumulatedRealWithdrawalDiff)">
-                {{ formatNumber(statistics?.mean.accumulatedRealWithdrawalDiff) }}
+              <td
+                :class="
+                  getDiffClass((statistics?.mean.accumulatedRealWithdrawalDiff ?? 0) / yearsLater)
+                "
+              >
+                {{
+                  formatNumber((statistics?.mean.accumulatedRealWithdrawalDiff ?? 0) / yearsLater)
+                }}
               </td>
-              <td>{{ formatNumber(statistics?.stdDev.accumulatedRealWithdrawalDiff) }}</td>
+              <td>
+                {{
+                  formatNumber((statistics?.stdDev.accumulatedRealWithdrawalDiff ?? 0) / yearsLater)
+                }}
+              </td>
             </tr>
 
             <!-- Annual Averages -->

@@ -3,6 +3,7 @@ import { useCalculatorStore } from './stores/calculator'
 import { storeToRefs } from 'pinia'
 import InputParameters from './components/InputParameters.vue'
 import SummaryStatistics from './components/SummaryStatistics.vue'
+import SummaryVisualization from './components/SummaryVisualization.vue'
 import TimeSeriesVisualization from './components/TimeSeriesVisualization.vue'
 import ParameterVisualization from './components/ParameterVisualization.vue'
 import SimulationHistory from './components/SimulationHistory.vue'
@@ -22,6 +23,7 @@ const { simulationCount } = storeToRefs(store)
 
     <InputParameters />
     <SummaryStatistics />
+    <SummaryVisualization />
     <TimeSeriesVisualization />
     <ParameterVisualization />
     <SimulationHistory />
