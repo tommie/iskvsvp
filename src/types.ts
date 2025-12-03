@@ -49,7 +49,7 @@ export interface ScenarioSummary {
   paidTax: number
   taxationDegree: number
   realWithdrawal: number
-  firstYearWithdrawal: number
+  firstYearWithdrawal: number // Second year if profitWithdrawalRate > 0
   accumulatedRealWithdrawal: number
   averageTaxRate: number
 }
@@ -78,5 +78,6 @@ export interface SimulationStatistics {
 export interface TimeSeriesPoint {
   simulationId: number
   year: number
-  scenarios: Record<string, number> // scenario name -> value
+  liquidValue: Record<string, number> // scenario name -> liquidValue
+  withdrawalsReal: Record<string, number>
 }

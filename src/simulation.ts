@@ -131,7 +131,9 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
       state.accumulatedRealWithdrawal += withdrawnReal
 
       // Store first year data
-      if (i === 0) {
+      //
+      // If we are doing profit-based withdrawals, the first year will be strangely low.
+      if (i === 0 || (scenario.profitWithdrawalRate > 0 && i === 1)) {
         firstYearData[scenario.name] = { withdrawnReal }
       }
 
@@ -388,8 +390,11 @@ export function extractTimeSeriesData(results: SimulationResult[]): TimeSeriesPo
       points.push({
         simulationId,
         year: yearData.year,
-        scenarios: Object.fromEntries(
+        liquidValue: Object.fromEntries(
           Object.entries(yearData.scenarios).map(([name, data]) => [name, data.liquidValue]),
+        ),
+        withdrawalsReal: Object.fromEntries(
+          Object.entries(yearData.scenarios).map(([name, data]) => [name, data.withdrawnReal]),
         ),
       })
     })

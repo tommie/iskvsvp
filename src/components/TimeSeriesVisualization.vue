@@ -7,29 +7,35 @@ import * as d3 from 'd3'
 const store = useCalculatorStore()
 const { timeSeriesData } = storeToRefs(store)
 
-const svgRef = ref<SVGSVGElement | null>(null)
-const containerRef = ref<HTMLDivElement | null>(null)
+const valueSvgRef = ref<SVGSVGElement | null>(null)
+const valueContainerRef = ref<HTMLDivElement | null>(null)
+const withdrawalSvgRef = ref<SVGSVGElement | null>(null)
+const withdrawalContainerRef = ref<HTMLDivElement | null>(null)
 
-const drawChart = () => {
-  if (!svgRef.value || !timeSeriesData.value.length || !containerRef.value) return
-
+const drawGenericChart = (
+  svgElement: SVGSVGElement,
+  containerElement: HTMLDivElement,
+  dataExtractor: (d: any, scenarioName: string) => number,
+  title: string,
+  yAxisLabel: string,
+) => {
   // Clear previous chart
-  d3.select(svgRef.value).selectAll('*').remove()
+  d3.select(svgElement).selectAll('*').remove()
 
   // Get scenario names from first data point
-  const scenarioNames = Object.keys(timeSeriesData.value[0]?.scenarios ?? {})
+  const scenarioNames = Object.keys(timeSeriesData.value[0]?.liquidValue ?? {})
   if (scenarioNames.length === 0) return
 
   const colors = ['#0d6efd', '#dc3545', '#198754', '#ffc107', '#6f42c1', '#fd7e14']
 
   // Get container dimensions
-  const containerWidth = containerRef.value.clientWidth
+  const containerWidth = containerElement.clientWidth
   const margin = { top: 40, right: 120, bottom: 60, left: 80 }
   const width = containerWidth - margin.left - margin.right
   const height = 600 - margin.top - margin.bottom
 
   const svg = d3
-    .select(svgRef.value)
+    .select(svgElement)
     .attr('width', width + margin.left + margin.right)
     .attr('height', height + margin.top + margin.bottom)
     .append('g')
@@ -40,7 +46,7 @@ const drawChart = () => {
 
   // Get y extent across all scenarios
   const allScenarioValues = timeSeriesData.value.flatMap((d) =>
-    scenarioNames.map((name) => d.scenarios[name] ?? 0),
+    scenarioNames.map((name) => dataExtractor(d, name)),
   )
   const yExtent = d3.extent(allScenarioValues.filter((v) => isFinite(v) && v > 0)) as [
     number,
@@ -71,7 +77,7 @@ const drawChart = () => {
   // Add Y axis
   svg
     .append('g')
-    .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format('.2s')))
+    .call(d3.axisLeft(yScale).ticks(3).tickFormat(d3.format('.2s')))
     .append('text')
     .attr('transform', 'rotate(-90)')
     .attr('x', -height / 2)
@@ -79,7 +85,7 @@ const drawChart = () => {
     .attr('fill', 'black')
     .attr('text-anchor', 'middle')
     .style('font-size', '14px')
-    .text('Värde (SEK)')
+    .text(yAxisLabel)
 
   // Add title
   svg
@@ -89,10 +95,10 @@ const drawChart = () => {
     .attr('text-anchor', 'middle')
     .style('font-size', '16px')
     .style('font-weight', 'bold')
-    .text('Monte Carlo Simulation över tid (logaritmisk skala)')
+    .text(title)
 
-  // Add horizontal line at initial capital value
-  const initialValue = timeSeriesData.value[0]?.scenarios[scenarioNames[0]!] ?? 0
+  // Add horizontal line at initial value
+  const initialValue = dataExtractor(timeSeriesData.value[0]!, scenarioNames[0]!)
   if (initialValue > 0 && isFinite(initialValue)) {
     svg
       .append('line')
@@ -102,6 +108,7 @@ const drawChart = () => {
       .attr('y2', yScale(initialValue))
       .attr('stroke', '#999')
       .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '5,5')
       .attr('opacity', 0.7)
   }
 
@@ -111,7 +118,7 @@ const drawChart = () => {
 
     // Filter valid data for this scenario
     const validData = timeSeriesData.value.filter((d) => {
-      const value = d.scenarios[scenarioName] ?? 0
+      const value = dataExtractor(d, scenarioName)
       return isFinite(value) && value > 0
     })
 
@@ -123,7 +130,7 @@ const drawChart = () => {
       .append('circle')
       .attr('class', `dot-${scenarioName}`)
       .attr('cx', (d) => xScale(d.year))
-      .attr('cy', (d) => yScale(d.scenarios[scenarioName] ?? 0))
+      .attr('cy', (d) => yScale(dataExtractor(d, scenarioName)))
       .attr('r', 1.5)
       .attr('fill', color)
       .attr('opacity', 0.03)
@@ -132,7 +139,7 @@ const drawChart = () => {
     const yearGroups = d3.group(validData, (d) => d.year)
     const medianData = Array.from(yearGroups, ([year, values]) => ({
       year,
-      median: d3.median(values, (d) => d.scenarios[scenarioName] ?? 0) ?? 0,
+      median: d3.median(values, (d) => dataExtractor(d, scenarioName)) ?? 0,
     }))
       .filter((d) => isFinite(d.median) && d.median > 0)
       .sort((a, b) => a.year - b.year)
@@ -199,21 +206,45 @@ const drawChart = () => {
   })
 }
 
+const drawCharts = () => {
+  if (!timeSeriesData.value.length) return
+  if (!valueSvgRef.value || !valueContainerRef.value) return
+  if (!withdrawalSvgRef.value || !withdrawalContainerRef.value) return
+
+  // Draw value chart
+  drawGenericChart(
+    valueSvgRef.value,
+    valueContainerRef.value,
+    (d, scenarioName) => d.liquidValue[scenarioName] ?? 0,
+    'Värde över tid (logaritmisk skala)',
+    'Värde (SEK)',
+  )
+
+  // Draw withdrawal chart
+  drawGenericChart(
+    withdrawalSvgRef.value,
+    withdrawalContainerRef.value,
+    (d, scenarioName) => d.withdrawalsReal[scenarioName] ?? 0,
+    'Uttag över tid (reellt, logaritmisk skala)',
+    'Uttag reellt (SEK)',
+  )
+}
+
 // Watch for data changes
 watch(timeSeriesData, async () => {
   await nextTick()
-  drawChart()
+  drawCharts()
 })
 
 // Redraw on window resize
 onMounted(() => {
   const handleResize = () => {
-    drawChart()
+    drawCharts()
   }
   window.addEventListener('resize', handleResize)
 
   // Initial draw
-  nextTick(() => drawChart())
+  nextTick(() => drawCharts())
 
   return () => {
     window.removeEventListener('resize', handleResize)
@@ -226,12 +257,16 @@ onMounted(() => {
     <div class="card-header">
       <h3>Över tid</h3>
       <p class="mb-0 text-muted">
-        Punktdiagram som visar kontovärden över tid för alla simuleringar (transparens visar täthet)
+        Punktdiagram som visar kontovärden och uttag över tid för alla simuleringar (transparens
+        visar täthet). Heldragna linjer visar medianvärden, streckade linjer visar initiala värden.
       </p>
     </div>
     <div class="card-body">
-      <div ref="containerRef" class="chart-container">
-        <svg ref="svgRef"></svg>
+      <div ref="valueContainerRef" class="chart-container mb-4">
+        <svg ref="valueSvgRef"></svg>
+      </div>
+      <div ref="withdrawalContainerRef" class="chart-container">
+        <svg ref="withdrawalSvgRef"></svg>
       </div>
     </div>
   </div>
