@@ -14,9 +14,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const initialCapital = ref(5000000)
   const development = ref(0.1299) // Swedbank Robur Globalfond A
   const developmentStdDev = ref(0.202) // Swedbank Robur Globalfond A
-  const withdrawalISK = ref(0.03)
-  const withdrawalVP = ref(0.03)
-  const badYearWithdrawalRate = ref(1.0)
+  const balanceWithdrawalRate = ref(0.03)
+  const profitWithdrawalRate = ref(0.0)
+  const profitLookbackYears = ref(5)
   const iskTaxRate = ref(0.0296)
   const iskTaxRateStdDev = ref(0.005)
   const inflationRate = ref(0.02)
@@ -47,8 +47,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
     scenarios: [
       {
         name: 'ISK',
-        withdrawalRate: withdrawalISK.value,
-        badYearWithdrawalRate: badYearWithdrawalRate.value,
+        balanceWithdrawalRate: balanceWithdrawalRate.value,
+        profitWithdrawalRate: profitWithdrawalRate.value,
+        profitLookbackYears: profitLookbackYears.value,
         capitalGainsTax: capitalGainsTax.value,
         iskTaxRate: iskTaxRate.value,
         iskTaxRateStdDev: iskTaxRateStdDev.value,
@@ -56,8 +57,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
       },
       {
         name: 'VP',
-        withdrawalRate: withdrawalVP.value,
-        badYearWithdrawalRate: badYearWithdrawalRate.value,
+        balanceWithdrawalRate: balanceWithdrawalRate.value,
+        profitWithdrawalRate: profitWithdrawalRate.value,
+        profitLookbackYears: profitLookbackYears.value,
         capitalGainsTax: capitalGainsTax.value,
         isISK: false,
       },
@@ -116,21 +118,15 @@ export const useCalculatorStore = defineStore('calculator', () => {
     inflationRate.value = params.inflationRate
     inflationStdDev.value = params.inflationStdDev
 
-    // Load from scenarios
-    const iskScenario = params.scenarios.find((s) => s.isISK)
-    const vpScenario = params.scenarios.find((s) => !s.isISK)
+    const firstScenario = params.scenarios[0]!
+    balanceWithdrawalRate.value = firstScenario.balanceWithdrawalRate
+    profitWithdrawalRate.value = firstScenario.profitWithdrawalRate
+    profitLookbackYears.value = firstScenario.profitLookbackYears
+    capitalGainsTax.value = firstScenario.capitalGainsTax
 
-    if (iskScenario) {
-      withdrawalISK.value = iskScenario.withdrawalRate
-      badYearWithdrawalRate.value = iskScenario.badYearWithdrawalRate
-      iskTaxRate.value = iskScenario.iskTaxRate ?? 0.0296
-      iskTaxRateStdDev.value = iskScenario.iskTaxRateStdDev ?? 0.005
-      capitalGainsTax.value = iskScenario.capitalGainsTax
-    }
-
-    if (vpScenario) {
-      withdrawalVP.value = vpScenario.withdrawalRate
-    }
+    const iskScenario = params.scenarios.find((s) => s.isISK)!
+    iskTaxRate.value = iskScenario.iskTaxRate!
+    iskTaxRateStdDev.value = iskScenario.iskTaxRateStdDev!
   }
 
   return {
@@ -138,9 +134,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
     initialCapital,
     development,
     developmentStdDev,
-    withdrawalISK,
-    withdrawalVP,
-    badYearWithdrawalRate,
+    balanceWithdrawalRate,
+    profitWithdrawalRate,
+    profitLookbackYears,
     iskTaxRate,
     iskTaxRateStdDev,
     inflationRate,

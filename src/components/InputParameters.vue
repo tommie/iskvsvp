@@ -8,9 +8,9 @@ const {
   initialCapital,
   development,
   developmentStdDev,
-  withdrawalISK,
-  withdrawalVP,
-  badYearWithdrawalRate,
+  balanceWithdrawalRate,
+  profitWithdrawalRate,
+  profitLookbackYears,
   iskTaxRate,
   iskTaxRateStdDev,
   inflationRate,
@@ -153,49 +153,45 @@ const getTargetValue = (event: UIEvent) => {
             <h5 class="section-title">Uttag (per år)</h5>
             <div class="row g-3">
               <div class="col-12">
-                <label class="form-label">ISK</label>
+                <label class="form-label">Värdebaserad uttagsgrad</label>
                 <div class="input-group">
                   <input
                     type="number"
                     step="0.1"
                     class="form-control text-end"
-                    :value="(withdrawalISK * 100).toFixed(1)"
-                    @input="withdrawalISK = getTargetValue($event) / 100"
+                    :value="(balanceWithdrawalRate * 100).toFixed(1)"
+                    @input="balanceWithdrawalRate = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
                 </div>
               </div>
               <div class="col-12">
-                <label class="form-label">VP</label>
+                <label class="form-label">Vinstbaserad uttagsgrad</label>
                 <div class="input-group">
                   <input
                     type="number"
                     step="0.1"
                     class="form-control text-end"
-                    :value="(withdrawalVP * 100).toFixed(1)"
-                    @input="withdrawalVP = getTargetValue($event) / 100"
+                    :value="(profitWithdrawalRate * 100).toFixed(1)"
+                    @input="profitWithdrawalRate = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
                 </div>
               </div>
               <div class="col-12">
-                <label class="form-label">Uttagsgrad vid dåliga år</label>
+                <label class="form-label">Lookback-period (vinst)</label>
                 <div class="input-group">
                   <input
                     type="number"
-                    step="0.1"
+                    step="1"
                     class="form-control text-end"
-                    :value="(badYearWithdrawalRate * 100).toFixed(1)"
-                    @input="badYearWithdrawalRate = getTargetValue($event) / 100"
+                    :value="profitLookbackYears"
+                    @input="profitLookbackYears = getTargetValue($event)"
                     :disabled="isRunning"
                   />
-                  <span class="input-group-text">%</span>
-                </div>
-                <div class="form-text">
-                  Multiplikator för uttag när portföljvärdet inte ökade föregående år (100% =
-                  normalt uttag)
+                  <span class="input-group-text">år</span>
                 </div>
               </div>
             </div>

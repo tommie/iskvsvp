@@ -24,10 +24,10 @@ function randomNormal(mean: number, stdDev: number): number {
 
 interface ScenarioState {
   amount: number
-  previousAmount: number
   cumulativePaidTax: number
   accumulatedRealWithdrawal: number
   currentTaxRate: number
+  yearlyAmounts: number[]
 }
 
 /**
@@ -41,10 +41,10 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
   for (const scenario of params.scenarios) {
     scenarioStates[scenario.name] = {
       amount: params.initialCapital,
-      previousAmount: params.initialCapital,
       cumulativePaidTax: 0,
       accumulatedRealWithdrawal: 0,
       currentTaxRate: scenario.iskTaxRate ?? 0, // ISK basis rate (or 0 for VP)
+      yearlyAmounts: [params.initialCapital],
     }
   }
 
@@ -74,33 +74,36 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
         )
       }
 
-      // Check if previous year had no net increase (bad year)
-      const isBadYear = i > 0 && state.amount <= state.previousAmount
+      // Calculate balance-based withdrawal
+      const balanceWithdrawal = state.amount * scenario.balanceWithdrawalRate
 
-      // Calculate withdrawal rate (reduced in bad years)
-      const withdrawalRate = isBadYear
-        ? scenario.withdrawalRate * scenario.badYearWithdrawalRate
-        : scenario.withdrawalRate
+      // Calculate profit-based withdrawal
+      let profitWithdrawal = 0
+      if (i > 0 && scenario.profitWithdrawalRate > 0) {
+        const lookbackYears = Math.min(scenario.profitLookbackYears, state.yearlyAmounts.length - 1)
+        if (lookbackYears > 0) {
+          const oldAmount = state.yearlyAmounts[state.yearlyAmounts.length - 1 - lookbackYears]!
+          const totalProfit = state.amount - oldAmount
+          const averageAnnualProfit = totalProfit / lookbackYears
+          profitWithdrawal = Math.max(0, averageAnnualProfit * scenario.profitWithdrawalRate)
+        }
+      }
+
+      const withdrawn = balanceWithdrawal + profitWithdrawal
+      const withdrawalRate = state.amount > 0 ? withdrawn / state.amount : 0
 
       // Calculate liquidation value and withdrawal
       let liquidValue: number
-      let withdrawn: number
 
       if (scenario.isISK) {
         // ISK: tax is ISK basis rate × capital gains tax rate, applied to account value
         // currentTaxRate is the ISK basis rate (e.g., 2.96%)
         liquidValue = state.amount
-        withdrawn = state.amount * withdrawalRate
       } else {
         // Calculate future tax if liquidated
         const capitalGain = state.amount - params.initialCapital
         // We allow negative future tax, though it will only be valid if offset by other tax
         liquidValue = state.amount - capitalGain * scenario.capitalGainsTax
-
-        // It could be argued that this should use liquidValue, as it handicaps ISK severly in later
-        // years, but that's precisely the benefit of deferring taxes: a larger capital is placed in
-        // the markets.
-        withdrawn = state.amount * withdrawalRate
       }
 
       // Calculate tax
@@ -146,15 +149,15 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
         inflationRate, // Shared but stored for reference
       }
 
-      // Store current amount for next year's bad year check
-      state.previousAmount = state.amount
-
       // Update amount for next year, ensure non-negative
       if (scenario.isISK) {
-        state.amount = Math.max(0, state.amount * (1 + development - withdrawalRate) - tax)
+        state.amount = Math.max(0, state.amount * (1 + development) - withdrawn - tax)
       } else {
-        state.amount = Math.max(0, state.amount * (1 + development - withdrawalRate))
+        state.amount = Math.max(0, state.amount * (1 + development) - withdrawn)
       }
+
+      // Track yearly amount for profit calculation
+      state.yearlyAmounts.push(state.amount)
     }
 
     yearlyData.push({

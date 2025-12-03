@@ -237,7 +237,7 @@ const positionPopover = (popoverId: string, anchorId: string) => {
                   >
                     <span v-if="idx > 0">, </span>
                     {{ scenario.name }}
-                    {{ formatPercent(scenario.withdrawalRate) }}
+                    {{ formatPercent(scenario.balanceWithdrawalRate) }}
                   </template>
                 </span>
               </div>

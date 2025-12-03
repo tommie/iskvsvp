@@ -1,7 +1,8 @@
 export interface ScenarioConfig {
   name: string
-  withdrawalRate: number
-  badYearWithdrawalRate: number
+  balanceWithdrawalRate: number
+  profitWithdrawalRate: number
+  profitLookbackYears: number
   capitalGainsTax: number // Capital gains tax rate (used by both ISK and VP)
   iskTaxRate?: number // ISK basis rate (only for ISK scenarios)
   iskTaxRateStdDev?: number // ISK basis rate volatility (only for ISK scenarios)
