@@ -228,7 +228,7 @@ onMounted(() => {
       <div class="card-header">
         <h3>Avkastning över tid</h3>
         <p class="mb-0 text-muted">
-          Punktdiagram som visar årlig avkastning över tid för alla simuleringar
+          Punktdiagram som visar antagen årlig avkastning över tid för alla simuleringar
         </p>
       </div>
       <div class="card-body">
@@ -243,7 +243,7 @@ onMounted(() => {
       <div class="card-header">
         <h3>Inflation över tid</h3>
         <p class="mb-0 text-muted">
-          Punktdiagram som visar inflation över tid för alla simuleringar
+          Punktdiagram som visar antagen inflation över tid för alla simuleringar
         </p>
       </div>
       <div class="card-body">
@@ -258,7 +258,7 @@ onMounted(() => {
       <div class="card-header">
         <h3>ISK-skattesats över tid</h3>
         <p class="mb-0 text-muted">
-          Punktdiagram som visar ISK-skattesats över tid för alla simuleringar
+          Punktdiagram som visar antagen ISK-skattesats över tid för alla simuleringar
         </p>
       </div>
       <div class="card-body">
