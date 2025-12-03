@@ -53,6 +53,10 @@ const applyRORPreset = () => {
 const handleRunSimulation = async () => {
   await store.runSimulation()
 }
+
+const getTargetValue = (event: UIEvent) => {
+  return parseFloat((event.target as HTMLInputElement)?.value)
+}
 </script>
 
 <template>
@@ -84,7 +88,7 @@ const handleRunSimulation = async () => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(capitalGainsTax * 100).toFixed(1)"
-                    @input="capitalGainsTax = parseFloat($event.target.value) / 100"
+                    @input="capitalGainsTax = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -119,7 +123,7 @@ const handleRunSimulation = async () => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(development * 100).toFixed(1)"
-                    @input="development = parseFloat($event.target.value) / 100"
+                    @input="development = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -133,7 +137,7 @@ const handleRunSimulation = async () => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(developmentStdDev * 100).toFixed(1)"
-                    @input="developmentStdDev = parseFloat($event.target.value) / 100"
+                    @input="developmentStdDev = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -156,7 +160,7 @@ const handleRunSimulation = async () => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(withdrawalISK * 100).toFixed(1)"
-                    @input="withdrawalISK = parseFloat($event.target.value) / 100"
+                    @input="withdrawalISK = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -170,7 +174,7 @@ const handleRunSimulation = async () => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(withdrawalVP * 100).toFixed(1)"
-                    @input="withdrawalVP = parseFloat($event.target.value) / 100"
+                    @input="withdrawalVP = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -184,7 +188,7 @@ const handleRunSimulation = async () => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(badYearWithdrawalRate * 100).toFixed(1)"
-                    @input="badYearWithdrawalRate = parseFloat($event.target.value) / 100"
+                    @input="badYearWithdrawalRate = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -209,7 +213,7 @@ const handleRunSimulation = async () => {
                     step="0.01"
                     class="form-control text-end"
                     :value="(iskTaxRate * 100).toFixed(2)"
-                    @input="iskTaxRate = parseFloat($event.target.value) / 100"
+                    @input="iskTaxRate = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -223,7 +227,7 @@ const handleRunSimulation = async () => {
                     step="0.01"
                     class="form-control text-end"
                     :value="(iskTaxRateStdDev * 100).toFixed(2)"
-                    @input="iskTaxRateStdDev = parseFloat($event.target.value) / 100"
+                    @input="iskTaxRateStdDev = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -246,7 +250,7 @@ const handleRunSimulation = async () => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(inflationRate * 100).toFixed(1)"
-                    @input="inflationRate = parseFloat($event.target.value) / 100"
+                    @input="inflationRate = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -260,7 +264,7 @@ const handleRunSimulation = async () => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(inflationStdDev * 100).toFixed(1)"
-                    @input="inflationStdDev = parseFloat($event.target.value) / 100"
+                    @input="inflationStdDev = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
