@@ -117,7 +117,9 @@ const positionPopover = (popoverId: string, anchorId: string) => {
     <div class="card-header d-flex justify-content-between align-items-center">
       <div>
         <h3>Simuleringshistorik</h3>
-        <p class="mb-0 text-muted">Tidigare simuleringar ({{ records.length }} st)</p>
+        <p class="mb-0 text-muted">
+          Tidigare simuleringar ({{ records.length }} st). Värden visar medianresultat.
+        </p>
       </div>
       <div>
         <button
@@ -216,49 +218,56 @@ const positionPopover = (popoverId: string, anchorId: string) => {
           </div>
           <div class="history-card-body">
             <div class="result-summary">
-              <strong>Vinnare (median reellt uttag):</strong>
+              <strong>Vinnare (reellt uttag):</strong>
               <span :class="['winner-badge', getWinnerClass(getWinner(record))]">
                 {{ getWinner(record) }}
               </span>
             </div>
             <div class="parameters-summary">
               <div class="param-row">
-                <span class="param-label">Startkapital:</span>
-                <span class="param-value"
-                  >{{ formatNumber(record.parameters.initialCapital) }} kr</span
-                >
-              </div>
-              <div class="param-row">
-                <span class="param-label">Uttag:</span>
+                <span class="param-label">Genomsnittligt uttag reellt per år:</span>
                 <span class="param-value">
                   <template
-                    v-for="(scenario, idx) in record.parameters.scenarios"
-                    :key="scenario.name"
+                    v-for="(scenarioName, idx) in Object.keys(
+                      record.statistics.median.scenarios ?? {},
+                    )"
+                    :key="scenarioName"
                   >
                     <span v-if="idx > 0">, </span>
-                    {{ scenario.name }}
-                    {{ formatPercent(scenario.balanceWithdrawalRate) }}
+                    {{ scenarioName }}
+                    {{
+                      formatPercent(
+                        (record.statistics.median.scenarios?.[scenarioName]
+                          ?.accumulatedRealWithdrawal ?? 0) /
+                          record.parameters.yearsLater /
+                          record.parameters.initialCapital,
+                      )
+                    }}
                   </template>
                 </span>
               </div>
               <div class="param-row">
-                <span class="param-label">Avkastning:</span>
+                <span class="param-label">Likvidutveckling:</span>
                 <span class="param-value">
-                  {{ formatPercent(record.parameters.development) }}, SD
-                  {{ formatPercent(record.parameters.developmentStdDev) }}
+                  <template
+                    v-for="(scenarioName, idx) in Object.keys(
+                      record.statistics.median.scenarios ?? {},
+                    )"
+                    :key="scenarioName"
+                  >
+                    <span v-if="idx > 0">, </span>
+                    {{ scenarioName }}
+                    {{
+                      (
+                        (record.statistics.median.scenarios?.[scenarioName]?.liquidValue ?? 0) /
+                        record.parameters.initialCapital
+                      ).toFixed(2)
+                    }}x
+                  </template>
                 </span>
               </div>
-              <div
-                class="param-row"
-                v-if="record.parameters.scenarios.some((s) => s.isISK && s.iskTaxRate)"
-              >
-                <span class="param-label">ISK-skatt:</span>
-                <span class="param-value">{{
-                  formatPercent(record.parameters.scenarios.find((s) => s.isISK)?.iskTaxRate)
-                }}</span>
-              </div>
               <div class="param-row">
-                <span class="param-label">Beskattningsgrad (median):</span>
+                <span class="param-label">Beskattningsgrad:</span>
                 <span class="param-value">
                   <template
                     v-for="(scenarioName, idx) in Object.keys(
@@ -277,20 +286,11 @@ const positionPopover = (popoverId: string, anchorId: string) => {
                 </span>
               </div>
               <div class="param-row">
-                <span class="param-label">Period:</span>
+                <span class="param-label">Simulering:</span>
                 <span class="param-value">
-                  {{ record.parameters.startYear }} -
-                  {{ record.parameters.startYear + record.parameters.yearsLater }} ({{
-                    record.parameters.yearsLater
-                  }}
-                  år)
+                  {{ record.parameters.yearsLater }} år,
+                  {{ formatNumber(record.parameters.simulationCount) }} gånger
                 </span>
-              </div>
-              <div class="param-row">
-                <span class="param-label">Simuleringar:</span>
-                <span class="param-value">{{
-                  formatNumber(record.parameters.simulationCount)
-                }}</span>
               </div>
             </div>
           </div>
