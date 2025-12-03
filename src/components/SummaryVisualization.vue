@@ -195,13 +195,27 @@ const drawAllCharts = () => {
     })
   }
 
-  // Liquid Value
+  // Liquid Value - Last Year and First Year
+  const liquidValueSeries = scenarioNames.map((name, i) => {
+    const lastYearValues = summaries.map((s) => s.scenarios[name]?.liquidValue ?? 0)
+    const firstYearValues = summaries.map((s) => s.scenarios[name]?.firstYearLiquidValue ?? 0)
+    return {
+      label: name,
+      values: lastYearValues,
+      median: d3.median(lastYearValues) ?? 0,
+      firstYearMedian: d3.median(firstYearValues) ?? 0,
+      color: colors[i % colors.length]!,
+    }
+  })
+
   drawChart(
     liquidValueSvgRef.value,
     liquidValueContainerRef.value,
-    buildSeries('liquidValue'),
+    liquidValueSeries,
     'Likvidvärde',
     (d) => d3.format(',.0f')(d) + ' kr',
+    4, // tick count
+    90, // Increased row height to fit first year labels
   )
 
   // Paid Tax

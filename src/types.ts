@@ -45,6 +45,7 @@ export interface YearlyData {
 
 export interface ScenarioSummary {
   liquidValue: number
+  firstYearLiquidValue: number
   paidTax: number
   taxationDegree: number
   realWithdrawal: number

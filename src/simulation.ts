@@ -191,6 +191,7 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
 
     scenarioSummaries[scenario.name] = {
       liquidValue: lastYearData.liquidValue,
+      firstYearLiquidValue: params.initialCapital,
       paidTax: lastYearData.paidTax,
       taxationDegree: lastYearData.taxationDegree,
       realWithdrawal: lastYearData.withdrawnReal,
@@ -278,6 +279,7 @@ export function calculateStatistics(results: SimulationResult[]): SimulationStat
     // Get all fields from scenario summary
     const fields: (keyof ScenarioSummary)[] = [
       'liquidValue',
+      'firstYearLiquidValue',
       'paidTax',
       'taxationDegree',
       'realWithdrawal',
