@@ -82,26 +82,37 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
         ? scenario.withdrawalRate * scenario.badYearWithdrawalRate
         : scenario.withdrawalRate
 
-      // Calculate withdrawal
-      const withdrawn = state.amount * withdrawalRate
+      // Calculate liquidation value and withdrawal
+      let liquidValue: number
+      let withdrawn: number
+
+      if (scenario.isISK) {
+        // ISK: tax is ISK basis rate × capital gains tax rate, applied to account value
+        // currentTaxRate is the ISK basis rate (e.g., 2.96%)
+        liquidValue = state.amount
+        withdrawn = state.amount * withdrawalRate
+      } else {
+        // Calculate future tax if liquidated
+        const capitalGain = state.amount - params.initialCapital
+        // We allow negative future tax, though it will only be valid if offset by other tax
+        liquidValue = state.amount - capitalGain * scenario.capitalGainsTax
+
+        // It could be argued that this should use liquidValue, as it handicaps ISK severly in later
+        // years, but that's precisely the benefit of deferring taxes: a larger capital is placed in
+        // the markets.
+        withdrawn = state.amount * withdrawalRate
+      }
 
       // Calculate tax
       let tax: number
-      let liquidValue: number
 
       if (scenario.isISK) {
         // ISK: tax is ISK basis rate × capital gains tax rate, applied to account value
         // currentTaxRate is the ISK basis rate (e.g., 2.96%)
         tax = state.amount * state.currentTaxRate * scenario.capitalGainsTax
-        liquidValue = state.amount
       } else {
-        // VP: capital gains tax applied to actual capital gains
-        const capitalGain = state.amount * (1 + development) - params.initialCapital
-        tax = Math.max(0, capitalGain) * withdrawalRate * scenario.capitalGainsTax
-
-        // Calculate future tax if liquidated
-        const futureTaxVP = Math.max(0, capitalGain) * scenario.capitalGainsTax
-        liquidValue = state.amount - futureTaxVP / (1 + development)
+        // VP: capital gains tax applied to actual sold value
+        tax = withdrawn * scenario.capitalGainsTax
       }
 
       // Update cumulative taxes
