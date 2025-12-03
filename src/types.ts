@@ -52,6 +52,8 @@ export interface ScenarioSummary {
   firstYearWithdrawal: number // Second year if profitWithdrawalRate > 0
   accumulatedRealWithdrawal: number
   averageTaxRate: number
+  maxDrawdown: number
+  maxDrawdownPeriod: number
 }
 
 export interface Summary {

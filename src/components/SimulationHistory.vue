@@ -286,6 +286,23 @@ const positionPopover = (popoverId: string, anchorId: string) => {
                 </span>
               </div>
               <div class="param-row">
+                <span class="param-label">Maximalt drawdown:</span>
+                <span class="param-value">
+                  <template
+                    v-for="(scenarioName, idx) in Object.keys(
+                      record.statistics.median.scenarios ?? {},
+                    )"
+                    :key="scenarioName"
+                  >
+                    <span v-if="idx > 0">, </span>
+                    {{ scenarioName }}
+                    {{
+                      formatPercent(record.statistics.median.scenarios?.[scenarioName]?.maxDrawdown)
+                    }}
+                  </template>
+                </span>
+              </div>
+              <div class="param-row">
                 <span class="param-label">Simulering:</span>
                 <span class="param-value">
                   {{ record.parameters.yearsLater }} år,

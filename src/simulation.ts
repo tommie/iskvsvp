@@ -28,6 +28,10 @@ interface ScenarioState {
   accumulatedRealWithdrawal: number
   currentTaxRate: number
   yearlyAmounts: number[]
+  peakAmount: number
+  currentDrawdownStart: number | null
+  maxDrawdown: number
+  maxDrawdownPeriod: number
 }
 
 /**
@@ -45,6 +49,10 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
       accumulatedRealWithdrawal: 0,
       currentTaxRate: scenario.iskTaxRate ?? 0, // ISK basis rate (or 0 for VP)
       yearlyAmounts: [params.initialCapital],
+      peakAmount: params.initialCapital,
+      currentDrawdownStart: null,
+      maxDrawdown: 0,
+      maxDrawdownPeriod: 0,
     }
   }
 
@@ -160,6 +168,26 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
 
       // Track yearly amount for profit calculation
       state.yearlyAmounts.push(state.amount)
+
+      // Track drawdown
+      if (state.amount > state.peakAmount) {
+        // New peak - end any current drawdown
+        state.peakAmount = state.amount
+        if (state.currentDrawdownStart !== null) {
+          const drawdownPeriod = i - state.currentDrawdownStart
+          state.maxDrawdownPeriod = Math.max(state.maxDrawdownPeriod, drawdownPeriod)
+          state.currentDrawdownStart = null
+        }
+      } else if (state.amount < state.peakAmount) {
+        // In drawdown
+        const drawdown = (state.peakAmount - state.amount) / state.peakAmount
+        state.maxDrawdown = Math.max(state.maxDrawdown, drawdown)
+
+        // Track drawdown period
+        if (state.currentDrawdownStart === null) {
+          state.currentDrawdownStart = i
+        }
+      }
     }
 
     yearlyData.push({
@@ -191,6 +219,13 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
       yearlyData.reduce((sum, year) => sum + year.scenarios[scenario.name]!.taxRate, 0) /
       yearlyData.length
 
+    // Handle final drawdown period if still in drawdown at end
+    let finalMaxDrawdownPeriod = state.maxDrawdownPeriod
+    if (state.currentDrawdownStart !== null) {
+      const currentDrawdownPeriod = params.yearsLater - 1 - state.currentDrawdownStart
+      finalMaxDrawdownPeriod = Math.max(finalMaxDrawdownPeriod, currentDrawdownPeriod)
+    }
+
     scenarioSummaries[scenario.name] = {
       liquidValue: lastYearData.liquidValue,
       firstYearLiquidValue: params.initialCapital,
@@ -200,6 +235,8 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
       firstYearWithdrawal,
       accumulatedRealWithdrawal: state.accumulatedRealWithdrawal,
       averageTaxRate,
+      maxDrawdown: state.maxDrawdown,
+      maxDrawdownPeriod: finalMaxDrawdownPeriod,
     }
   }
 
@@ -288,6 +325,8 @@ export function calculateStatistics(results: SimulationResult[]): SimulationStat
       'firstYearWithdrawal',
       'accumulatedRealWithdrawal',
       'averageTaxRate',
+      'maxDrawdown',
+      'maxDrawdownPeriod',
     ]
 
     const meanScenario = {} as ScenarioSummary

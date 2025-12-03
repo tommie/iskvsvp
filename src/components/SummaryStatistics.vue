@@ -623,6 +623,167 @@ const hasResults = computed(() => statistics.value !== null)
               </tr>
             </template>
 
+            <!-- Max Drawdown -->
+            <template
+              v-for="(scenarioName, index) in scenarioNames"
+              :key="`maxDrawdown-${scenarioName}`"
+            >
+              <tr>
+                <th
+                  v-if="index === 0"
+                  :rowspan="scenarioNames.length"
+                  class="align-middle"
+                  scope="row"
+                >
+                  Maximalt drawdown
+                </th>
+                <th scope="row">{{ scenarioName }}</th>
+                <td
+                  :class="getCellClass(statistics?.percentile5, scenarioName, 'maxDrawdown', false)"
+                >
+                  {{
+                    formatPercent(getScenario(statistics?.percentile5, scenarioName, 'maxDrawdown'))
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile25, scenarioName, 'maxDrawdown', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile25, scenarioName, 'maxDrawdown'),
+                    )
+                  }}
+                </td>
+                <td :class="getCellClass(statistics?.median, scenarioName, 'maxDrawdown', false)">
+                  {{ formatPercent(getScenario(statistics?.median, scenarioName, 'maxDrawdown')) }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile75, scenarioName, 'maxDrawdown', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile75, scenarioName, 'maxDrawdown'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile95, scenarioName, 'maxDrawdown', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile95, scenarioName, 'maxDrawdown'),
+                    )
+                  }}
+                </td>
+                <td :class="getCellClass(statistics?.mean, scenarioName, 'maxDrawdown', false)">
+                  {{ formatPercent(getScenario(statistics?.mean, scenarioName, 'maxDrawdown')) }}
+                </td>
+                <td :class="getCellClass(statistics?.stdDev, scenarioName, 'maxDrawdown', false)">
+                  {{ formatPercent(getScenario(statistics?.stdDev, scenarioName, 'maxDrawdown')) }}
+                </td>
+              </tr>
+            </template>
+
+            <!-- Max Drawdown Period -->
+            <template
+              v-for="(scenarioName, index) in scenarioNames"
+              :key="`maxDrawdownPeriod-${scenarioName}`"
+            >
+              <tr>
+                <th
+                  v-if="index === 0"
+                  :rowspan="scenarioNames.length"
+                  class="align-middle"
+                  scope="row"
+                >
+                  Längsta drawdown-period
+                </th>
+                <th scope="row">{{ scenarioName }}</th>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile5, scenarioName, 'maxDrawdownPeriod', false)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile5, scenarioName, 'maxDrawdownPeriod'),
+                    )
+                  }}
+                  år
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile25, scenarioName, 'maxDrawdownPeriod', false)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile25, scenarioName, 'maxDrawdownPeriod'),
+                    )
+                  }}
+                  år
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.median, scenarioName, 'maxDrawdownPeriod', false)
+                  "
+                >
+                  {{
+                    formatNumber(getScenario(statistics?.median, scenarioName, 'maxDrawdownPeriod'))
+                  }}
+                  år
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile75, scenarioName, 'maxDrawdownPeriod', false)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile75, scenarioName, 'maxDrawdownPeriod'),
+                    )
+                  }}
+                  år
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile95, scenarioName, 'maxDrawdownPeriod', false)
+                  "
+                >
+                  {{
+                    formatNumber(
+                      getScenario(statistics?.percentile95, scenarioName, 'maxDrawdownPeriod'),
+                    )
+                  }}
+                  år
+                </td>
+                <td
+                  :class="getCellClass(statistics?.mean, scenarioName, 'maxDrawdownPeriod', false)"
+                >
+                  {{
+                    formatNumber(getScenario(statistics?.mean, scenarioName, 'maxDrawdownPeriod'))
+                  }}
+                  år
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.stdDev, scenarioName, 'maxDrawdownPeriod', false)
+                  "
+                >
+                  {{
+                    formatNumber(getScenario(statistics?.stdDev, scenarioName, 'maxDrawdownPeriod'))
+                  }}
+                  år
+                </td>
+              </tr>
+            </template>
+
             <!-- Annual Averages -->
             <template v-if="showStochasticParameters">
               <tr class="table-light">

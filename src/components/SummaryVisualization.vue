@@ -17,6 +17,10 @@ const withdrawalSvgRef = ref<SVGSVGElement | null>(null)
 const withdrawalContainerRef = ref<HTMLDivElement | null>(null)
 const accumulatedWithdrawalSvgRef = ref<SVGSVGElement | null>(null)
 const accumulatedWithdrawalContainerRef = ref<HTMLDivElement | null>(null)
+const maxDrawdownSvgRef = ref<SVGSVGElement | null>(null)
+const maxDrawdownContainerRef = ref<HTMLDivElement | null>(null)
+const maxDrawdownPeriodSvgRef = ref<SVGSVGElement | null>(null)
+const maxDrawdownPeriodContainerRef = ref<HTMLDivElement | null>(null)
 
 interface DataSeries {
   label: string
@@ -34,6 +38,7 @@ const drawChart = (
   formatValue: (d: number) => string,
   tickCount: number = 4,
   rowHeight: number = 60,
+  useLinearScale: boolean = false,
 ) => {
   // Clear previous chart
   d3.select(svgElement).selectAll('*').remove()
@@ -53,18 +58,26 @@ const drawChart = (
   const width = containerWidth - margin.left - margin.right
 
   // Get x extent across all series, filtering out invalid values
-  const allValues = series.flatMap((s) => s.values).filter((v) => isFinite(v) && v > 0)
+  const allValues = series
+    .flatMap((s) => s.values)
+    .filter((v) => isFinite(v) && (useLinearScale ? v >= 0 : v > 0))
 
   if (allValues.length === 0) return // No valid data to display
 
   const xExtent = d3.extent(allValues) as [number, number]
 
-  // Ensure positive values for log scale
-  const xMin = Math.max(xExtent[0], 0.0001)
-  const xMax = xExtent[1]
-
-  // Create log scale
-  const xScale = d3.scaleLog().domain([xMin, xMax]).range([0, width]).nice()
+  // Create scale (linear or log)
+  let xScale: any
+  if (useLinearScale) {
+    const xMin = Math.max(xExtent[0], 0)
+    const xMax = xExtent[1]
+    xScale = d3.scaleLinear().domain([xMin, xMax]).range([0, width]).nice()
+  } else {
+    // Ensure positive values for log scale
+    const xMin = Math.max(xExtent[0], 0.0001)
+    const xMax = xExtent[1]
+    xScale = d3.scaleLog().domain([xMin, xMax]).range([0, width]).nice()
+  }
 
   // Add X axis
   svg
@@ -104,7 +117,7 @@ const drawChart = (
       .text(s.label)
 
     // Draw dots (filter out invalid values)
-    const validValues = s.values.filter((v) => isFinite(v) && v > 0)
+    const validValues = s.values.filter((v) => isFinite(v) && (useLinearScale ? v >= 0 : v > 0))
     svg
       .selectAll(`.dot-series-${i}`)
       .data(validValues)
@@ -118,7 +131,7 @@ const drawChart = (
       .attr('opacity', 0.1)
 
     // Draw median line (last year) - only if valid
-    if (isFinite(s.median) && s.median > 0) {
+    if (isFinite(s.median) && (useLinearScale ? s.median >= 0 : s.median > 0)) {
       svg
         .append('line')
         .attr('x1', xScale(s.median))
@@ -141,7 +154,11 @@ const drawChart = (
     }
 
     // Draw first year median line if provided (dashed) - only if valid
-    if (s.firstYearMedian !== undefined && isFinite(s.firstYearMedian) && s.firstYearMedian > 0) {
+    if (
+      s.firstYearMedian !== undefined &&
+      isFinite(s.firstYearMedian) &&
+      (useLinearScale ? s.firstYearMedian >= 0 : s.firstYearMedian > 0)
+    ) {
       svg
         .append('line')
         .attr('x1', xScale(s.firstYearMedian))
@@ -174,6 +191,8 @@ const drawAllCharts = () => {
   if (!taxationDegreeSvgRef.value || !taxationDegreeContainerRef.value) return
   if (!withdrawalSvgRef.value || !withdrawalContainerRef.value) return
   if (!accumulatedWithdrawalSvgRef.value || !accumulatedWithdrawalContainerRef.value) return
+  if (!maxDrawdownSvgRef.value || !maxDrawdownContainerRef.value) return
+  if (!maxDrawdownPeriodSvgRef.value || !maxDrawdownPeriodContainerRef.value) return
 
   // Extract data from results
   const summaries = results.value.map((r) => r.summary)
@@ -280,6 +299,30 @@ const drawAllCharts = () => {
     (d) => d3.format(',.0f')(d) + ' kr',
     3, // Fewer ticks for this chart with narrower range
   )
+
+  // Max Drawdown
+  drawChart(
+    maxDrawdownSvgRef.value,
+    maxDrawdownContainerRef.value,
+    buildSeries('maxDrawdown'),
+    'Maximalt drawdown',
+    (d) => d3.format('.1%')(d),
+    3,
+    60,
+    true, // Use linear scale
+  )
+
+  // Max Drawdown Period
+  drawChart(
+    maxDrawdownPeriodSvgRef.value,
+    maxDrawdownPeriodContainerRef.value,
+    buildSeries('maxDrawdownPeriod'),
+    'Längsta drawdown-period',
+    (d) => d3.format('.0f')(d) + ' år',
+    3,
+    60,
+    true, // Use linear scale
+  )
 }
 
 // Watch for data changes
@@ -335,8 +378,18 @@ onMounted(() => {
       </div>
 
       <!-- Accumulated Withdrawal -->
-      <div ref="accumulatedWithdrawalContainerRef" class="chart-container">
+      <div ref="accumulatedWithdrawalContainerRef" class="chart-container mb-4">
         <svg ref="accumulatedWithdrawalSvgRef"></svg>
+      </div>
+
+      <!-- Max Drawdown -->
+      <div ref="maxDrawdownContainerRef" class="chart-container mb-4">
+        <svg ref="maxDrawdownSvgRef"></svg>
+      </div>
+
+      <!-- Max Drawdown Period -->
+      <div ref="maxDrawdownPeriodContainerRef" class="chart-container">
+        <svg ref="maxDrawdownPeriodSvgRef"></svg>
       </div>
     </div>
   </div>

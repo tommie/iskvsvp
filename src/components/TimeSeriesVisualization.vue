@@ -65,7 +65,7 @@ const drawGenericChart = (
   svg
     .append('g')
     .attr('transform', `translate(0,${height})`)
-    .call(d3.axisBottom(xScale).tickFormat(d3.format('d')))
+    .call(d3.axisBottom(xScale).ticks(5).tickFormat(d3.format('d')))
     .append('text')
     .attr('x', width / 2)
     .attr('y', 45)
