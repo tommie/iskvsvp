@@ -91,6 +91,20 @@ const drawChart = () => {
     .style('font-weight', 'bold')
     .text('Monte Carlo Simulation över tid (logaritmisk skala)')
 
+  // Add horizontal line at initial capital value
+  const initialValue = timeSeriesData.value[0]?.scenarios[scenarioNames[0]!] ?? 0
+  if (initialValue > 0 && isFinite(initialValue)) {
+    svg
+      .append('line')
+      .attr('x1', 0)
+      .attr('x2', width)
+      .attr('y1', yScale(initialValue))
+      .attr('y2', yScale(initialValue))
+      .attr('stroke', '#999')
+      .attr('stroke-width', 1)
+      .attr('opacity', 0.7)
+  }
+
   // Draw points and median lines for each scenario
   scenarioNames.forEach((scenarioName, i) => {
     const color = colors[i % colors.length]!
