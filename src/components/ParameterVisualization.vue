@@ -5,7 +5,7 @@ import { ref, watch, onMounted, nextTick } from 'vue'
 import * as d3 from 'd3'
 
 const store = useCalculatorStore()
-const { results } = storeToRefs(store)
+const { results, showStochasticParameters } = storeToRefs(store)
 
 const rorSvgRef = ref<SVGSVGElement | null>(null)
 const rorContainerRef = ref<HTMLDivElement | null>(null)
@@ -192,6 +192,15 @@ watch(results, async () => {
   drawAllCharts()
 })
 
+// Watch for visibility changes
+watch(showStochasticParameters, async (newValue) => {
+  if (newValue) {
+    // Wait for DOM to update with visible elements
+    await nextTick()
+    drawAllCharts()
+  }
+})
+
 // Redraw on window resize
 onMounted(() => {
   const handleResize = () => {
@@ -209,7 +218,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div v-if="results.length > 0">
+  <div v-if="results.length > 0 && showStochasticParameters">
     <!-- ROR Chart -->
     <div class="card mb-4">
       <div class="card-header">

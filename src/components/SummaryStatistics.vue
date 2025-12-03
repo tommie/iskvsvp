@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 
 const store = useCalculatorStore()
-const { statistics } = storeToRefs(store)
+const { statistics, showStochasticParameters } = storeToRefs(store)
 
 const formatNumber = (value: number | undefined): string => {
   if (value == null || isNaN(value)) return '-'
@@ -328,37 +328,39 @@ const hasResults = computed(() => statistics.value !== null)
             </tr>
 
             <!-- Annual Averages -->
-            <tr class="table-light">
-              <th rowspan="3" class="align-middle" scope="row">Genomsnitt per år</th>
-              <th scope="row">Avkastning</th>
-              <td>{{ formatPercent(statistics?.percentile5.averageDevelopment) }}</td>
-              <td>{{ formatPercent(statistics?.percentile25.averageDevelopment) }}</td>
-              <td>{{ formatPercent(statistics?.median.averageDevelopment) }}</td>
-              <td>{{ formatPercent(statistics?.percentile75.averageDevelopment) }}</td>
-              <td>{{ formatPercent(statistics?.percentile95.averageDevelopment) }}</td>
-              <td>{{ formatPercent(statistics?.mean.averageDevelopment) }}</td>
-              <td>{{ formatPercent(statistics?.stdDev.averageDevelopment) }}</td>
-            </tr>
-            <tr class="table-light">
-              <th scope="row">ISK-skattesats</th>
-              <td>{{ formatPercent(statistics?.percentile5.averageISKTaxRate) }}</td>
-              <td>{{ formatPercent(statistics?.percentile25.averageISKTaxRate) }}</td>
-              <td>{{ formatPercent(statistics?.median.averageISKTaxRate) }}</td>
-              <td>{{ formatPercent(statistics?.percentile75.averageISKTaxRate) }}</td>
-              <td>{{ formatPercent(statistics?.percentile95.averageISKTaxRate) }}</td>
-              <td>{{ formatPercent(statistics?.mean.averageISKTaxRate) }}</td>
-              <td>{{ formatPercent(statistics?.stdDev.averageISKTaxRate) }}</td>
-            </tr>
-            <tr class="table-light">
-              <th scope="row">Inflationstakt</th>
-              <td>{{ formatPercent(statistics?.percentile5.averageInflationRate) }}</td>
-              <td>{{ formatPercent(statistics?.percentile25.averageInflationRate) }}</td>
-              <td>{{ formatPercent(statistics?.median.averageInflationRate) }}</td>
-              <td>{{ formatPercent(statistics?.percentile75.averageInflationRate) }}</td>
-              <td>{{ formatPercent(statistics?.percentile95.averageInflationRate) }}</td>
-              <td>{{ formatPercent(statistics?.mean.averageInflationRate) }}</td>
-              <td>{{ formatPercent(statistics?.stdDev.averageInflationRate) }}</td>
-            </tr>
+            <template v-if="showStochasticParameters">
+              <tr class="table-light">
+                <th rowspan="3" class="align-middle" scope="row">Genomsnitt per år</th>
+                <th scope="row">Avkastning</th>
+                <td>{{ formatPercent(statistics?.percentile5.averageDevelopment) }}</td>
+                <td>{{ formatPercent(statistics?.percentile25.averageDevelopment) }}</td>
+                <td>{{ formatPercent(statistics?.median.averageDevelopment) }}</td>
+                <td>{{ formatPercent(statistics?.percentile75.averageDevelopment) }}</td>
+                <td>{{ formatPercent(statistics?.percentile95.averageDevelopment) }}</td>
+                <td>{{ formatPercent(statistics?.mean.averageDevelopment) }}</td>
+                <td>{{ formatPercent(statistics?.stdDev.averageDevelopment) }}</td>
+              </tr>
+              <tr class="table-light">
+                <th scope="row">ISK-skattesats</th>
+                <td>{{ formatPercent(statistics?.percentile5.averageISKTaxRate) }}</td>
+                <td>{{ formatPercent(statistics?.percentile25.averageISKTaxRate) }}</td>
+                <td>{{ formatPercent(statistics?.median.averageISKTaxRate) }}</td>
+                <td>{{ formatPercent(statistics?.percentile75.averageISKTaxRate) }}</td>
+                <td>{{ formatPercent(statistics?.percentile95.averageISKTaxRate) }}</td>
+                <td>{{ formatPercent(statistics?.mean.averageISKTaxRate) }}</td>
+                <td>{{ formatPercent(statistics?.stdDev.averageISKTaxRate) }}</td>
+              </tr>
+              <tr class="table-light">
+                <th scope="row">Inflationstakt</th>
+                <td>{{ formatPercent(statistics?.percentile5.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.percentile25.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.median.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.percentile75.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.percentile95.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.mean.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.stdDev.averageInflationRate) }}</td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>

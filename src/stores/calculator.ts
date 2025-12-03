@@ -32,6 +32,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const results = ref<SimulationResult[]>([])
   const statistics = ref<SimulationStatistics | null>(null)
   const timeSeriesData = ref<TimeSeriesPoint[]>([])
+  const showStochasticParameters = ref(false)
 
   // Computed parameters object
   const parameters = computed<InputParameters>(() => ({
@@ -133,6 +134,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     results,
     statistics,
     timeSeriesData,
+    showStochasticParameters,
     parameters,
 
     // Actions

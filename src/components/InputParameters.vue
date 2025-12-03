@@ -21,6 +21,7 @@ const {
   simulationCount,
   isRunning,
   progress,
+  showStochasticParameters,
 } = storeToRefs(store)
 
 const rorPreset = ref('')
@@ -313,6 +314,14 @@ const handleRunSimulation = async () => {
         <button class="btn btn-primary btn-lg" @click="handleRunSimulation" :disabled="isRunning">
           <span v-if="isRunning" class="spinner-border spinner-border-sm me-2"></span>
           {{ isRunning ? 'Kör simulering...' : 'Kör Monte Carlo-simulering' }}
+        </button>
+
+        <button
+          class="btn btn-outline-secondary btn-lg ms-2"
+          @click="showStochasticParameters = !showStochasticParameters"
+          :disabled="isRunning"
+        >
+          {{ showStochasticParameters ? 'Dölj parametrar' : 'Visa parametrar' }}
         </button>
 
         <div v-if="isRunning" class="mt-3">
