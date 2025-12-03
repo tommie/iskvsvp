@@ -54,10 +54,9 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
   for (let i = 0; i < params.yearsLater; i++) {
     const year = params.startYear + i
 
-    // Generate shared inflation for this year (same across all scenarios for fair comparison)
-    // Use first scenario's inflation parameters
-    const firstScenario = params.scenarios[0]!
-    const inflationRate = randomNormal(firstScenario.inflationRate, firstScenario.inflationStdDev)
+    // Generate shared stochastics for this year (same across all scenarios for fair comparison)
+    const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev)
+    const development = randomNormal(params.development, params.developmentStdDev)
     cumulativeInflation *= 1 + inflationRate
 
     const scenarioYearlyData: Record<string, ScenarioYearlyData> = {}
@@ -65,9 +64,6 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
     // Process each scenario
     for (const scenario of params.scenarios) {
       const state = scenarioStates[scenario.name]!
-
-      // Generate stochastic development for this scenario this year
-      const development = randomNormal(scenario.development, scenario.developmentStdDev)
 
       // Update ISK basis rate if ISK (random walk)
       if (scenario.isISK && scenario.iskTaxRateStdDev) {
@@ -135,7 +131,7 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
         withdrawnReal,
         withdrawalRate,
         taxRate: state.currentTaxRate,
-        development, // Store per-scenario
+        development, // Shared but stored for reference
         inflationRate, // Shared but stored for reference
       }
 
@@ -152,7 +148,7 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
 
     yearlyData.push({
       year,
-      development: firstScenario.development, // Store first scenario's parameter for reference
+      development,
       inflationRate,
       inflation: cumulativeInflation,
       scenarios: scenarioYearlyData,

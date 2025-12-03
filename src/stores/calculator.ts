@@ -40,15 +40,15 @@ export const useCalculatorStore = defineStore('calculator', () => {
     startYear: startYear.value,
     yearsLater: yearsLater.value,
     simulationCount: simulationCount.value,
+    development: development.value,
+    developmentStdDev: developmentStdDev.value,
+    inflationRate: inflationRate.value,
+    inflationStdDev: inflationStdDev.value,
     scenarios: [
       {
         name: 'ISK',
         withdrawalRate: withdrawalISK.value,
         badYearWithdrawalRate: badYearWithdrawalRate.value,
-        development: development.value,
-        developmentStdDev: developmentStdDev.value,
-        inflationRate: inflationRate.value,
-        inflationStdDev: inflationStdDev.value,
         capitalGainsTax: capitalGainsTax.value,
         iskTaxRate: iskTaxRate.value,
         iskTaxRateStdDev: iskTaxRateStdDev.value,
@@ -58,10 +58,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
         name: 'VP',
         withdrawalRate: withdrawalVP.value,
         badYearWithdrawalRate: badYearWithdrawalRate.value,
-        development: development.value,
-        developmentStdDev: developmentStdDev.value,
-        inflationRate: inflationRate.value,
-        inflationStdDev: inflationStdDev.value,
         capitalGainsTax: capitalGainsTax.value,
         isISK: false,
       },
@@ -115,20 +111,20 @@ export const useCalculatorStore = defineStore('calculator', () => {
     startYear.value = params.startYear
     yearsLater.value = params.yearsLater
     simulationCount.value = params.simulationCount
+    development.value = params.development
+    developmentStdDev.value = params.developmentStdDev
+    inflationRate.value = params.inflationRate
+    inflationStdDev.value = params.inflationStdDev
 
     // Load from scenarios
     const iskScenario = params.scenarios.find((s) => s.isISK)
     const vpScenario = params.scenarios.find((s) => !s.isISK)
 
     if (iskScenario) {
-      development.value = iskScenario.development
-      developmentStdDev.value = iskScenario.developmentStdDev
       withdrawalISK.value = iskScenario.withdrawalRate
       badYearWithdrawalRate.value = iskScenario.badYearWithdrawalRate
       iskTaxRate.value = iskScenario.iskTaxRate ?? 0.0296
       iskTaxRateStdDev.value = iskScenario.iskTaxRateStdDev ?? 0.005
-      inflationRate.value = iskScenario.inflationRate
-      inflationStdDev.value = iskScenario.inflationStdDev
       capitalGainsTax.value = iskScenario.capitalGainsTax
     }
 

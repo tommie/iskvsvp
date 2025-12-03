@@ -244,8 +244,8 @@ const positionPopover = (popoverId: string, anchorId: string) => {
               <div class="param-row">
                 <span class="param-label">Avkastning:</span>
                 <span class="param-value">
-                  {{ formatPercent(record.parameters.scenarios[0]?.development) }}, SD
-                  {{ formatPercent(record.parameters.scenarios[0]?.developmentStdDev) }}
+                  {{ formatPercent(record.parameters.development) }}, SD
+                  {{ formatPercent(record.parameters.developmentStdDev) }}
                 </span>
               </div>
               <div

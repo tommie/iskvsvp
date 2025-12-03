@@ -626,8 +626,8 @@ const hasResults = computed(() => statistics.value !== null)
             <!-- Annual Averages -->
             <template v-if="showStochasticParameters">
               <tr class="table-light">
-                <th rowspan="3" class="align-middle" scope="row">Genomsnitt per år</th>
                 <th scope="row">Avkastning</th>
+                <th scope="row"></th>
                 <td>{{ formatPercent(statistics?.percentile5.averageDevelopment) }}</td>
                 <td>{{ formatPercent(statistics?.percentile25.averageDevelopment) }}</td>
                 <td>{{ formatPercent(statistics?.median.averageDevelopment) }}</td>
@@ -636,12 +636,33 @@ const hasResults = computed(() => statistics.value !== null)
                 <td>{{ formatPercent(statistics?.mean.averageDevelopment) }}</td>
                 <td>{{ formatPercent(statistics?.stdDev.averageDevelopment) }}</td>
               </tr>
+              <tr class="table-light">
+                <th scope="row">Inflationstakt</th>
+                <th scope="row"></th>
+                <td>{{ formatPercent(statistics?.percentile5.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.percentile25.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.median.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.percentile75.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.percentile95.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.mean.averageInflationRate) }}</td>
+                <td>{{ formatPercent(statistics?.stdDev.averageInflationRate) }}</td>
+              </tr>
               <template
-                v-for="scenarioName in scenarioNames.filter((n) => n === 'ISK')"
+                v-for="(scenarioName, index) in scenarioNames.filter(
+                  (name) => getScenario(statistics?.percentile95, name, 'averageTaxRate') > 0,
+                )"
                 :key="`iskTax-${scenarioName}`"
               >
                 <tr class="table-light">
-                  <th scope="row">ISK-skattesats</th>
+                  <th
+                    v-if="index === 0"
+                    :rowspan="scenarioNames.length"
+                    class="align-middle"
+                    scope="row"
+                  >
+                    ISK-skattesats
+                  </th>
+                  <th scope="row">{{ scenarioName }}</th>
                   <td>
                     {{
                       formatPercent(
@@ -687,16 +708,6 @@ const hasResults = computed(() => statistics.value !== null)
                   </td>
                 </tr>
               </template>
-              <tr class="table-light">
-                <th scope="row">Inflationstakt</th>
-                <td>{{ formatPercent(statistics?.percentile5.averageInflationRate) }}</td>
-                <td>{{ formatPercent(statistics?.percentile25.averageInflationRate) }}</td>
-                <td>{{ formatPercent(statistics?.median.averageInflationRate) }}</td>
-                <td>{{ formatPercent(statistics?.percentile75.averageInflationRate) }}</td>
-                <td>{{ formatPercent(statistics?.percentile95.averageInflationRate) }}</td>
-                <td>{{ formatPercent(statistics?.mean.averageInflationRate) }}</td>
-                <td>{{ formatPercent(statistics?.stdDev.averageInflationRate) }}</td>
-              </tr>
             </template>
           </tbody>
         </table>

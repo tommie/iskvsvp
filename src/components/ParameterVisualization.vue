@@ -238,21 +238,6 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- ISK Tax Rate Chart -->
-    <div class="card mb-4">
-      <div class="card-header">
-        <h3>ISK-skattesats över tid</h3>
-        <p class="mb-0 text-muted">
-          Punktdiagram som visar ISK-skattesats över tid för alla simuleringar
-        </p>
-      </div>
-      <div class="card-body">
-        <div ref="iskTaxContainerRef" class="chart-container">
-          <svg ref="iskTaxSvgRef"></svg>
-        </div>
-      </div>
-    </div>
-
     <!-- Inflation Chart -->
     <div class="card mb-4">
       <div class="card-header">
@@ -264,6 +249,21 @@ onMounted(() => {
       <div class="card-body">
         <div ref="inflationContainerRef" class="chart-container">
           <svg ref="inflationSvgRef"></svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- ISK Tax Rate Chart -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <h3>ISK-skattesats över tid</h3>
+        <p class="mb-0 text-muted">
+          Punktdiagram som visar ISK-skattesats över tid för alla simuleringar
+        </p>
+      </div>
+      <div class="card-body">
+        <div ref="iskTaxContainerRef" class="chart-container">
+          <svg ref="iskTaxSvgRef"></svg>
         </div>
       </div>
     </div>
