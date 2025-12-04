@@ -875,8 +875,12 @@ const hasResults = computed(() => statistics.value !== null)
                 <td>{{ formatPercent(statistics?.median.averageDevelopment) }}</td>
                 <td>{{ formatPercent(statistics?.percentile75.averageDevelopment) }}</td>
                 <td>{{ formatPercent(statistics?.percentile95.averageDevelopment) }}</td>
-                <td>{{ formatPercent(statistics?.mean.averageDevelopment) }}</td>
-                <td>{{ formatPercent(statistics?.stdDev.averageDevelopment) }}</td>
+                <td v-if="showDetailedStatistics">
+                  {{ formatPercent(statistics?.mean.averageDevelopment) }}
+                </td>
+                <td v-if="showDetailedStatistics">
+                  {{ formatPercent(statistics?.stdDev.averageDevelopment) }}
+                </td>
               </tr>
               <tr class="table-light">
                 <th scope="row">Inflationstakt</th>
@@ -886,8 +890,12 @@ const hasResults = computed(() => statistics.value !== null)
                 <td>{{ formatPercent(statistics?.median.averageInflationRate) }}</td>
                 <td>{{ formatPercent(statistics?.percentile75.averageInflationRate) }}</td>
                 <td>{{ formatPercent(statistics?.percentile95.averageInflationRate) }}</td>
-                <td>{{ formatPercent(statistics?.mean.averageInflationRate) }}</td>
-                <td>{{ formatPercent(statistics?.stdDev.averageInflationRate) }}</td>
+                <td v-if="showDetailedStatistics">
+                  {{ formatPercent(statistics?.mean.averageInflationRate) }}
+                </td>
+                <td v-if="showDetailedStatistics">
+                  {{ formatPercent(statistics?.stdDev.averageInflationRate) }}
+                </td>
               </tr>
               <template
                 v-for="(scenarioName, index) in scenarioNames.filter(
@@ -938,12 +946,12 @@ const hasResults = computed(() => statistics.value !== null)
                       )
                     }}
                   </td>
-                  <td>
+                  <td v-if="showDetailedStatistics">
                     {{
                       formatPercent(getScenario(statistics?.mean, scenarioName, 'averageTaxRate'))
                     }}
                   </td>
-                  <td>
+                  <td v-if="showDetailedStatistics">
                     {{
                       formatPercent(getScenario(statistics?.stdDev, scenarioName, 'averageTaxRate'))
                     }}
