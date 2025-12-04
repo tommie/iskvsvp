@@ -112,7 +112,16 @@ const drawGenericChart = (
       .attr('opacity', 0.7)
   }
 
-  // Draw points and median lines for each scenario
+  // Create histogram bins (30 bins, exponentially spaced for log scale)
+  const numBins = 30
+  const logMin = Math.log(yMin)
+  const logMax = Math.log(yMax)
+  const binEdges: number[] = []
+  for (let i = 0; i <= numBins; i++) {
+    binEdges.push(Math.exp(logMin + (i / numBins) * (logMax - logMin)))
+  }
+
+  // Draw histograms and median lines for each scenario
   scenarioNames.forEach((scenarioName, i) => {
     const color = colors[i % colors.length]!
 
@@ -127,21 +136,57 @@ const drawGenericChart = (
       return isFinite(value) && value > 0
     })
 
-    // Draw points
+    // Group by year and create 2D histogram
+    const yearGroups = d3.group(validData, (d) => d.year)
+    const years = Array.from(yearGroups.keys()).sort((a, b) => a - b)
+
+    // Find max count for opacity scaling
+    let maxCount = 0
+    const histogramData: Array<{ year: number; binIndex: number; count: number }> = []
+
+    years.forEach((year) => {
+      const yearData = yearGroups.get(year)!
+      const values = yearData.map((d) => dataExtractor(d, scenarioName))
+
+      // Count values in each bin
+      const binCounts = new Array(numBins).fill(0)
+      values.forEach((value) => {
+        // Find which bin this value belongs to
+        for (let b = 0; b < numBins; b++) {
+          if (value >= binEdges[b]! && value < binEdges[b + 1]!) {
+            binCounts[b]++
+            break
+          }
+        }
+      })
+
+      // Store histogram data
+      binCounts.forEach((count, binIndex) => {
+        if (count > 0) {
+          histogramData.push({ year, binIndex, count })
+          maxCount = Math.max(maxCount, count)
+        }
+      })
+    })
+
+    // Draw histogram rectangles
+    const yearWidth = years.length > 1 ? Math.abs(xScale(years[1]!) - xScale(years[0]!)) : 10
+    const rectWidth = (yearWidth * 0.4) / scenarioNames.length
+
     svg
-      .selectAll(`.dot-${scenarioName}`)
-      .data(validData)
+      .selectAll(`.hist-${scenarioName}`)
+      .data(histogramData)
       .enter()
-      .append('circle')
-      .attr('class', `dot-${scenarioName}`)
-      .attr('cx', (d) => xScale(d.year + xOffset))
-      .attr('cy', (d) => yScale(dataExtractor(d, scenarioName)))
-      .attr('r', 1.5)
+      .append('rect')
+      .attr('class', `hist-${scenarioName}`)
+      .attr('x', (d) => xScale(d.year + xOffset) - rectWidth / 2)
+      .attr('y', (d) => yScale(binEdges[d.binIndex + 1]!))
+      .attr('width', rectWidth)
+      .attr('height', (d) => yScale(binEdges[d.binIndex]!) - yScale(binEdges[d.binIndex + 1]!))
       .attr('fill', color)
-      .attr('opacity', 0.03)
+      .attr('opacity', (d) => Math.pow(d.count / maxCount, 0.5) * 0.7 + 0.1)
 
     // Calculate median values by year
-    const yearGroups = d3.group(validData, (d) => d.year)
     const medianData = Array.from(yearGroups, ([year, values]) => ({
       year,
       median: d3.median(values, (d) => dataExtractor(d, scenarioName)) ?? 0,
@@ -176,21 +221,22 @@ const drawGenericChart = (
     const color = colors[i % colors.length]!
     const yOffset = i * 50
 
-    // Simulation dots
+    // Simulation histogram
     legend
-      .append('circle')
-      .attr('cx', 0)
-      .attr('cy', yOffset)
-      .attr('r', 4)
+      .append('rect')
+      .attr('x', -6)
+      .attr('y', yOffset - 6)
+      .attr('width', 12)
+      .attr('height', 12)
       .attr('fill', color)
-      .attr('opacity', 0.3)
+      .attr('opacity', 0.4)
 
     legend
       .append('text')
       .attr('x', 15)
       .attr('y', yOffset + 5)
       .style('font-size', '11px')
-      .text(`${scenarioName} (sim.)`)
+      .text(`${scenarioName} (hist.)`)
 
     // Median line
     legend
@@ -262,8 +308,9 @@ onMounted(() => {
     <div class="card-header">
       <h3>Över tid</h3>
       <p class="mb-0 text-muted">
-        Punktdiagram som visar kontovärden och uttag över tid för alla simuleringar (transparens
-        visar täthet). Heldragna linjer visar medianvärden, streckade linjer visar initiala värden.
+        Histogram som visar fördelningen av kontovärden och uttag över tid för alla simuleringar
+        (intensitet visar täthet). Heldragna linjer visar medianvärden, streckade linjer visar
+        initiala värden.
       </p>
     </div>
     <div class="card-body">

@@ -116,19 +116,61 @@ const drawChart = (
       .style('font-weight', '500')
       .text(s.label)
 
-    // Draw dots (filter out invalid values)
+    // Draw histogram (filter out invalid values)
     const validValues = s.values.filter((v) => isFinite(v) && (useLinearScale ? v >= 0 : v > 0))
-    svg
-      .selectAll(`.dot-series-${i}`)
-      .data(validValues)
-      .enter()
-      .append('circle')
-      .attr('class', `dot-series-${i}`)
-      .attr('cx', (d) => xScale(d))
-      .attr('cy', yPosition)
-      .attr('r', 2)
-      .attr('fill', s.color)
-      .attr('opacity', 0.1)
+
+    if (validValues.length > 0) {
+      const numBins = 100
+      const xMin = d3.min(validValues)!
+      const xMax = d3.max(validValues)!
+
+      // Create bins (exponential for log scale, linear for linear scale)
+      const binEdges: number[] = []
+      if (useLinearScale) {
+        for (let j = 0; j <= numBins; j++) {
+          binEdges.push(xMin + (j / numBins) * (xMax - xMin))
+        }
+      } else {
+        const logMin = Math.log(Math.max(xMin, 0.0001))
+        const logMax = Math.log(xMax)
+        for (let j = 0; j <= numBins; j++) {
+          binEdges.push(Math.exp(logMin + (j / numBins) * (logMax - logMin)))
+        }
+      }
+
+      // Count values in each bin
+      const binCounts = new Array(numBins).fill(0)
+      validValues.forEach((value) => {
+        for (let b = 0; b < numBins; b++) {
+          if (value >= binEdges[b]! && value < binEdges[b + 1]!) {
+            binCounts[b]++
+            break
+          }
+        }
+      })
+
+      const maxCount = d3.max(binCounts) ?? 1
+      const histogramData = binCounts
+        .map((count, binIndex) => ({ binIndex, count }))
+        .filter((d) => d.count > 0)
+
+      // Draw histogram rectangles
+      const barHeight = 16
+      svg
+        .selectAll(`.hist-series-${i}`)
+        .data(histogramData)
+        .enter()
+        .append('rect')
+        .attr('class', `hist-series-${i}`)
+        .attr('x', (d) => xScale(binEdges[d.binIndex]!))
+        .attr('y', yPosition - barHeight / 2)
+        .attr('width', (d) =>
+          Math.max(1, xScale(binEdges[d.binIndex + 1]!) - xScale(binEdges[d.binIndex]!)),
+        )
+        .attr('height', barHeight)
+        .attr('fill', s.color)
+        .attr('opacity', (d) => 0.1 + (d.count / maxCount) * 0.5)
+    }
 
     // Draw median line (last year) - only if valid
     if (isFinite(s.median) && (useLinearScale ? s.median >= 0 : s.median > 0)) {
@@ -136,8 +178,8 @@ const drawChart = (
         .append('line')
         .attr('x1', xScale(s.median))
         .attr('x2', xScale(s.median))
-        .attr('y1', yPosition - 20)
-        .attr('y2', yPosition + 20)
+        .attr('y1', yPosition - 16)
+        .attr('y2', yPosition + 16)
         .attr('stroke', s.color)
         .attr('stroke-width', 3)
 
@@ -352,8 +394,9 @@ onMounted(() => {
     <div class="card-header">
       <h3>Visualisering av resultat</h3>
       <p class="mb-0 text-muted">
-        Punktdiagram som visar fördelningen av resultat över alla simuleringar. Heldragna linjer
-        visar medianvärden för sista året, streckade linjer visar första året.
+        Histogram som visar fördelningen av resultat över alla simuleringar (intensitet visar
+        täthet). Heldragna linjer visar medianvärden för sista året, streckade linjer visar första
+        året.
       </p>
     </div>
     <div class="card-body">
