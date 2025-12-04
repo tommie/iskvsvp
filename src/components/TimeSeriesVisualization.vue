@@ -185,30 +185,6 @@ const drawGenericChart = (
       .attr('height', (d) => yScale(binEdges[d.binIndex]!) - yScale(binEdges[d.binIndex + 1]!))
       .attr('fill', color)
       .attr('opacity', (d) => Math.pow(d.count / maxCount, 0.5) * 0.7 + 0.1)
-
-    // Calculate median values by year
-    const medianData = Array.from(yearGroups, ([year, values]) => ({
-      year,
-      median: d3.median(values, (d) => dataExtractor(d, scenarioName)) ?? 0,
-    }))
-      .filter((d) => isFinite(d.median) && d.median > 0)
-      .sort((a, b) => a.year - b.year)
-
-    // Create line generator
-    const line = d3
-      .line<{ year: number; median: number }>()
-      .x((d) => xScale(d.year + xOffset))
-      .y((d) => yScale(d.median))
-
-    // Draw median line
-    svg
-      .append('path')
-      .datum(medianData)
-      .attr('class', `line-${scenarioName}-median`)
-      .attr('fill', 'none')
-      .attr('stroke', color)
-      .attr('stroke-width', 3)
-      .attr('d', line)
   })
 
   // Draw representative simulation line if available
@@ -258,7 +234,7 @@ const drawGenericChart = (
 
   scenarioNames.forEach((scenarioName, i) => {
     const color = colors[i % colors.length]!
-    const yOffset = i * 75
+    const yOffset = i * 50
 
     // Simulation histogram
     legend
@@ -277,31 +253,14 @@ const drawGenericChart = (
       .style('font-size', '11px')
       .text(`${scenarioName} (hist.)`)
 
-    // Median line
-    legend
-      .append('line')
-      .attr('x1', -8)
-      .attr('x2', 8)
-      .attr('y1', yOffset + 25)
-      .attr('y2', yOffset + 25)
-      .attr('stroke', color)
-      .attr('stroke-width', 3)
-
-    legend
-      .append('text')
-      .attr('x', 15)
-      .attr('y', yOffset + 30)
-      .style('font-size', '11px')
-      .text(`${scenarioName} (median)`)
-
     // Representative simulation line
     if (representativeSimulationId.value !== null) {
       legend
         .append('line')
         .attr('x1', -8)
         .attr('x2', 8)
-        .attr('y1', yOffset + 50)
-        .attr('y2', yOffset + 50)
+        .attr('y1', yOffset + 25)
+        .attr('y2', yOffset + 25)
         .attr('stroke', color)
         .attr('stroke-width', 2)
         .attr('stroke-dasharray', '5,5')
@@ -309,7 +268,7 @@ const drawGenericChart = (
       legend
         .append('text')
         .attr('x', 15)
-        .attr('y', yOffset + 55)
+        .attr('y', yOffset + 30)
         .style('font-size', '11px')
         .text(`${scenarioName} (repr.)`)
     }
@@ -368,8 +327,8 @@ onMounted(() => {
       <h3>Över tid</h3>
       <p class="mb-0 text-muted">
         Histogram som visar fördelningen av kontovärden och uttag över tid för alla simuleringar
-        (intensitet visar täthet). Heldragna linjer visar medianvärden, färgade streckade linjer
-        visar representativ simulering (närmast median), horisontell grå linje visar initialt värde.
+        (intensitet visar täthet). Färgade streckade linjer visar ett representativt exempel
+        (närmast median), horisontell grå linje visar initialt värde.
       </p>
     </div>
     <div class="card-body">
