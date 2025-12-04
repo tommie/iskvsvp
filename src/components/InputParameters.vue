@@ -22,6 +22,7 @@ const {
   isRunning,
   progress,
   showStochasticParameters,
+  showDetailedStatistics,
 } = storeToRefs(store)
 
 const rorPreset = ref('')
@@ -354,6 +355,14 @@ const expectedTotalWithdrawalRate = computed(() => {
           <span v-if="isRunning" class="spinner-border spinner-border-sm me-2"></span>
           <span v-else class="me-2">⏵</span>
           Kör simulering
+        </button>
+
+        <button
+          class="btn btn-outline-secondary btn-lg ms-2"
+          @click="showDetailedStatistics = !showDetailedStatistics"
+          :disabled="isRunning"
+        >
+          {{ showDetailedStatistics ? 'Dölj detaljer' : 'Visa detaljer' }}
         </button>
 
         <button

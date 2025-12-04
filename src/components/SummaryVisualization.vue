@@ -5,7 +5,7 @@ import { ref, watch, onMounted, nextTick } from 'vue'
 import * as d3 from 'd3'
 
 const store = useCalculatorStore()
-const { results, yearsLater } = storeToRefs(store)
+const { results, yearsLater, showDetailedStatistics } = storeToRefs(store)
 
 const liquidValueSvgRef = ref<SVGSVGElement | null>(null)
 const liquidValueContainerRef = ref<HTMLDivElement | null>(null)
@@ -229,12 +229,9 @@ const drawChart = (
 const drawAllCharts = () => {
   if (!results.value.length) return
   if (!liquidValueSvgRef.value || !liquidValueContainerRef.value) return
-  if (!paidTaxSvgRef.value || !paidTaxContainerRef.value) return
-  if (!taxationDegreeSvgRef.value || !taxationDegreeContainerRef.value) return
   if (!withdrawalSvgRef.value || !withdrawalContainerRef.value) return
   if (!accumulatedWithdrawalSvgRef.value || !accumulatedWithdrawalContainerRef.value) return
   if (!maxDrawdownSvgRef.value || !maxDrawdownContainerRef.value) return
-  if (!maxDrawdownPeriodSvgRef.value || !maxDrawdownPeriodContainerRef.value) return
 
   // Extract data from results
   const summaries = results.value.map((r) => r.summary)
@@ -277,25 +274,6 @@ const drawAllCharts = () => {
     (d) => d3.format(',.0f')(d) + ' kr',
     4, // tick count
     90, // Increased row height to fit first year labels
-  )
-
-  // Paid Tax
-  drawChart(
-    paidTaxSvgRef.value,
-    paidTaxContainerRef.value,
-    buildSeries('paidTax'),
-    'Betald skatt',
-    (d) => d3.format(',.0f')(d) + ' kr',
-  )
-
-  // Taxation Degree
-  drawChart(
-    taxationDegreeSvgRef.value,
-    taxationDegreeContainerRef.value,
-    buildSeries('taxationDegree'),
-    'Beskattningsgrad',
-    (d) => d3.format('.1%')(d),
-    3, // Fewer ticks for percentage scale
   )
 
   // Withdrawals (Real) - Last Year and First Year
@@ -354,22 +332,47 @@ const drawAllCharts = () => {
     true, // Use linear scale
   )
 
-  // Max Drawdown Period
-  drawChart(
-    maxDrawdownPeriodSvgRef.value,
-    maxDrawdownPeriodContainerRef.value,
-    buildSeries('maxDrawdownPeriod'),
-    'Längsta drawdown-period',
-    (d) => d3.format('.0f')(d) + ' år',
-    3,
-    60,
-    true, // Use linear scale
-  )
+  if (maxDrawdownPeriodSvgRef.value && maxDrawdownPeriodContainerRef.value) {
+    // Max Drawdown Period
+    drawChart(
+      maxDrawdownPeriodSvgRef.value,
+      maxDrawdownPeriodContainerRef.value,
+      buildSeries('maxDrawdownPeriod'),
+      'Längsta drawdown-period',
+      (d) => d3.format('.0f')(d) + ' år',
+      3,
+      60,
+      true, // Use linear scale
+    )
+  }
+
+  if (paidTaxSvgRef.value && paidTaxContainerRef.value) {
+    // Paid Tax
+    drawChart(
+      paidTaxSvgRef.value,
+      paidTaxContainerRef.value,
+      buildSeries('paidTax'),
+      'Betald skatt',
+      (d) => d3.format(',.0f')(d) + ' kr',
+    )
+  }
+  if (taxationDegreeSvgRef.value && taxationDegreeContainerRef.value) {
+    // Taxation Degree
+    drawChart(
+      taxationDegreeSvgRef.value,
+      taxationDegreeContainerRef.value,
+      buildSeries('taxationDegree'),
+      'Beskattningsgrad',
+      (d) => d3.format('.1%')(d),
+      3, // Fewer ticks for percentage scale
+    )
+  }
 }
 
 // Watch for data changes
-watch(results, async () => {
+watch([results, showDetailedStatistics], async () => {
   await nextTick()
+  console.log('drawall2', results.value.length)
   drawAllCharts()
 })
 
@@ -381,6 +384,7 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
 
   // Initial draw
+  console.log('drawall', results.value.length)
   nextTick(() => drawAllCharts())
 
   return () => {
@@ -421,17 +425,25 @@ onMounted(() => {
       </div>
 
       <!-- Max Drawdown Period -->
-      <div ref="maxDrawdownPeriodContainerRef" class="chart-container">
+      <div
+        v-if="showDetailedStatistics"
+        ref="maxDrawdownPeriodContainerRef"
+        class="chart-container"
+      >
         <svg ref="maxDrawdownPeriodSvgRef"></svg>
       </div>
 
       <!-- Paid Tax -->
-      <div ref="paidTaxContainerRef" class="chart-container mb-4">
+      <div v-if="showDetailedStatistics" ref="paidTaxContainerRef" class="chart-container mb-4">
         <svg ref="paidTaxSvgRef"></svg>
       </div>
 
       <!-- Taxation Degree -->
-      <div ref="taxationDegreeContainerRef" class="chart-container mb-4">
+      <div
+        v-if="showDetailedStatistics"
+        ref="taxationDegreeContainerRef"
+        class="chart-container mb-4"
+      >
         <svg ref="taxationDegreeSvgRef"></svg>
       </div>
     </div>
