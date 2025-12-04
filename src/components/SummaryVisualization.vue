@@ -303,10 +303,12 @@ const drawAllCharts = () => {
   const years = yearsLater.value
   const avgWithdrawalSeries = scenarioNames.map((name, i) => {
     const values = summaries.map((s) => (s.scenarios[name]?.accumulatedRealWithdrawal ?? 0) / years)
+    const firstYearValues = summaries.map((s) => s.scenarios[name]?.firstYearWithdrawal ?? 0)
     return {
       label: name,
       values,
       median: d3.median(values) ?? 0,
+      firstYearMedian: d3.median(firstYearValues) ?? 0,
       color: colors[i % colors.length]!,
     }
   })
@@ -318,6 +320,7 @@ const drawAllCharts = () => {
     'Genomsnittligt uttag reellt per år',
     (d) => d3.format(',.0f')(d) + ' kr',
     3, // Fewer ticks for this chart with narrower range
+    90, // Increased row height to fit first year labels
   )
 
   // Max Drawdown
