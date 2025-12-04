@@ -357,21 +357,33 @@ const expectedTotalWithdrawalRate = computed(() => {
           Kör simulering
         </button>
 
-        <button
-          class="btn btn-outline-secondary btn-lg ms-2"
-          @click="showDetailedStatistics = !showDetailedStatistics"
-          :disabled="isRunning"
-        >
-          {{ showDetailedStatistics ? 'Dölj detaljer' : 'Visa detaljer' }}
-        </button>
+        <div class="form-check form-switch ms-3">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            role="switch"
+            id="show-detailed-statistics"
+            v-model="showDetailedStatistics"
+            :disabled="isRunning"
+          />
+          <label class="form-check-label" for="show-detailed-statistics">
+            Detaljerat resultat
+          </label>
+        </div>
 
-        <button
-          class="btn btn-outline-secondary btn-lg ms-2"
-          @click="showStochasticParameters = !showStochasticParameters"
-          :disabled="isRunning"
-        >
-          {{ showStochasticParameters ? 'Dölj parametrar' : 'Visa parametrar' }}
-        </button>
+        <div class="form-check form-switch ms-3">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            role="switch"
+            id="show-stochastic-params"
+            v-model="showStochasticParameters"
+            :disabled="isRunning"
+          />
+          <label class="form-check-label" for="show-stochastic-params">
+            Visa parametervärden
+          </label>
+        </div>
 
         <div
           v-if="isRunning"
