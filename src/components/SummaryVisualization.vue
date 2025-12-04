@@ -362,16 +362,6 @@ onMounted(() => {
         <svg ref="liquidValueSvgRef"></svg>
       </div>
 
-      <!-- Paid Tax -->
-      <div ref="paidTaxContainerRef" class="chart-container mb-4">
-        <svg ref="paidTaxSvgRef"></svg>
-      </div>
-
-      <!-- Taxation Degree -->
-      <div ref="taxationDegreeContainerRef" class="chart-container mb-4">
-        <svg ref="taxationDegreeSvgRef"></svg>
-      </div>
-
       <!-- Withdrawal (Last and First Year) -->
       <div ref="withdrawalContainerRef" class="chart-container mb-4">
         <svg ref="withdrawalSvgRef"></svg>
@@ -390,6 +380,16 @@ onMounted(() => {
       <!-- Max Drawdown Period -->
       <div ref="maxDrawdownPeriodContainerRef" class="chart-container">
         <svg ref="maxDrawdownPeriodSvgRef"></svg>
+      </div>
+
+      <!-- Paid Tax -->
+      <div ref="paidTaxContainerRef" class="chart-container mb-4">
+        <svg ref="paidTaxSvgRef"></svg>
+      </div>
+
+      <!-- Taxation Degree -->
+      <div ref="taxationDegreeContainerRef" class="chart-container mb-4">
+        <svg ref="taxationDegreeSvgRef"></svg>
       </div>
     </div>
   </div>

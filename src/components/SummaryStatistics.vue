@@ -180,124 +180,6 @@ const hasResults = computed(() => statistics.value !== null)
               </tr>
             </template>
 
-            <!-- Paid Tax -->
-            <template
-              v-for="(scenarioName, index) in scenarioNames"
-              :key="`paidTax-${scenarioName}`"
-            >
-              <tr>
-                <th
-                  v-if="index === 0"
-                  :rowspan="scenarioNames.length"
-                  class="align-middle"
-                  scope="row"
-                >
-                  Betald skatt
-                </th>
-                <th scope="row">{{ scenarioName }}</th>
-                <td :class="getCellClass(statistics?.percentile5, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.percentile5, scenarioName, 'paidTax')) }}
-                </td>
-                <td :class="getCellClass(statistics?.percentile25, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.percentile25, scenarioName, 'paidTax')) }}
-                </td>
-                <td :class="getCellClass(statistics?.median, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.median, scenarioName, 'paidTax')) }}
-                </td>
-                <td :class="getCellClass(statistics?.percentile75, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.percentile75, scenarioName, 'paidTax')) }}
-                </td>
-                <td :class="getCellClass(statistics?.percentile95, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.percentile95, scenarioName, 'paidTax')) }}
-                </td>
-                <td :class="getCellClass(statistics?.mean, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.mean, scenarioName, 'paidTax')) }}
-                </td>
-                <td :class="getCellClass(statistics?.stdDev, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.stdDev, scenarioName, 'paidTax')) }}
-                </td>
-              </tr>
-            </template>
-
-            <!-- Taxation Degree -->
-            <template
-              v-for="(scenarioName, index) in scenarioNames"
-              :key="`taxationDegree-${scenarioName}`"
-            >
-              <tr>
-                <th
-                  v-if="index === 0"
-                  :rowspan="scenarioNames.length"
-                  class="align-middle"
-                  scope="row"
-                >
-                  Beskattningsgrad
-                </th>
-                <th scope="row">{{ scenarioName }}</th>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile5, scenarioName, 'taxationDegree', false)
-                  "
-                >
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile5, scenarioName, 'taxationDegree'),
-                    )
-                  }}
-                </td>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile25, scenarioName, 'taxationDegree', false)
-                  "
-                >
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile25, scenarioName, 'taxationDegree'),
-                    )
-                  }}
-                </td>
-                <td
-                  :class="getCellClass(statistics?.median, scenarioName, 'taxationDegree', false)"
-                >
-                  {{
-                    formatPercent(getScenario(statistics?.median, scenarioName, 'taxationDegree'))
-                  }}
-                </td>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile75, scenarioName, 'taxationDegree', false)
-                  "
-                >
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile75, scenarioName, 'taxationDegree'),
-                    )
-                  }}
-                </td>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile95, scenarioName, 'taxationDegree', false)
-                  "
-                >
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile95, scenarioName, 'taxationDegree'),
-                    )
-                  }}
-                </td>
-                <td :class="getCellClass(statistics?.mean, scenarioName, 'taxationDegree', false)">
-                  {{ formatPercent(getScenario(statistics?.mean, scenarioName, 'taxationDegree')) }}
-                </td>
-                <td
-                  :class="getCellClass(statistics?.stdDev, scenarioName, 'taxationDegree', false)"
-                >
-                  {{
-                    formatPercent(getScenario(statistics?.stdDev, scenarioName, 'taxationDegree'))
-                  }}
-                </td>
-              </tr>
-            </template>
-
             <!-- First Year Withdrawal -->
             <template
               v-for="(scenarioName, index) in scenarioNames"
@@ -780,6 +662,124 @@ const hasResults = computed(() => statistics.value !== null)
                     formatNumber(getScenario(statistics?.stdDev, scenarioName, 'maxDrawdownPeriod'))
                   }}
                   år
+                </td>
+              </tr>
+            </template>
+
+            <!-- Paid Tax -->
+            <template
+              v-for="(scenarioName, index) in scenarioNames"
+              :key="`paidTax-${scenarioName}`"
+            >
+              <tr>
+                <th
+                  v-if="index === 0"
+                  :rowspan="scenarioNames.length"
+                  class="align-middle"
+                  scope="row"
+                >
+                  Betald skatt
+                </th>
+                <th scope="row">{{ scenarioName }}</th>
+                <td :class="getCellClass(statistics?.percentile5, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.percentile5, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.percentile25, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.percentile25, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.median, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.median, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.percentile75, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.percentile75, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.percentile95, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.percentile95, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.mean, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.mean, scenarioName, 'paidTax')) }}
+                </td>
+                <td :class="getCellClass(statistics?.stdDev, scenarioName, 'paidTax', false)">
+                  {{ formatNumber(getScenario(statistics?.stdDev, scenarioName, 'paidTax')) }}
+                </td>
+              </tr>
+            </template>
+
+            <!-- Taxation Degree -->
+            <template
+              v-for="(scenarioName, index) in scenarioNames"
+              :key="`taxationDegree-${scenarioName}`"
+            >
+              <tr>
+                <th
+                  v-if="index === 0"
+                  :rowspan="scenarioNames.length"
+                  class="align-middle"
+                  scope="row"
+                >
+                  Beskattningsgrad
+                </th>
+                <th scope="row">{{ scenarioName }}</th>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile5, scenarioName, 'taxationDegree', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile5, scenarioName, 'taxationDegree'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile25, scenarioName, 'taxationDegree', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile25, scenarioName, 'taxationDegree'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="getCellClass(statistics?.median, scenarioName, 'taxationDegree', false)"
+                >
+                  {{
+                    formatPercent(getScenario(statistics?.median, scenarioName, 'taxationDegree'))
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile75, scenarioName, 'taxationDegree', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile75, scenarioName, 'taxationDegree'),
+                    )
+                  }}
+                </td>
+                <td
+                  :class="
+                    getCellClass(statistics?.percentile95, scenarioName, 'taxationDegree', false)
+                  "
+                >
+                  {{
+                    formatPercent(
+                      getScenario(statistics?.percentile95, scenarioName, 'taxationDegree'),
+                    )
+                  }}
+                </td>
+                <td :class="getCellClass(statistics?.mean, scenarioName, 'taxationDegree', false)">
+                  {{ formatPercent(getScenario(statistics?.mean, scenarioName, 'taxationDegree')) }}
+                </td>
+                <td
+                  :class="getCellClass(statistics?.stdDev, scenarioName, 'taxationDegree', false)"
+                >
+                  {{
+                    formatPercent(getScenario(statistics?.stdDev, scenarioName, 'taxationDegree'))
+                  }}
                 </td>
               </tr>
             </template>
