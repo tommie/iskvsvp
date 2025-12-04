@@ -116,6 +116,11 @@ const drawGenericChart = (
   scenarioNames.forEach((scenarioName, i) => {
     const color = colors[i % colors.length]!
 
+    // Calculate offset for this series (distribute evenly across a small range)
+    const offsetRange = 0.3 // Total year range for offsets
+    const offsetPerSeries = offsetRange / Math.max(1, scenarioNames.length - 1)
+    const xOffset = i * offsetPerSeries - offsetRange / 2
+
     // Filter valid data for this scenario
     const validData = timeSeriesData.value.filter((d) => {
       const value = dataExtractor(d, scenarioName)
@@ -129,7 +134,7 @@ const drawGenericChart = (
       .enter()
       .append('circle')
       .attr('class', `dot-${scenarioName}`)
-      .attr('cx', (d) => xScale(d.year))
+      .attr('cx', (d) => xScale(d.year + xOffset))
       .attr('cy', (d) => yScale(dataExtractor(d, scenarioName)))
       .attr('r', 1.5)
       .attr('fill', color)
@@ -147,7 +152,7 @@ const drawGenericChart = (
     // Create line generator
     const line = d3
       .line<{ year: number; median: number }>()
-      .x((d) => xScale(d.year))
+      .x((d) => xScale(d.year + xOffset))
       .y((d) => yScale(d.median))
 
     // Draw median line
