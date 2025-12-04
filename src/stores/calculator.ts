@@ -78,13 +78,23 @@ export const useCalculatorStore = defineStore('calculator', () => {
       // Create worker
       const worker = new SimulationWorker()
 
+      interface SimulationWorkerResult {
+        results: SimulationResult[]
+        statistics: SimulationStatistics
+        timeseries: TimeSeriesPoint[]
+      }
+
       // Wait for results from worker
-      const workerResults = await new Promise<SimulationResult[]>((resolve, reject) => {
+      const workerResults = await new Promise<SimulationWorkerResult>((resolve, reject) => {
         worker.onmessage = (e: MessageEvent) => {
           if (e.data.type === 'progress') {
-            progress.value = e.data.progress
+            progress.value = Math.min(90, e.data.progress)
           } else if (e.data.type === 'complete') {
-            resolve(e.data.results)
+            resolve({
+              results: e.data.results,
+              statistics: calculateStatistics(e.data.results),
+              timeseries: extractTimeSeriesData(e.data.results),
+            })
           }
         }
 
@@ -99,9 +109,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
       // Terminate worker
       worker.terminate()
 
-      results.value = workerResults
-      statistics.value = calculateStatistics(results.value)
-      timeSeriesData.value = extractTimeSeriesData(results.value)
+      results.value = workerResults.results
+      statistics.value = workerResults.statistics
+      timeSeriesData.value = workerResults.timeseries
 
       // Save to history
       if (statistics.value) {

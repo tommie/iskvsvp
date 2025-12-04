@@ -349,10 +349,11 @@ const expectedTotalWithdrawalRate = computed(() => {
         </div>
       </div>
 
-      <div class="mt-4">
+      <div class="mt-4 d-flex align-items-center">
         <button class="btn btn-primary btn-lg" @click="handleRunSimulation" :disabled="isRunning">
           <span v-if="isRunning" class="spinner-border spinner-border-sm me-2"></span>
-          {{ isRunning ? 'Kör simulering...' : 'Kör Monte Carlo-simulering' }}
+          <span v-else class="me-2">⏵</span>
+          Kör simulering
         </button>
 
         <button
@@ -363,18 +364,19 @@ const expectedTotalWithdrawalRate = computed(() => {
           {{ showStochasticParameters ? 'Dölj parametrar' : 'Visa parametrar' }}
         </button>
 
-        <div v-if="isRunning" class="mt-3">
-          <div class="progress">
-            <div
-              class="progress-bar progress-bar-striped progress-bar-animated"
-              role="progressbar"
-              :style="{ width: progress + '%' }"
-              :aria-valuenow="progress"
-              aria-valuemin="0"
-              aria-valuemax="100"
-            >
-              {{ Math.round(progress) }}%
-            </div>
+        <div
+          v-if="isRunning"
+          class="progress flex-grow-1 ms-2"
+          role="progressbar"
+          :aria-valuenow="progress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+        >
+          <div
+            class="progress-bar progress-bar-striped progress-bar-animated"
+            :style="{ width: Math.round(progress) + '%' }"
+          >
+            {{ Math.round(progress) }}%
           </div>
         </div>
       </div>
