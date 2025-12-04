@@ -6,8 +6,9 @@ import type {
   SimulationStatistics,
   TimeSeriesPoint,
 } from '../types'
-import { runMonteCarloSimulation, calculateStatistics, extractTimeSeriesData } from '../simulation'
+import { calculateStatistics, extractTimeSeriesData } from '../simulation'
 import { useHistoryStore } from './history'
+import SimulationWorker from '../simulation.worker?worker'
 
 export const useCalculatorStore = defineStore('calculator', () => {
   // Input parameters
@@ -74,13 +75,31 @@ export const useCalculatorStore = defineStore('calculator', () => {
     progress.value = 0
 
     try {
-      // Use setTimeout to allow UI to update
-      await new Promise((resolve) => setTimeout(resolve, 0))
+      // Create worker
+      const worker = new SimulationWorker()
 
-      results.value = runMonteCarloSimulation(parameters.value, (p) => {
-        progress.value = p
+      // Wait for results from worker
+      const workerResults = await new Promise<SimulationResult[]>((resolve, reject) => {
+        worker.onmessage = (e: MessageEvent) => {
+          if (e.data.type === 'progress') {
+            progress.value = e.data.progress
+          } else if (e.data.type === 'complete') {
+            resolve(e.data.results)
+          }
+        }
+
+        worker.onerror = (error) => {
+          reject(error)
+        }
+
+        // Start simulation
+        worker.postMessage({ params: parameters.value })
       })
 
+      // Terminate worker
+      worker.terminate()
+
+      results.value = workerResults
       statistics.value = calculateStatistics(results.value)
       timeSeriesData.value = extractTimeSeriesData(results.value)
 
