@@ -375,7 +375,6 @@ const drawAllCharts = () => {
 // Watch for data changes
 watch([results, showDetailedStatistics], async () => {
   await nextTick()
-  console.log('drawall2', results.value.length)
   drawAllCharts()
 })
 
@@ -387,7 +386,6 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
 
   // Initial draw
-  console.log('drawall', results.value.length)
   nextTick(() => drawAllCharts())
 
   return () => {
