@@ -26,7 +26,7 @@ const drawGenericChart = (
   const scenarioNames = Object.keys(timeSeriesData.value[0]?.liquidValue ?? {})
   if (scenarioNames.length === 0) return
 
-  const colors = ['#0d6efd', '#dc3545', '#198754', '#ffc107', '#6f42c1', '#fd7e14']
+  const colors = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
 
   // Get container dimensions
   const containerWidth = containerElement.clientWidth

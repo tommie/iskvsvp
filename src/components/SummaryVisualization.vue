@@ -199,7 +199,7 @@ const drawAllCharts = () => {
 
   // Get scenario names from first summary
   const scenarioNames = Object.keys(summaries[0]?.scenarios ?? {})
-  const colors = ['#0d6efd', '#dc3545', '#198754', '#ffc107', '#6f42c1', '#fd7e14']
+  const colors = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
 
   // Helper to build series for a field
   const buildSeries = (field: string) => {
