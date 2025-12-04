@@ -33,6 +33,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const results = ref<SimulationResult[]>([])
   const statistics = ref<SimulationStatistics | null>(null)
   const timeSeriesData = ref<TimeSeriesPoint[]>([])
+  const representativeSimulationId = ref<number | null>(null)
   const showStochasticParameters = ref(false)
   const showDetailedStatistics = ref(false)
 
@@ -67,6 +68,152 @@ export const useCalculatorStore = defineStore('calculator', () => {
       },
     ],
   }))
+
+  /**
+   * Find the simulation that is closest to the median across multiple metrics.
+   */
+  function findRepresentativeSimulation(
+    simResults: SimulationResult[],
+    stats: SimulationStatistics,
+  ): number | null {
+    if (!simResults.length || !stats.median.scenarios) return null
+
+    const scenarioNames = Object.keys(stats.median.scenarios)
+    if (!scenarioNames.length) return null
+
+    // For each metric, collect values across all scenarios
+    const metrics: Array<{ values: number[]; median: number; mean: number; stdDev: number }> = []
+
+    // Metric 1: Final liquidation value (sum across scenarios)
+    const liquidValues = simResults.map((r) =>
+      scenarioNames.reduce((sum, name) => sum + (r.summary.scenarios[name]?.liquidValue ?? 0), 0),
+    )
+    const liquidMedian = scenarioNames.reduce(
+      (sum, name) => sum + (stats.median.scenarios?.[name]?.liquidValue ?? 0),
+      0,
+    )
+    const liquidMean = scenarioNames.reduce(
+      (sum, name) => sum + (stats.mean.scenarios?.[name]?.liquidValue ?? 0),
+      0,
+    )
+    const liquidStdDev = Math.sqrt(
+      scenarioNames.reduce(
+        (sum, name) => sum + Math.pow(stats.stdDev.scenarios?.[name]?.liquidValue ?? 0, 2),
+        0,
+      ),
+    )
+    metrics.push({
+      values: liquidValues,
+      median: liquidMedian,
+      mean: liquidMean,
+      stdDev: liquidStdDev,
+    })
+
+    // Metric 2: Final year withdrawals (sum across scenarios)
+    const withdrawalValues = simResults.map((r) =>
+      scenarioNames.reduce(
+        (sum, name) => sum + (r.summary.scenarios[name]?.realWithdrawal ?? 0),
+        0,
+      ),
+    )
+    const withdrawalMedian = scenarioNames.reduce(
+      (sum, name) => sum + (stats.median.scenarios?.[name]?.realWithdrawal ?? 0),
+      0,
+    )
+    const withdrawalMean = scenarioNames.reduce(
+      (sum, name) => sum + (stats.mean.scenarios?.[name]?.realWithdrawal ?? 0),
+      0,
+    )
+    const withdrawalStdDev = Math.sqrt(
+      scenarioNames.reduce(
+        (sum, name) => sum + Math.pow(stats.stdDev.scenarios?.[name]?.realWithdrawal ?? 0, 2),
+        0,
+      ),
+    )
+    metrics.push({
+      values: withdrawalValues,
+      median: withdrawalMedian,
+      mean: withdrawalMean,
+      stdDev: withdrawalStdDev,
+    })
+
+    // Metric 3: Average annual withdrawals (sum across scenarios)
+    const avgWithdrawalValues = simResults.map((r) =>
+      scenarioNames.reduce(
+        (sum, name) => sum + (r.summary.scenarios[name]?.accumulatedRealWithdrawal ?? 0),
+        0,
+      ),
+    )
+    const avgWithdrawalMedian = scenarioNames.reduce(
+      (sum, name) => sum + (stats.median.scenarios?.[name]?.accumulatedRealWithdrawal ?? 0),
+      0,
+    )
+    const avgWithdrawalMean = scenarioNames.reduce(
+      (sum, name) => sum + (stats.mean.scenarios?.[name]?.accumulatedRealWithdrawal ?? 0),
+      0,
+    )
+    const avgWithdrawalStdDev = Math.sqrt(
+      scenarioNames.reduce(
+        (sum, name) =>
+          sum + Math.pow(stats.stdDev.scenarios?.[name]?.accumulatedRealWithdrawal ?? 0, 2),
+        0,
+      ),
+    )
+    metrics.push({
+      values: avgWithdrawalValues,
+      median: avgWithdrawalMedian,
+      mean: avgWithdrawalMean,
+      stdDev: avgWithdrawalStdDev,
+    })
+
+    // Metric 4: Max drawdown (sum across scenarios)
+    const drawdownValues = simResults.map((r) =>
+      scenarioNames.reduce((sum, name) => sum + (r.summary.scenarios[name]?.maxDrawdown ?? 0), 0),
+    )
+    const drawdownMedian = scenarioNames.reduce(
+      (sum, name) => sum + (stats.median.scenarios?.[name]?.maxDrawdown ?? 0),
+      0,
+    )
+    const drawdownMean = scenarioNames.reduce(
+      (sum, name) => sum + (stats.mean.scenarios?.[name]?.maxDrawdown ?? 0),
+      0,
+    )
+    const drawdownStdDev = Math.sqrt(
+      scenarioNames.reduce(
+        (sum, name) => sum + Math.pow(stats.stdDev.scenarios?.[name]?.maxDrawdown ?? 0, 2),
+        0,
+      ),
+    )
+    metrics.push({
+      values: drawdownValues,
+      median: drawdownMedian,
+      mean: drawdownMean,
+      stdDev: drawdownStdDev,
+    })
+
+    // Calculate distance for each simulation
+    let minDistance = Infinity
+    let representativeId: number | null = null
+
+    simResults.forEach((result, idx) => {
+      let distance = 0
+      metrics.forEach((metric) => {
+        const value = metric.values[idx]!
+        // Normalize using z-score: (value - median) / stdDev
+        const stdDev = metric.stdDev > 0 ? metric.stdDev : 1
+        const normalized = (value - metric.median) / stdDev
+        distance += normalized * normalized
+      })
+      distance = Math.sqrt(distance)
+
+      if (distance < minDistance) {
+        minDistance = distance
+        representativeId = idx
+      }
+    })
+
+    return representativeId
+  }
 
   /**
    * Run the Monte Carlo simulation.
@@ -114,6 +261,14 @@ export const useCalculatorStore = defineStore('calculator', () => {
       statistics.value = workerResults.statistics
       timeSeriesData.value = workerResults.timeseries
 
+      // Find representative simulation
+      if (statistics.value) {
+        representativeSimulationId.value = findRepresentativeSimulation(
+          results.value,
+          statistics.value,
+        )
+      }
+
       // Save to history
       if (statistics.value) {
         const historyStore = useHistoryStore()
@@ -132,6 +287,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     results.value = []
     statistics.value = null
     timeSeriesData.value = []
+    representativeSimulationId.value = null
     progress.value = 0
   }
 
@@ -182,6 +338,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     results,
     statistics,
     timeSeriesData,
+    representativeSimulationId,
     showStochasticParameters,
     showDetailedStatistics,
     parameters,

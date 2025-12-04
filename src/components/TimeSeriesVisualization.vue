@@ -5,7 +5,7 @@ import { ref, watch, onMounted, nextTick } from 'vue'
 import * as d3 from 'd3'
 
 const store = useCalculatorStore()
-const { timeSeriesData } = storeToRefs(store)
+const { timeSeriesData, representativeSimulationId } = storeToRefs(store)
 
 const valueSvgRef = ref<SVGSVGElement | null>(null)
 const valueContainerRef = ref<HTMLDivElement | null>(null)
@@ -211,6 +211,45 @@ const drawGenericChart = (
       .attr('d', line)
   })
 
+  // Draw representative simulation line if available
+  if (representativeSimulationId.value !== null) {
+    const repSimData = timeSeriesData.value.filter(
+      (d) => d.simulationId === representativeSimulationId.value,
+    )
+
+    scenarioNames.forEach((scenarioName, i) => {
+      const color = colors[i % colors.length]!
+      const offsetRange = 0.3
+      const offsetPerSeries = offsetRange / Math.max(1, scenarioNames.length - 1)
+      const xOffset = i * offsetPerSeries - offsetRange / 2
+
+      const repData = repSimData
+        .map((d) => ({
+          year: d.year,
+          value: dataExtractor(d, scenarioName),
+        }))
+        .filter((d) => isFinite(d.value) && d.value > 0)
+        .sort((a, b) => a.year - b.year)
+
+      if (repData.length > 0) {
+        const repLine = d3
+          .line<{ year: number; value: number }>()
+          .x((d) => xScale(d.year + xOffset))
+          .y((d) => yScale(d.value))
+
+        svg
+          .append('path')
+          .datum(repData)
+          .attr('class', `line-${scenarioName}-representative`)
+          .attr('fill', 'none')
+          .attr('stroke', color)
+          .attr('stroke-width', 2)
+          .attr('stroke-dasharray', '5,5')
+          .attr('d', repLine)
+      }
+    })
+  }
+
   // Add legend
   const legend = svg
     .append('g')
@@ -219,7 +258,7 @@ const drawGenericChart = (
 
   scenarioNames.forEach((scenarioName, i) => {
     const color = colors[i % colors.length]!
-    const yOffset = i * 50
+    const yOffset = i * 75
 
     // Simulation histogram
     legend
@@ -254,6 +293,26 @@ const drawGenericChart = (
       .attr('y', yOffset + 30)
       .style('font-size', '11px')
       .text(`${scenarioName} (median)`)
+
+    // Representative simulation line
+    if (representativeSimulationId.value !== null) {
+      legend
+        .append('line')
+        .attr('x1', -8)
+        .attr('x2', 8)
+        .attr('y1', yOffset + 50)
+        .attr('y2', yOffset + 50)
+        .attr('stroke', color)
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '5,5')
+
+      legend
+        .append('text')
+        .attr('x', 15)
+        .attr('y', yOffset + 55)
+        .style('font-size', '11px')
+        .text(`${scenarioName} (repr.)`)
+    }
   })
 }
 
@@ -309,8 +368,8 @@ onMounted(() => {
       <h3>Över tid</h3>
       <p class="mb-0 text-muted">
         Histogram som visar fördelningen av kontovärden och uttag över tid för alla simuleringar
-        (intensitet visar täthet). Heldragna linjer visar medianvärden, streckade linjer visar
-        initiala värden.
+        (intensitet visar täthet). Heldragna linjer visar medianvärden, färgade streckade linjer
+        visar representativ simulering (närmast median), horisontell grå linje visar initialt värde.
       </p>
     </div>
     <div class="card-body">
