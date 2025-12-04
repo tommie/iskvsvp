@@ -17,7 +17,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const developmentStdDev = ref(0.202) // Swedbank Robur Globalfond A
   const balanceWithdrawalRate = ref(0.015)
   const profitWithdrawalRate = ref(0.15)
-  const profitLookbackYears = ref(3)
+  const profitLookbackYears = ref(5)
   const iskTaxRate = ref(0.0296)
   const iskTaxRateStdDev = ref(0.005)
   const inflationRate = ref(0.02)
