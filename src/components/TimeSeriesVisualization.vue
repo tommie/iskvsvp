@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
-import { ref, watch, onMounted, nextTick } from 'vue'
+import { computed } from 'vue'
 import * as d3 from 'd3'
+import D3Chart from './D3Chart.vue'
 
 const store = useCalculatorStore()
 const { timeSeriesData, representativeSimulationId } = storeToRefs(store)
 
-const valueSvgRef = ref<SVGSVGElement | null>(null)
-const valueContainerRef = ref<HTMLDivElement | null>(null)
-const withdrawalSvgRef = ref<SVGSVGElement | null>(null)
-const withdrawalContainerRef = ref<HTMLDivElement | null>(null)
+// Combine data for reactivity tracking
+const chartData = computed(() => ({
+  timeSeriesData: timeSeriesData.value,
+  representativeSimulationId: representativeSimulationId.value,
+}))
 
 const drawGenericChart = (
   svgElement: SVGSVGElement,
@@ -275,81 +277,42 @@ const drawGenericChart = (
   })
 }
 
-const drawCharts = () => {
+// Render functions for D3Chart component
+const renderValueChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
   if (!timeSeriesData.value.length) return
-  if (!valueSvgRef.value || !valueContainerRef.value) return
-  if (!withdrawalSvgRef.value || !withdrawalContainerRef.value) return
-
-  // Draw value chart
   drawGenericChart(
-    valueSvgRef.value,
-    valueContainerRef.value,
+    svg,
+    container,
     (d, scenarioName) => d.liquidValue[scenarioName] ?? 0,
     'Värde över tid (logaritmisk skala)',
     'Värde (SEK)',
   )
+}
 
-  // Draw withdrawal chart
+const renderWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!timeSeriesData.value.length) return
   drawGenericChart(
-    withdrawalSvgRef.value,
-    withdrawalContainerRef.value,
+    svg,
+    container,
     (d, scenarioName) => d.withdrawalsReal[scenarioName] ?? 0,
     'Uttag över tid (reellt, logaritmisk skala)',
     'Uttag reellt (SEK)',
   )
 }
-
-// Watch for data changes
-watch(timeSeriesData, async () => {
-  await nextTick()
-  drawCharts()
-})
-
-// Redraw on window resize
-onMounted(() => {
-  const handleResize = () => {
-    drawCharts()
-  }
-  window.addEventListener('resize', handleResize)
-
-  // Initial draw
-  nextTick(() => drawCharts())
-
-  return () => {
-    window.removeEventListener('resize', handleResize)
-  }
-})
 </script>
 
 <template>
-  <div class="card mb-4" v-if="timeSeriesData.length > 0">
-    <div class="card-header">
-      <h3>Över tid</h3>
-      <p class="mb-0 text-muted">
-        Histogram som visar fördelningen av kontovärden och uttag över tid för alla simuleringar
-        (intensitet visar täthet). Färgade streckade linjer visar ett representativt exempel
-        (närmast median), horisontell grå linje visar initialt värde.
-      </p>
+  <div v-if="timeSeriesData.length > 0">
+    <p class="text-muted mb-3">
+      Histogram som visar fördelningen av kontovärden och uttag över tid för alla simuleringar
+      (intensitet visar täthet). Färgade streckade linjer visar ett representativt exempel (närmast
+      median), horisontell grå linje visar initialt värde.
+    </p>
+    <div class="mb-4">
+      <D3Chart :renderChart="renderValueChart" :data="chartData" />
     </div>
-    <div class="card-body">
-      <div ref="valueContainerRef" class="chart-container mb-4">
-        <svg ref="valueSvgRef"></svg>
-      </div>
-      <div ref="withdrawalContainerRef" class="chart-container">
-        <svg ref="withdrawalSvgRef"></svg>
-      </div>
+    <div>
+      <D3Chart :renderChart="renderWithdrawalChart" :data="chartData" />
     </div>
   </div>
 </template>
-
-<style scoped>
-.chart-container {
-  width: 100%;
-  overflow-x: auto;
-}
-
-svg {
-  display: block;
-  margin: 0 auto;
-}
-</style>

@@ -21,8 +21,6 @@ const {
   simulationCount,
   isRunning,
   progress,
-  showStochasticParameters,
-  showDetailedStatistics,
 } = storeToRefs(store)
 
 const rorPreset = ref('')
@@ -356,34 +354,6 @@ const expectedTotalWithdrawalRate = computed(() => {
           <span v-else class="me-2">⏵</span>
           Kör simulering
         </button>
-
-        <div class="form-check form-switch ms-3">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            role="switch"
-            id="show-detailed-statistics"
-            v-model="showDetailedStatistics"
-            :disabled="isRunning"
-          />
-          <label class="form-check-label" for="show-detailed-statistics">
-            Detaljerat resultat
-          </label>
-        </div>
-
-        <div class="form-check form-switch ms-3">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            role="switch"
-            id="show-stochastic-params"
-            v-model="showStochasticParameters"
-            :disabled="isRunning"
-          />
-          <label class="form-check-label" for="show-stochastic-params">
-            Visa parametervärden
-          </label>
-        </div>
 
         <div
           v-if="isRunning"

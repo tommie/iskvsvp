@@ -1,26 +1,19 @@
 <script setup lang="ts">
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
-import { ref, watch, onMounted, nextTick } from 'vue'
+import { computed } from 'vue'
 import * as d3 from 'd3'
+import D3Chart from './D3Chart.vue'
 
 const store = useCalculatorStore()
 const { results, yearsLater, showDetailedStatistics } = storeToRefs(store)
 
-const liquidValueSvgRef = ref<SVGSVGElement | null>(null)
-const liquidValueContainerRef = ref<HTMLDivElement | null>(null)
-const paidTaxSvgRef = ref<SVGSVGElement | null>(null)
-const paidTaxContainerRef = ref<HTMLDivElement | null>(null)
-const taxationDegreeSvgRef = ref<SVGSVGElement | null>(null)
-const taxationDegreeContainerRef = ref<HTMLDivElement | null>(null)
-const withdrawalSvgRef = ref<SVGSVGElement | null>(null)
-const withdrawalContainerRef = ref<HTMLDivElement | null>(null)
-const accumulatedWithdrawalSvgRef = ref<SVGSVGElement | null>(null)
-const accumulatedWithdrawalContainerRef = ref<HTMLDivElement | null>(null)
-const maxDrawdownSvgRef = ref<SVGSVGElement | null>(null)
-const maxDrawdownContainerRef = ref<HTMLDivElement | null>(null)
-const maxDrawdownPeriodSvgRef = ref<SVGSVGElement | null>(null)
-const maxDrawdownPeriodContainerRef = ref<HTMLDivElement | null>(null)
+// Combine data for reactivity tracking
+const chartData = computed(() => ({
+  results: results.value,
+  yearsLater: yearsLater.value,
+  showDetailedStatistics: showDetailedStatistics.value,
+}))
 
 interface DataSeries {
   label: string
@@ -226,34 +219,30 @@ const drawChart = (
   })
 }
 
-const drawAllCharts = () => {
+// Helper functions for building series data
+const getSummaries = () => results.value.map((r) => r.summary)
+const getScenarioNames = () => Object.keys(getSummaries()[0]?.scenarios ?? {})
+const colors = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
+
+const buildSeries = (field: string) => {
+  const summaries = getSummaries()
+  const scenarioNames = getScenarioNames()
+  return scenarioNames.map((name, i) => {
+    const values = summaries.map((s) => (s.scenarios[name] as any)?.[field] ?? 0)
+    return {
+      label: name,
+      values,
+      median: d3.median(values) ?? 0,
+      color: colors[i % colors.length]!,
+    }
+  })
+}
+
+// Individual render functions for each chart
+const renderLiquidValueChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
   if (!results.value.length) return
-  if (!liquidValueSvgRef.value || !liquidValueContainerRef.value) return
-  if (!withdrawalSvgRef.value || !withdrawalContainerRef.value) return
-  if (!accumulatedWithdrawalSvgRef.value || !accumulatedWithdrawalContainerRef.value) return
-  if (!maxDrawdownSvgRef.value || !maxDrawdownContainerRef.value) return
-
-  // Extract data from results
-  const summaries = results.value.map((r) => r.summary)
-
-  // Get scenario names from first summary
-  const scenarioNames = Object.keys(summaries[0]?.scenarios ?? {})
-  const colors = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
-
-  // Helper to build series for a field
-  const buildSeries = (field: string) => {
-    return scenarioNames.map((name, i) => {
-      const values = summaries.map((s) => (s.scenarios[name] as any)?.[field] ?? 0)
-      return {
-        label: name,
-        values,
-        median: d3.median(values) ?? 0,
-        color: colors[i % colors.length]!,
-      }
-    })
-  }
-
-  // Liquid Value - Last Year and First Year
+  const summaries = getSummaries()
+  const scenarioNames = getScenarioNames()
   const liquidValueSeries = scenarioNames.map((name, i) => {
     const lastYearValues = summaries.map((s) => s.scenarios[name]?.liquidValue ?? 0)
     const firstYearValues = summaries.map((s) => s.scenarios[name]?.firstYearLiquidValue ?? 0)
@@ -265,18 +254,21 @@ const drawAllCharts = () => {
       color: colors[i % colors.length]!,
     }
   })
-
   drawChart(
-    liquidValueSvgRef.value,
-    liquidValueContainerRef.value,
+    svg,
+    container,
     liquidValueSeries,
     'Likvidvärde',
     (d) => d3.format(',.0f')(d) + ' kr',
-    4, // tick count
-    90, // Increased row height to fit first year labels
+    4,
+    90,
   )
+}
 
-  // Withdrawals (Real) - Last Year and First Year
+const renderWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!results.value.length) return
+  const summaries = getSummaries()
+  const scenarioNames = getScenarioNames()
   const withdrawalSeries = scenarioNames.map((name, i) => {
     const realValues = summaries.map((s) => s.scenarios[name]?.realWithdrawal ?? 0)
     const firstYearValues = summaries.map((s) => s.scenarios[name]?.firstYearWithdrawal ?? 0)
@@ -288,18 +280,21 @@ const drawAllCharts = () => {
       color: colors[i % colors.length]!,
     }
   })
-
   drawChart(
-    withdrawalSvgRef.value,
-    withdrawalContainerRef.value,
+    svg,
+    container,
     withdrawalSeries,
     'Uttag reellt (sista året)',
     (d) => d3.format(',.0f')(d) + ' kr',
-    4, // tick count
-    90, // Increased row height to fit first year labels
+    4,
+    90,
   )
+}
 
-  // Average Annual Real Withdrawal
+const renderAccumulatedWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!results.value.length) return
+  const summaries = getSummaries()
+  const scenarioNames = getScenarioNames()
   const years = yearsLater.value
   const avgWithdrawalSeries = scenarioNames.map((name, i) => {
     const values = summaries.map((s) => (s.scenarios[name]?.accumulatedRealWithdrawal ?? 0) / years)
@@ -312,152 +307,109 @@ const drawAllCharts = () => {
       color: colors[i % colors.length]!,
     }
   })
-
   drawChart(
-    accumulatedWithdrawalSvgRef.value,
-    accumulatedWithdrawalContainerRef.value,
+    svg,
+    container,
     avgWithdrawalSeries,
     'Genomsnittligt uttag reellt per år',
     (d) => d3.format(',.0f')(d) + ' kr',
-    3, // Fewer ticks for this chart with narrower range
-    90, // Increased row height to fit first year labels
+    3,
+    90,
   )
+}
 
-  // Max Drawdown
+const renderMaxDrawdownChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!results.value.length) return
   drawChart(
-    maxDrawdownSvgRef.value,
-    maxDrawdownContainerRef.value,
+    svg,
+    container,
     buildSeries('maxDrawdown'),
     'Maximalt drawdown',
     (d) => d3.format('.1%')(d),
     3,
     60,
-    true, // Use linear scale
+    true,
   )
-
-  if (maxDrawdownPeriodSvgRef.value && maxDrawdownPeriodContainerRef.value) {
-    // Max Drawdown Period
-    drawChart(
-      maxDrawdownPeriodSvgRef.value,
-      maxDrawdownPeriodContainerRef.value,
-      buildSeries('maxDrawdownPeriod'),
-      'Längsta drawdown-period',
-      (d) => d3.format('.0f')(d) + ' år',
-      3,
-      60,
-      true, // Use linear scale
-    )
-  }
-
-  if (paidTaxSvgRef.value && paidTaxContainerRef.value) {
-    // Paid Tax
-    drawChart(
-      paidTaxSvgRef.value,
-      paidTaxContainerRef.value,
-      buildSeries('paidTax'),
-      'Betald skatt',
-      (d) => d3.format(',.0f')(d) + ' kr',
-    )
-  }
-  if (taxationDegreeSvgRef.value && taxationDegreeContainerRef.value) {
-    // Taxation Degree
-    drawChart(
-      taxationDegreeSvgRef.value,
-      taxationDegreeContainerRef.value,
-      buildSeries('taxationDegree'),
-      'Beskattningsgrad',
-      (d) => d3.format('.1%')(d),
-      3, // Fewer ticks for percentage scale
-    )
-  }
 }
 
-// Watch for data changes
-watch([results, showDetailedStatistics], async () => {
-  await nextTick()
-  drawAllCharts()
-})
+const renderMaxDrawdownPeriodChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!results.value.length) return
+  drawChart(
+    svg,
+    container,
+    buildSeries('maxDrawdownPeriod'),
+    'Längsta drawdown-period',
+    (d) => d3.format('.0f')(d) + ' år',
+    3,
+    60,
+    true,
+  )
+}
 
-// Redraw on window resize
-onMounted(() => {
-  const handleResize = () => {
-    drawAllCharts()
-  }
-  window.addEventListener('resize', handleResize)
+const renderPaidTaxChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!results.value.length) return
+  drawChart(
+    svg,
+    container,
+    buildSeries('paidTax'),
+    'Betald skatt',
+    (d) => d3.format(',.0f')(d) + ' kr',
+  )
+}
 
-  // Initial draw
-  nextTick(() => drawAllCharts())
-
-  return () => {
-    window.removeEventListener('resize', handleResize)
-  }
-})
+const renderTaxationDegreeChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!results.value.length) return
+  drawChart(
+    svg,
+    container,
+    buildSeries('taxationDegree'),
+    'Beskattningsgrad',
+    (d) => d3.format('.1%')(d),
+    3,
+  )
+}
 </script>
 
 <template>
-  <div class="card mb-4" v-if="results.length > 0">
-    <div class="card-header">
-      <h3>Visualisering av resultat</h3>
-      <p class="mb-0 text-muted">
-        Histogram som visar fördelningen av resultat över alla simuleringar (intensitet visar
-        täthet). Heldragna linjer visar medianvärden för sista året, streckade linjer visar första
-        året.
-      </p>
+  <div v-if="results.length > 0">
+    <p class="text-muted mb-3">
+      Histogram som visar fördelningen av resultat över alla simuleringar (intensitet visar täthet).
+      Heldragna linjer visar medianvärden för sista året, streckade linjer visar första året.
+    </p>
+
+    <!-- Liquid Value -->
+    <div class="mb-4">
+      <D3Chart :renderChart="renderLiquidValueChart" :data="chartData" />
     </div>
-    <div class="card-body">
-      <!-- Liquid Value -->
-      <div ref="liquidValueContainerRef" class="chart-container mb-4">
-        <svg ref="liquidValueSvgRef"></svg>
-      </div>
 
-      <!-- Withdrawal (Last and First Year) -->
-      <div ref="withdrawalContainerRef" class="chart-container mb-4">
-        <svg ref="withdrawalSvgRef"></svg>
-      </div>
+    <!-- Withdrawal (Last and First Year) -->
+    <div class="mb-4">
+      <D3Chart :renderChart="renderWithdrawalChart" :data="chartData" />
+    </div>
 
-      <!-- Accumulated Withdrawal -->
-      <div ref="accumulatedWithdrawalContainerRef" class="chart-container mb-4">
-        <svg ref="accumulatedWithdrawalSvgRef"></svg>
-      </div>
+    <!-- Accumulated Withdrawal -->
+    <div class="mb-4">
+      <D3Chart :renderChart="renderAccumulatedWithdrawalChart" :data="chartData" />
+    </div>
 
-      <!-- Max Drawdown -->
-      <div ref="maxDrawdownContainerRef" class="chart-container mb-4">
-        <svg ref="maxDrawdownSvgRef"></svg>
-      </div>
+    <!-- Max Drawdown -->
+    <div class="mb-4">
+      <D3Chart :renderChart="renderMaxDrawdownChart" :data="chartData" />
+    </div>
 
-      <!-- Max Drawdown Period -->
-      <div
-        v-if="showDetailedStatistics"
-        ref="maxDrawdownPeriodContainerRef"
-        class="chart-container"
-      >
-        <svg ref="maxDrawdownPeriodSvgRef"></svg>
-      </div>
+    <!-- Max Drawdown Period -->
+    <div v-if="showDetailedStatistics" class="mb-4">
+      <D3Chart :renderChart="renderMaxDrawdownPeriodChart" :data="chartData" />
+    </div>
 
-      <!-- Paid Tax -->
-      <div v-if="showDetailedStatistics" ref="paidTaxContainerRef" class="chart-container mb-4">
-        <svg ref="paidTaxSvgRef"></svg>
-      </div>
+    <!-- Paid Tax -->
+    <div v-if="showDetailedStatistics" class="mb-4">
+      <D3Chart :renderChart="renderPaidTaxChart" :data="chartData" />
+    </div>
 
-      <!-- Taxation Degree -->
-      <div
-        v-if="showDetailedStatistics"
-        ref="taxationDegreeContainerRef"
-        class="chart-container mb-4"
-      >
-        <svg ref="taxationDegreeSvgRef"></svg>
-      </div>
+    <!-- Taxation Degree -->
+    <div v-if="showDetailedStatistics" class="mb-4">
+      <D3Chart :renderChart="renderTaxationDegreeChart" :data="chartData" />
     </div>
   </div>
 </template>
-
-<style scoped>
-.chart-container {
-  width: 100%;
-  overflow-x: auto;
-}
-
-svg {
-  display: block;
-}
-</style>

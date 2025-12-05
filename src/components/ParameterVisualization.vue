@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
-import { ref, watch, onMounted, nextTick } from 'vue'
+import { computed } from 'vue'
 import * as d3 from 'd3'
+import D3Chart from './D3Chart.vue'
 
 const store = useCalculatorStore()
-const { results, showStochasticParameters } = storeToRefs(store)
+const { results } = storeToRefs(store)
 
-const rorSvgRef = ref<SVGSVGElement | null>(null)
-const rorContainerRef = ref<HTMLDivElement | null>(null)
-const iskTaxSvgRef = ref<SVGSVGElement | null>(null)
-const iskTaxContainerRef = ref<HTMLDivElement | null>(null)
-const inflationSvgRef = ref<SVGSVGElement | null>(null)
-const inflationContainerRef = ref<HTMLDivElement | null>(null)
+// Combine data for reactivity tracking
+const chartData = computed(() => ({
+  results: results.value,
+}))
 
 interface ParameterPoint {
   simulationId: number
@@ -129,13 +128,8 @@ const drawChart = (
     .attr('d', line)
 }
 
-const drawAllCharts = () => {
-  if (!results.value.length) return
-  if (!rorSvgRef.value || !rorContainerRef.value) return
-  if (!iskTaxSvgRef.value || !iskTaxContainerRef.value) return
-  if (!inflationSvgRef.value || !inflationContainerRef.value) return
-
-  // Extract parameter data
+// Helper to extract parameter data
+const getParameterData = (): ParameterPoint[] => {
   const parameterData: ParameterPoint[] = []
   results.value.forEach((result, simulationId) => {
     result.yearlyData.forEach((yearData) => {
@@ -152,11 +146,16 @@ const drawAllCharts = () => {
       })
     })
   })
+  return parameterData
+}
 
-  // Draw ROR chart
+// Individual render functions for each chart
+const renderRorChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!results.value.length) return
+  const parameterData = getParameterData()
   drawChart(
-    rorSvgRef.value,
-    rorContainerRef.value,
+    svg,
+    container,
     parameterData,
     (d) => d.development,
     (d) => d.medianValue,
@@ -164,11 +163,14 @@ const drawAllCharts = () => {
     '#0d6efd',
     'Avkastning',
   )
+}
 
-  // Draw ISK tax rate chart
+const renderIskTaxChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!results.value.length) return
+  const parameterData = getParameterData()
   drawChart(
-    iskTaxSvgRef.value,
-    iskTaxContainerRef.value,
+    svg,
+    container,
     parameterData,
     (d) => d.iskTaxRate,
     (d) => d.medianValue,
@@ -176,11 +178,14 @@ const drawAllCharts = () => {
     '#198754',
     'ISK-skatt',
   )
+}
 
-  // Draw inflation chart
+const renderInflationChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!results.value.length) return
+  const parameterData = getParameterData()
   drawChart(
-    inflationSvgRef.value,
-    inflationContainerRef.value,
+    svg,
+    container,
     parameterData,
     (d) => d.inflationRate,
     (d) => d.medianValue,
@@ -189,95 +194,21 @@ const drawAllCharts = () => {
     'Inflation',
   )
 }
-
-// Watch for data changes
-watch(results, async () => {
-  await nextTick()
-  drawAllCharts()
-})
-
-// Watch for visibility changes
-watch(showStochasticParameters, async (newValue) => {
-  if (newValue) {
-    // Wait for DOM to update with visible elements
-    await nextTick()
-    drawAllCharts()
-  }
-})
-
-// Redraw on window resize
-onMounted(() => {
-  const handleResize = () => {
-    drawAllCharts()
-  }
-  window.addEventListener('resize', handleResize)
-
-  // Initial draw
-  nextTick(() => drawAllCharts())
-
-  return () => {
-    window.removeEventListener('resize', handleResize)
-  }
-})
 </script>
 
 <template>
-  <div v-if="results.length > 0 && showStochasticParameters">
+  <div v-if="results.length > 0">
+    <p class="text-muted mb-3">
+      Punktdiagram som visar stokastiska parametervärden över tid för alla simuleringar.
+    </p>
+
     <!-- ROR Chart -->
-    <div class="card mb-4">
-      <div class="card-header">
-        <h3>Avkastning över tid</h3>
-        <p class="mb-0 text-muted">
-          Punktdiagram som visar antagen årlig avkastning över tid för alla simuleringar
-        </p>
-      </div>
-      <div class="card-body">
-        <div ref="rorContainerRef" class="chart-container">
-          <svg ref="rorSvgRef"></svg>
-        </div>
-      </div>
-    </div>
+    <D3Chart :renderChart="renderRorChart" :data="chartData" />
 
     <!-- Inflation Chart -->
-    <div class="card mb-4">
-      <div class="card-header">
-        <h3>Inflation över tid</h3>
-        <p class="mb-0 text-muted">
-          Punktdiagram som visar antagen inflation över tid för alla simuleringar
-        </p>
-      </div>
-      <div class="card-body">
-        <div ref="inflationContainerRef" class="chart-container">
-          <svg ref="inflationSvgRef"></svg>
-        </div>
-      </div>
-    </div>
+    <D3Chart :renderChart="renderInflationChart" :data="chartData" />
 
     <!-- ISK Tax Rate Chart -->
-    <div class="card mb-4">
-      <div class="card-header">
-        <h3>ISK-skattesats över tid</h3>
-        <p class="mb-0 text-muted">
-          Punktdiagram som visar antagen ISK-skattesats över tid för alla simuleringar
-        </p>
-      </div>
-      <div class="card-body">
-        <div ref="iskTaxContainerRef" class="chart-container">
-          <svg ref="iskTaxSvgRef"></svg>
-        </div>
-      </div>
-    </div>
+    <D3Chart :renderChart="renderIskTaxChart" :data="chartData" />
   </div>
 </template>
-
-<style scoped>
-.chart-container {
-  width: 100%;
-  overflow-x: auto;
-}
-
-svg {
-  display: block;
-  margin: 0 auto;
-}
-</style>
