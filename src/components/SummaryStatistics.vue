@@ -100,7 +100,8 @@ const hasResults = computed(() => statistics.value !== null)
 <template>
   <div v-if="hasResults">
     <p class="text-muted mb-3">
-      Statistik över alla simuleringar. Bästa värden i varje kolumn är markerade.
+      Statistik över alla simuleringar. Celler med bästa värdet för varje mått och percentil är
+      markerade med färg.
     </p>
     <div class="table-responsive">
       <table class="table table-bordered table-hover">
@@ -854,10 +855,6 @@ const hasResults = computed(() => statistics.value !== null)
         </tbody>
       </table>
     </div>
-    <p class="small text-muted mt-3">
-      <strong>Observera:</strong> Celler med bästa värdet för varje mått och percentil är markerade
-      med färg.
-    </p>
   </div>
 </template>
 

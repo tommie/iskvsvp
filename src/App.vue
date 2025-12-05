@@ -132,11 +132,11 @@ watch(statistics, (newStats) => {
 
     <footer class="mt-5 pt-4 border-top text-muted">
       <p class="small">
-        <strong>Observera:</strong> Denna simulator använder Monte Carlo-metoder för att modellera
-        osäkerhet i avkastning och inflation. Årlig avkastning och inflation modelleras som
-        normalfördelningar. ISK-skattesatsen har ett minimum på 1,25% och ändras stokastiskt varje
-        år. Resultaten visar statistik över
-        {{ simulationCount.toLocaleString('sv-SE') }} simuleringar.
+        Denna sida använder Monte Carlo-metoder för att modellera osäkerhet i avkastning och
+        inflation. Årlig avkastning, inflation och förändring i ISK-skattesats modelleras som
+        normalfördelningar. Resultaten visar statistik över
+        {{ simulationCount.toLocaleString('sv-SE') }} simuleringar. Den kan inte spå i framtiden,
+        men kan användas för att jämföra olika investeringsmodeller.
       </p>
     </footer>
   </div>
