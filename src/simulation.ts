@@ -5,7 +5,6 @@ import type {
   Summary,
   YearlyData,
   TimeSeriesPoint,
-  ScenarioConfig,
   ScenarioYearlyData,
   ScenarioSummary,
 } from './types'

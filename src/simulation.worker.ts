@@ -1,4 +1,4 @@
-import type { InputParameters, SimulationResult } from './types'
+import type { InputParameters } from './types'
 import { runMonteCarloSimulation } from './simulation'
 
 self.onmessage = (e: MessageEvent<{ params: InputParameters }>) => {

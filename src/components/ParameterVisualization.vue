@@ -29,7 +29,6 @@ const drawChart = (
   medianAccessor: (d: { year: number; medianValue: number }) => number,
   title: string,
   color: string,
-  legendLabel: string,
 ) => {
   // Clear previous chart
   d3.select(svgElement).selectAll('*').remove()
@@ -161,7 +160,6 @@ const renderRorChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
     (d) => d.medianValue,
     'Avkastning över tid',
     '#0d6efd',
-    'Avkastning',
   )
 }
 
@@ -176,7 +174,6 @@ const renderIskTaxChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
     (d) => d.medianValue,
     'ISK-skattesats över tid',
     '#198754',
-    'ISK-skatt',
   )
 }
 
@@ -191,7 +188,6 @@ const renderInflationChart = (svg: SVGSVGElement, container: HTMLDivElement) => 
     (d) => d.medianValue,
     'Inflation över tid',
     '#dc3545',
-    'Inflation',
   )
 }
 </script>

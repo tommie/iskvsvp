@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 import * as d3 from 'd3'
 import D3Chart from './D3Chart.vue'
+import type { TimeSeriesPoint } from '../types'
 
 const store = useCalculatorStore()
 const { timeSeriesData, representativeSimulationId } = storeToRefs(store)
@@ -17,7 +18,7 @@ const chartData = computed(() => ({
 const drawGenericChart = (
   svgElement: SVGSVGElement,
   containerElement: HTMLDivElement,
-  dataExtractor: (d: any, scenarioName: string) => number,
+  dataExtractor: (d: TimeSeriesPoint, scenarioName: string) => number,
   title: string,
   yAxisLabel: string,
 ) => {

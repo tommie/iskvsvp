@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { useCalculatorStore } from '../stores/calculator'
+import * as d3 from 'd3'
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
-import * as d3 from 'd3'
+
+import { useCalculatorStore } from '../stores/calculator'
+import type { ScenarioSummary } from '../types'
 import D3Chart from './D3Chart.vue'
 
 const store = useCalculatorStore()
-const { results, yearsLater, showDetailedStatistics, statistics } = storeToRefs(store)
+const { results, yearsLater, showDetailedStatistics } = storeToRefs(store)
 
 // Combine data for reactivity tracking
 const chartData = computed(() => ({
@@ -14,24 +16,6 @@ const chartData = computed(() => ({
   yearsLater: yearsLater.value,
   showDetailedStatistics: showDetailedStatistics.value,
 }))
-
-// Get scenario names dynamically
-const scenarioNames = computed(() => {
-  if (!statistics.value?.median?.scenarios) return []
-  return Object.keys(statistics.value.median.scenarios)
-})
-
-// Helper to get scenario value from a Summary
-const getScenario = (summary: any, scenarioName: string, key: string): number => {
-  if (!summary?.scenarios?.[scenarioName]) return 0
-  return summary.scenarios[scenarioName][key] ?? 0
-}
-
-// Format number
-const formatNumber = (value: number): string => {
-  if (!isFinite(value)) return '0'
-  return Math.round(value).toLocaleString('sv-SE')
-}
 
 interface DataSeries {
   label: string
@@ -78,7 +62,7 @@ const drawChart = (
   const xExtent = d3.extent(allValues) as [number, number]
 
   // Create scale (linear or log)
-  let xScale: any
+  let xScale: d3.ScaleLinear<number, number> | d3.ScaleLogarithmic<number, number>
   if (useLinearScale) {
     const xMin = Math.max(xExtent[0], 0)
     const xMax = xExtent[1]
@@ -242,11 +226,11 @@ const getSummaries = () => results.value.map((r) => r.summary)
 const getScenarioNames = () => Object.keys(getSummaries()[0]?.scenarios ?? {})
 const colors = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
 
-const buildSeries = (field: string) => {
+const buildSeries = (field: keyof ScenarioSummary) => {
   const summaries = getSummaries()
   const scenarioNames = getScenarioNames()
   return scenarioNames.map((name, i) => {
-    const values = summaries.map((s) => (s.scenarios[name] as any)?.[field] ?? 0)
+    const values = summaries.map((s) => s.scenarios[name]?.[field] ?? 0)
     return {
       label: name,
       values,

@@ -2,7 +2,7 @@
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
-import type { Summary } from '../types'
+import type { ScenarioSummary, Summary } from '../types'
 
 const store = useCalculatorStore()
 const { statistics, showDetailedStatistics, yearsLater } = storeToRefs(store)
@@ -14,9 +14,13 @@ const scenarioNames = computed(() => {
 })
 
 // Helper to get scenario value from a Summary
-const getScenario = (summary: Summary | undefined, scenarioName: string, key: string): number => {
+const getScenario = (
+  summary: Summary | undefined,
+  scenarioName: string,
+  key: keyof ScenarioSummary,
+): number => {
   if (!summary?.scenarios?.[scenarioName]) return 0
-  return (summary.scenarios[scenarioName] as any)[key] ?? 0
+  return summary.scenarios[scenarioName]![key] ?? 0
 }
 
 const formatNumber = (value: number | undefined): string => {
@@ -58,14 +62,14 @@ const formatPercent = (value: number | undefined): string => {
 // Returns scenario name or null if tie/no clear winner
 const getBestScenario = (
   summary: Summary | undefined,
-  field: string,
+  field: keyof ScenarioSummary,
   higherIsBetter: boolean,
 ): string | null => {
   if (!summary?.scenarios) return null
 
   const values = Object.entries(summary.scenarios).map(([name, data]) => ({
     name,
-    value: (data as any)[field] ?? 0,
+    value: data[field] ?? 0,
   }))
 
   if (values.length === 0) return null
@@ -84,7 +88,7 @@ const getBestScenario = (
 const getCellClass = (
   summary: Summary | undefined,
   scenarioName: string,
-  field: string,
+  field: keyof ScenarioSummary,
   higherIsBetter: boolean,
 ): string => {
   const best = getBestScenario(summary, field, higherIsBetter)
