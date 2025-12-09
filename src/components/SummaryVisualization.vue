@@ -260,7 +260,7 @@ const renderTotalValueChart = (svg: SVGSVGElement, container: HTMLDivElement) =>
     totalValueSeries,
     'Totalt värde',
     (d) => d3.format(',.0f')(d) + ' kr',
-    4,
+    3,
     90,
   )
 }
