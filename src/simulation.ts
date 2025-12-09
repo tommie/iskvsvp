@@ -26,6 +26,7 @@ interface ScenarioState {
   amount: number
   cumulativePaidTax: number
   accumulatedRealWithdrawal: number
+  accumulatedNominalWithdrawal: number
   currentTaxRate: number
   yearlyAmounts: number[]
   peakAmount: number
@@ -47,6 +48,7 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
       amount: params.initialCapital,
       cumulativePaidTax: 0,
       accumulatedRealWithdrawal: 0,
+      accumulatedNominalWithdrawal: 0,
       currentTaxRate: scenario.iskTaxRate ?? 0, // ISK basis rate (or 0 for VP)
       yearlyAmounts: [params.initialCapital],
       peakAmount: params.initialCapital,
@@ -135,8 +137,9 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
       // Real withdrawal adjusted for inflation
       const withdrawnReal = withdrawn / cumulativeInflation
 
-      // Accumulate real withdrawals
+      // Accumulate withdrawals
       state.accumulatedRealWithdrawal += withdrawnReal
+      state.accumulatedNominalWithdrawal += withdrawn
 
       // Store first year data
       //
@@ -234,6 +237,8 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
       realWithdrawal: lastYearData.withdrawnReal,
       firstYearWithdrawal,
       accumulatedRealWithdrawal: state.accumulatedRealWithdrawal,
+      accumulatedNominalWithdrawal: state.accumulatedNominalWithdrawal,
+      totalValue: lastYearData.liquidValue + state.accumulatedNominalWithdrawal,
       averageTaxRate,
       maxDrawdown: state.maxDrawdown,
       maxDrawdownPeriod: finalMaxDrawdownPeriod,
@@ -324,6 +329,8 @@ export function calculateStatistics(results: SimulationResult[]): SimulationStat
       'realWithdrawal',
       'firstYearWithdrawal',
       'accumulatedRealWithdrawal',
+      'accumulatedNominalWithdrawal',
+      'totalValue',
       'averageTaxRate',
       'maxDrawdown',
       'maxDrawdownPeriod',

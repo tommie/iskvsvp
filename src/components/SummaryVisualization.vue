@@ -6,7 +6,7 @@ import * as d3 from 'd3'
 import D3Chart from './D3Chart.vue'
 
 const store = useCalculatorStore()
-const { results, yearsLater, showDetailedStatistics } = storeToRefs(store)
+const { results, yearsLater, showDetailedStatistics, statistics } = storeToRefs(store)
 
 // Combine data for reactivity tracking
 const chartData = computed(() => ({
@@ -14,6 +14,24 @@ const chartData = computed(() => ({
   yearsLater: yearsLater.value,
   showDetailedStatistics: showDetailedStatistics.value,
 }))
+
+// Get scenario names dynamically
+const scenarioNames = computed(() => {
+  if (!statistics.value?.median?.scenarios) return []
+  return Object.keys(statistics.value.median.scenarios)
+})
+
+// Helper to get scenario value from a Summary
+const getScenario = (summary: any, scenarioName: string, key: string): number => {
+  if (!summary?.scenarios?.[scenarioName]) return 0
+  return summary.scenarios[scenarioName][key] ?? 0
+}
+
+// Format number
+const formatNumber = (value: number): string => {
+  if (!isFinite(value)) return '0'
+  return Math.round(value).toLocaleString('sv-SE')
+}
 
 interface DataSeries {
   label: string
@@ -239,6 +257,30 @@ const buildSeries = (field: string) => {
 }
 
 // Individual render functions for each chart
+const renderTotalValueChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+  if (!results.value.length) return
+  const summaries = getSummaries()
+  const scenarioNames = getScenarioNames()
+  const totalValueSeries = scenarioNames.map((name, i) => {
+    const values = summaries.map((s) => s.scenarios[name]?.totalValue ?? 0)
+    return {
+      label: name,
+      values,
+      median: d3.median(values) ?? 0,
+      color: colors[i % colors.length]!,
+    }
+  })
+  drawChart(
+    svg,
+    container,
+    totalValueSeries,
+    'Totalt värde',
+    (d) => d3.format(',.0f')(d) + ' kr',
+    4,
+    90,
+  )
+}
+
 const renderLiquidValueChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
   if (!results.value.length) return
   const summaries = getSummaries()
@@ -376,6 +418,11 @@ const renderTaxationDegreeChart = (svg: SVGSVGElement, container: HTMLDivElement
       Histogram som visar fördelningen av resultat över alla simuleringar (intensitet visar täthet).
       Heldragna linjer visar medianvärden för sista året, streckade linjer visar första året.
     </p>
+
+    <!-- Total Value -->
+    <div class="mb-4">
+      <D3Chart :renderChart="renderTotalValueChart" :data="chartData" />
+    </div>
 
     <!-- Liquid Value -->
     <div class="mb-4">

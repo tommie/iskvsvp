@@ -284,7 +284,7 @@ const renderValueChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
     svg,
     container,
     (d, scenarioName) => d.liquidValue[scenarioName] ?? 0,
-    'Värde över tid (logaritmisk skala)',
+    'Värde (logaritmisk skala)',
     'Värde (SEK)',
   )
 }
@@ -295,7 +295,7 @@ const renderWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) =>
     svg,
     container,
     (d, scenarioName) => d.withdrawalsReal[scenarioName] ?? 0,
-    'Uttag över tid (reellt, logaritmisk skala)',
+    'Uttag per år (reellt, logaritmisk skala)',
     'Uttag reellt (SEK)',
   )
 }

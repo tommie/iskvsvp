@@ -122,6 +122,57 @@ const hasResults = computed(() => statistics.value !== null)
           </tr>
         </thead>
         <tbody>
+          <!-- Total Value (Liquidation + Withdrawals) -->
+          <template
+            v-for="(scenarioName, index) in scenarioNames"
+            :key="`totalValue-${scenarioName}`"
+          >
+            <tr>
+              <th
+                v-if="index === 0"
+                :rowspan="scenarioNames.length"
+                class="align-middle"
+                scope="row"
+              >
+                Totalt värde
+              </th>
+              <th scope="row">{{ scenarioName }}</th>
+              <td :class="getCellClass(statistics?.percentile5, scenarioName, 'totalValue', true)">
+                {{ formatNumber(getScenario(statistics?.percentile5, scenarioName, 'totalValue')) }}
+              </td>
+              <td :class="getCellClass(statistics?.percentile25, scenarioName, 'totalValue', true)">
+                {{
+                  formatNumber(getScenario(statistics?.percentile25, scenarioName, 'totalValue'))
+                }}
+              </td>
+              <td :class="getCellClass(statistics?.median, scenarioName, 'totalValue', true)">
+                {{ formatNumber(getScenario(statistics?.median, scenarioName, 'totalValue')) }}
+              </td>
+              <td :class="getCellClass(statistics?.percentile75, scenarioName, 'totalValue', true)">
+                {{
+                  formatNumber(getScenario(statistics?.percentile75, scenarioName, 'totalValue'))
+                }}
+              </td>
+              <td :class="getCellClass(statistics?.percentile95, scenarioName, 'totalValue', true)">
+                {{
+                  formatNumber(getScenario(statistics?.percentile95, scenarioName, 'totalValue'))
+                }}
+              </td>
+              <td
+                v-if="showDetailedStatistics"
+                :class="getCellClass(statistics?.mean, scenarioName, 'totalValue', true)"
+              >
+                {{ formatNumber(getScenario(statistics?.mean, scenarioName, 'totalValue')) }}
+              </td>
+              <td
+                v-if="showDetailedStatistics"
+                :class="getCellClass(statistics?.stdDev, scenarioName, 'totalValue', true)"
+              >
+                {{ formatNumber(getScenario(statistics?.stdDev, scenarioName, 'totalValue')) }}
+              </td>
+            </tr>
+          </template>
+
           <!-- Liquid Value -->
           <template
             v-for="(scenarioName, index) in scenarioNames"
