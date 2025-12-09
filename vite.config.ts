@@ -10,6 +10,7 @@ export default defineConfig({
     vue(),
     vueDevTools(),
   ],
+  base: process.env.NODE_ENV === 'production' ? '/iskvsvp/' : undefined,
   server: {
     port: 5392,
   },
