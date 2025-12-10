@@ -1,3 +1,4 @@
+import { alea } from 'seedrandom'
 import type {
   InputParameters,
   SimulationResult,
@@ -14,9 +15,9 @@ const ISK_TAX_RATE_MIN = 0.0125
 /**
  * Generate a random number from a normal distribution using Box-Muller transform.
  */
-function randomNormal(mean: number, stdDev: number): number {
-  const u1 = Math.random()
-  const u2 = Math.random()
+function randomNormal(mean: number, stdDev: number, rng: () => number): number {
+  const u1 = rng()
+  const u2 = rng()
   const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2)
   return mean + z0 * stdDev
 }
@@ -38,6 +39,9 @@ interface ScenarioState {
  * Run a single simulation with stochastic parameters for multiple scenarios.
  */
 export function runSingleSimulation(params: InputParameters): SimulationResult {
+  // Create seeded random number generator
+  const rng = alea(params.seed)
+
   const yearlyData: YearlyData[] = []
 
   // Initialize state for each scenario
@@ -64,8 +68,8 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
     const year = params.startYear + i
 
     // Generate shared stochastics for this year (same across all scenarios for fair comparison)
-    const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev)
-    const development = randomNormal(params.development, params.developmentStdDev)
+    const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev, rng)
+    const development = randomNormal(params.development, params.developmentStdDev, rng)
     cumulativeInflation *= 1 + inflationRate
 
     const scenarioYearlyData: Record<string, ScenarioYearlyData> = {}
@@ -76,7 +80,7 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
 
       // Update ISK basis rate if ISK (random walk)
       if (scenario.isISK && scenario.iskTaxRateStdDev) {
-        const taxRateChange = randomNormal(0, scenario.iskTaxRateStdDev)
+        const taxRateChange = randomNormal(0, scenario.iskTaxRateStdDev, rng)
         state.currentTaxRate = Math.max(
           ISK_TAX_RATE_MIN,
           Math.min(1.0, state.currentTaxRate + taxRateChange),
@@ -263,7 +267,8 @@ export function runMonteCarloSimulation(
   const results: SimulationResult[] = []
 
   for (let i = 0; i < params.simulationCount; i++) {
-    results.push(runSingleSimulation(params))
+    const params2 = { ...params, seed: params.seed + i.toString() }
+    results.push(runSingleSimulation(params2))
 
     if (onProgress && i % 100 === 0) {
       onProgress((i / params.simulationCount) * 100)

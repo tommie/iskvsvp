@@ -19,6 +19,7 @@ export interface InputParameters {
   inflationRate: number
   inflationStdDev: number
   scenarios: ScenarioConfig[]
+  seed: string // Random seed for reproducibility
 }
 
 export interface ScenarioYearlyData {

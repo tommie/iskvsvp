@@ -4,7 +4,9 @@ import type { LocationQuery } from 'vue-router'
 /**
  * Encode parameters to URL query string
  */
-export function encodeParamsToUrl(params: InputParameters): Record<string, string> {
+export function encodeParamsToUrl(
+  params: Omit<InputParameters, 'seed'> & Partial<Pick<InputParameters, 'seed'>>,
+): Record<string, string> {
   const query: Record<string, string> = {}
 
   // Map each parameter to its short name
@@ -33,6 +35,11 @@ export function encodeParamsToUrl(params: InputParameters): Record<string, strin
   }
   if (iskScenario?.iskTaxRateStdDev !== undefined) {
     query.its = iskScenario.iskTaxRateStdDev.toString()
+  }
+
+  // Include seed if present
+  if (params.seed) {
+    query.s = params.seed
   }
 
   return query
@@ -77,6 +84,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   const ir = parseNum('ir')
   const is = parseNum('is')
   const sc = parseNum('sc')
+  const seed = getString('s')
 
   if (ic !== undefined) params.initialCapital = ic
   if (sy !== undefined) params.startYear = sy
@@ -86,6 +94,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   if (ir !== undefined) params.inflationRate = ir
   if (is !== undefined) params.inflationStdDev = is
   if (sc !== undefined) params.simulationCount = sc
+  if (seed) params.seed = seed
 
   // Parse scenario parameters
   const bwr = parseNum('bwr')

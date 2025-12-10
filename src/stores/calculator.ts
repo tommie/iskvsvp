@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import type {
   InputParameters,
   SimulationResult,
@@ -28,6 +28,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const startYear = ref(45)
   const yearsLater = ref(36)
   const simulationCount = ref(1000)
+  const seed = ref<string | undefined>(undefined)
 
   // Simulation state
   const isRunning = ref(false)
@@ -39,7 +40,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const showDetailedStatistics = ref(false)
 
   // Computed parameters object
-  const parameters = computed<InputParameters>(() => ({
+  const parameters = computed<Omit<InputParameters, 'seed'>>(() => ({
     initialCapital: initialCapital.value,
     startYear: startYear.value,
     yearsLater: yearsLater.value,
@@ -220,12 +221,16 @@ export const useCalculatorStore = defineStore('calculator', () => {
    * Run the Monte Carlo simulation.
    */
   async function runSimulation() {
+    const worker = new SimulationWorker()
+
     isRunning.value = true
     progress.value = 0
 
     try {
-      // Create worker
-      const worker = new SimulationWorker()
+      const params = {
+        ...parameters.value,
+        seed: seed.value ?? Math.random().toString(36).substring(2, 15),
+      }
 
       interface SimulationWorkerResult {
         results: SimulationResult[]
@@ -273,12 +278,14 @@ export const useCalculatorStore = defineStore('calculator', () => {
       // Save to history
       if (statistics.value) {
         const historyStore = useHistoryStore()
-        historyStore.addRecord(parameters.value, statistics.value)
+        historyStore.addRecord(params, statistics.value)
       }
     } finally {
       worker.terminate()
       isRunning.value = false
       progress.value = 100
+      // Remove seed from URL after simulation completes
+      seed.value = undefined
     }
   }
 
@@ -305,6 +312,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     developmentStdDev.value = params.developmentStdDev
     inflationRate.value = params.inflationRate
     inflationStdDev.value = params.inflationStdDev
+    seed.value = params.seed
 
     const firstScenario = params.scenarios[0]!
     balanceWithdrawalRate.value = firstScenario.balanceWithdrawalRate
@@ -323,55 +331,64 @@ export const useCalculatorStore = defineStore('calculator', () => {
    */
   function initUrlSync() {
     const router = useRouter()
+    const route = useRoute()
     let isUpdatingFromUrl = false
 
     // Load from URL on init
-    const urlParams = decodeParamsFromUrl(router.currentRoute.value.query)
-    if (urlParams && Object.keys(urlParams).length > 0) {
-      isUpdatingFromUrl = true
+    watch(
+      route,
+      (route) => {
+        const urlParams = decodeParamsFromUrl(router.currentRoute.value.query)
+        if (urlParams && Object.keys(urlParams).length > 0) {
+          isUpdatingFromUrl = true
 
-      try {
-        if (urlParams.initialCapital !== undefined) initialCapital.value = urlParams.initialCapital
-        if (urlParams.startYear !== undefined) startYear.value = urlParams.startYear
-        if (urlParams.yearsLater !== undefined) yearsLater.value = urlParams.yearsLater
-        if (urlParams.simulationCount !== undefined)
-          simulationCount.value = urlParams.simulationCount
-        if (urlParams.development !== undefined) development.value = urlParams.development
-        if (urlParams.developmentStdDev !== undefined)
-          developmentStdDev.value = urlParams.developmentStdDev
-        if (urlParams.inflationRate !== undefined) inflationRate.value = urlParams.inflationRate
-        if (urlParams.inflationStdDev !== undefined)
-          inflationStdDev.value = urlParams.inflationStdDev
+          try {
+            if (urlParams.initialCapital !== undefined)
+              initialCapital.value = urlParams.initialCapital
+            if (urlParams.startYear !== undefined) startYear.value = urlParams.startYear
+            if (urlParams.yearsLater !== undefined) yearsLater.value = urlParams.yearsLater
+            if (urlParams.simulationCount !== undefined)
+              simulationCount.value = urlParams.simulationCount
+            if (urlParams.development !== undefined) development.value = urlParams.development
+            if (urlParams.developmentStdDev !== undefined)
+              developmentStdDev.value = urlParams.developmentStdDev
+            if (urlParams.inflationRate !== undefined) inflationRate.value = urlParams.inflationRate
+            if (urlParams.inflationStdDev !== undefined)
+              inflationStdDev.value = urlParams.inflationStdDev
+            if (urlParams.seed !== undefined) seed.value = urlParams.seed
 
-        if (urlParams.scenarios && urlParams.scenarios.length > 0) {
-          const firstScenario = urlParams.scenarios[0]
-          if (firstScenario) {
-            balanceWithdrawalRate.value = firstScenario.balanceWithdrawalRate
-            profitWithdrawalRate.value = firstScenario.profitWithdrawalRate
-            profitLookbackYears.value = firstScenario.profitLookbackYears
-            capitalGainsTax.value = firstScenario.capitalGainsTax
+            if (urlParams.scenarios && urlParams.scenarios.length > 0) {
+              const firstScenario = urlParams.scenarios[0]
+              if (firstScenario) {
+                balanceWithdrawalRate.value = firstScenario.balanceWithdrawalRate
+                profitWithdrawalRate.value = firstScenario.profitWithdrawalRate
+                profitLookbackYears.value = firstScenario.profitLookbackYears
+                capitalGainsTax.value = firstScenario.capitalGainsTax
+              }
+
+              const iskScenario = urlParams.scenarios.find((s) => s.isISK)
+              if (iskScenario?.iskTaxRate !== undefined) iskTaxRate.value = iskScenario.iskTaxRate
+              if (iskScenario?.iskTaxRateStdDev !== undefined)
+                iskTaxRateStdDev.value = iskScenario.iskTaxRateStdDev
+            }
+          } finally {
+            isUpdatingFromUrl = false
           }
-
-          const iskScenario = urlParams.scenarios.find((s) => s.isISK)
-          if (iskScenario?.iskTaxRate !== undefined) iskTaxRate.value = iskScenario.iskTaxRate
-          if (iskScenario?.iskTaxRateStdDev !== undefined)
-            iskTaxRateStdDev.value = iskScenario.iskTaxRateStdDev
         }
-      } finally {
-        isUpdatingFromUrl = false
-      }
-    }
+      },
+      { deep: true, immediate: true },
+    )
 
     // Watch parameters and update URL (debounced)
     let timeoutId: ReturnType<typeof setTimeout> | null = null
     watch(
-      parameters,
-      (newParams) => {
+      [parameters, seed],
+      ([newParams, seed]) => {
         if (isUpdatingFromUrl) return
 
         if (timeoutId) clearTimeout(timeoutId)
         timeoutId = setTimeout(() => {
-          const query = encodeParamsToUrl(newParams)
+          const query = encodeParamsToUrl({ ...newParams, seed })
           router.replace({ query })
         }, 500)
       },
