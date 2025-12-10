@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { useHistoryStore } from '../stores/history'
-import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
 import { ref, useId } from 'vue'
+import { encodeParamsToUrl } from '../utils/url-params'
 import type { HistoryRecord } from '../stores/history'
 
 const historyStore = useHistoryStore()
-const calculatorStore = useCalculatorStore()
 const { records } = storeToRefs(historyStore)
 
 const clearAllPopoverId = useId()
@@ -77,8 +76,11 @@ const getWinnerClass = (winner: string): string => {
   return colorMap[winner] ?? 'text-success'
 }
 
-const loadRecord = (record: HistoryRecord) => {
-  calculatorStore.loadParameters(record.parameters)
+const getRecordQueryParams = (record: HistoryRecord) => {
+  return encodeParamsToUrl(record.parameters)
+}
+
+const handleLoadRecord = () => {
   // Scroll to top to show the loaded parameters
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
@@ -168,13 +170,14 @@ const positionPopover = (popoverId: string, anchorId: string) => {
             <div v-else class="title-display">
               <h6 class="mb-0" @dblclick="startEdit(record)">{{ record.title }}</h6>
               <div class="header-actions">
-                <button
+                <router-link
+                  :to="{ path: '/', query: getRecordQueryParams(record) }"
                   class="btn btn-sm btn-link p-0 text-primary"
-                  @click="loadRecord(record)"
                   title="Ladda parametrar"
+                  @click="handleLoadRecord"
                 >
                   ↻
-                </button>
+                </router-link>
                 <button
                   class="btn btn-sm btn-link p-0"
                   @click="startEdit(record)"

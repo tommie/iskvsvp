@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import type {
   InputParameters,
   SimulationResult,
@@ -8,6 +9,7 @@ import type {
 } from '../types'
 import { calculateStatistics, extractTimeSeriesData } from '../simulation'
 import { useHistoryStore } from './history'
+import { encodeParamsToUrl, decodeParamsFromUrl } from '../utils/url-params'
 import SimulationWorker from '../simulation.worker?worker'
 
 export const useCalculatorStore = defineStore('calculator', () => {
@@ -314,6 +316,68 @@ export const useCalculatorStore = defineStore('calculator', () => {
     iskTaxRateStdDev.value = iskScenario.iskTaxRateStdDev!
   }
 
+  /**
+   * Initialize URL synchronization.
+   * This should be called from App.vue after router is ready.
+   */
+  function initUrlSync() {
+    const router = useRouter()
+    let isUpdatingFromUrl = false
+
+    // Load from URL on init
+    const urlParams = decodeParamsFromUrl(router.currentRoute.value.query)
+    if (urlParams && Object.keys(urlParams).length > 0) {
+      isUpdatingFromUrl = true
+
+      try {
+        if (urlParams.initialCapital !== undefined) initialCapital.value = urlParams.initialCapital
+        if (urlParams.startYear !== undefined) startYear.value = urlParams.startYear
+        if (urlParams.yearsLater !== undefined) yearsLater.value = urlParams.yearsLater
+        if (urlParams.simulationCount !== undefined)
+          simulationCount.value = urlParams.simulationCount
+        if (urlParams.development !== undefined) development.value = urlParams.development
+        if (urlParams.developmentStdDev !== undefined)
+          developmentStdDev.value = urlParams.developmentStdDev
+        if (urlParams.inflationRate !== undefined) inflationRate.value = urlParams.inflationRate
+        if (urlParams.inflationStdDev !== undefined)
+          inflationStdDev.value = urlParams.inflationStdDev
+
+        if (urlParams.scenarios && urlParams.scenarios.length > 0) {
+          const firstScenario = urlParams.scenarios[0]
+          if (firstScenario) {
+            balanceWithdrawalRate.value = firstScenario.balanceWithdrawalRate
+            profitWithdrawalRate.value = firstScenario.profitWithdrawalRate
+            profitLookbackYears.value = firstScenario.profitLookbackYears
+            capitalGainsTax.value = firstScenario.capitalGainsTax
+          }
+
+          const iskScenario = urlParams.scenarios.find((s) => s.isISK)
+          if (iskScenario?.iskTaxRate !== undefined) iskTaxRate.value = iskScenario.iskTaxRate
+          if (iskScenario?.iskTaxRateStdDev !== undefined)
+            iskTaxRateStdDev.value = iskScenario.iskTaxRateStdDev
+        }
+      } finally {
+        isUpdatingFromUrl = false
+      }
+    }
+
+    // Watch parameters and update URL (debounced)
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+    watch(
+      parameters,
+      (newParams) => {
+        if (isUpdatingFromUrl) return
+
+        if (timeoutId) clearTimeout(timeoutId)
+        timeoutId = setTimeout(() => {
+          const query = encodeParamsToUrl(newParams)
+          router.replace({ query })
+        }, 500)
+      },
+      { deep: true },
+    )
+  }
+
   return {
     // Input parameters
     initialCapital,
@@ -345,5 +409,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     runSimulation,
     resetResults,
     loadParameters,
+    initUrlSync,
   }
 })
