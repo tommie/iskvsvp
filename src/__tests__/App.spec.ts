@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia } from 'pinia'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import App from '../App.vue'
-import Home from '../views/Home.vue'
+import HomePage from '../views/HomePage.vue'
 
 describe('App', () => {
   it('mounts renders properly', async () => {
@@ -14,7 +14,7 @@ describe('App', () => {
         {
           path: '/',
           name: 'home',
-          component: Home,
+          component: HomePage,
         },
       ],
     })
