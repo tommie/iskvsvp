@@ -33,12 +33,15 @@ interface RORPreset {
 
 const rorPresets: RORPreset[] = [
   { label: 'AMF Aktiefond Europa', mean: 0.077744, stdDev: 0.192562 },
+  { label: 'Carnegie Småbolagsfond A', mean: 0.177747, stdDev: 0.195878 },
   { label: 'Carnegie Sverigefond A', mean: 0.1446, stdDev: 0.2283 },
   { label: 'Handelsbanken Nordiska Småb (A1 SEK)', mean: 0.154126, stdDev: 0.30111 },
   { label: 'Länsförsäkringar Fastighetsfond A', mean: 0.184636, stdDev: 0.282252 },
   { label: 'Länsförsäkringar Lång Räntefond A', mean: 0.044307, stdDev: 0.05498 },
   { label: 'Storebrand USA A SEK', mean: 0.090752, stdDev: 0.168028 },
-  { label: 'Swebank Robur Globalfond A', mean: 0.1299, stdDev: 0.202 },
+  { label: 'Swedbank Robur Access Europa A', mean: 0.06943, stdDev: 0.146178 },
+  { label: 'Swedbank Robur Europafond A', mean: 0.085581, stdDev: 0.17472 },
+  { label: 'Swedbank Robur Globalfond A', mean: 0.1299, stdDev: 0.202 },
 ]
 
 const applyRORPreset = () => {
