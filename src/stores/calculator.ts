@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { computed, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type {
   InputParameters,
@@ -32,9 +32,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
   // Simulation state
   const isRunning = ref(false)
   const progress = ref(0)
-  const results = ref<SimulationResult[]>([])
-  const statistics = ref<SimulationStatistics | null>(null)
-  const timeSeriesData = ref<TimeSeriesPoint[]>([])
+  const results = shallowRef<SimulationResult[]>([])
+  const statistics = shallowRef<SimulationStatistics | null>(null)
+  const timeSeriesData = shallowRef<TimeSeriesPoint[]>([])
   const representativeSimulationId = ref<number | null>(null)
   const showDetailedStatistics = ref(false)
 
@@ -237,7 +237,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
       const workerResults = await new Promise<SimulationWorkerResult>((resolve, reject) => {
         worker.onmessage = (e: MessageEvent) => {
           if (e.data.type === 'progress') {
-            progress.value = Math.min(90, e.data.progress)
+            progress.value = e.data.progress * 0.6
           } else if (e.data.type === 'complete') {
             resolve({
               results: e.data.results,
@@ -252,15 +252,15 @@ export const useCalculatorStore = defineStore('calculator', () => {
         }
 
         // Start simulation
-        worker.postMessage({ params: parameters.value })
+        worker.postMessage({ params })
       })
 
-      // Terminate worker
-      worker.terminate()
-
       results.value = workerResults.results
+      progress.value = 70
       statistics.value = workerResults.statistics
+      progress.value = 80
       timeSeriesData.value = workerResults.timeseries
+      progress.value = 90
 
       // Find representative simulation
       if (statistics.value) {
@@ -276,6 +276,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         historyStore.addRecord(parameters.value, statistics.value)
       }
     } finally {
+      worker.terminate()
       isRunning.value = false
       progress.value = 100
     }
