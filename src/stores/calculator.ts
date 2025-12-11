@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
-import { computed, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type {
   InputParameters,
   SimulationResult,
   SimulationStatistics,
   TimeSeriesPoint,
+  Portfolio,
 } from '../types'
 import { calculateStatistics, extractTimeSeriesData } from '../simulation'
 import { useHistoryStore } from './history'
@@ -15,8 +16,20 @@ import SimulationWorker from '../simulation.worker?worker'
 export const useCalculatorStore = defineStore('calculator', () => {
   // Input parameters
   const initialCapital = ref(5000000)
-  const development = ref(0.1299) // Swedbank Robur Globalfond A
-  const developmentStdDev = ref(0.202) // Swedbank Robur Globalfond A
+
+  // Default portfolio: Single asset (Swedbank Robur Globalfond A)
+  const portfolio = ref<Portfolio>({
+    assets: [
+      {
+        name: 'Global Equity',
+        weight: 1.0,
+        expectedReturn: 0.1299,
+        volatility: 0.202,
+      },
+    ],
+    correlationMatrix: [],
+  })
+
   const balanceWithdrawalRate = ref(0.015)
   const profitWithdrawalRate = ref(0.15)
   const profitLookbackYears = ref(5)
@@ -45,8 +58,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     startYear: startYear.value,
     yearsLater: yearsLater.value,
     simulationCount: simulationCount.value,
-    development: development.value,
-    developmentStdDev: developmentStdDev.value,
+    portfolio: portfolio.value,
     inflationRate: inflationRate.value,
     inflationStdDev: inflationStdDev.value,
     scenarios: [
@@ -232,6 +244,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
         seed: seed.value ?? Math.random().toString(36).substring(2, 15),
       }
 
+      // Create a plain object copy to ensure it can be cloned for the worker
+      const plainParams = JSON.parse(JSON.stringify(params))
+
       interface SimulationWorkerResult {
         results: SimulationResult[]
         statistics: SimulationStatistics
@@ -257,7 +272,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         }
 
         // Start simulation
-        worker.postMessage({ params })
+        worker.postMessage({ params: plainParams })
       })
 
       results.value = workerResults.results
@@ -308,8 +323,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     startYear.value = params.startYear
     yearsLater.value = params.yearsLater
     simulationCount.value = params.simulationCount
-    development.value = params.development
-    developmentStdDev.value = params.developmentStdDev
+    portfolio.value = params.portfolio
     inflationRate.value = params.inflationRate
     inflationStdDev.value = params.inflationStdDev
     seed.value = params.seed
@@ -338,7 +352,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     watch(
       route,
       (route) => {
-        const urlParams = decodeParamsFromUrl(router.currentRoute.value.query)
+        const urlParams = decodeParamsFromUrl(route.query)
         if (urlParams && Object.keys(urlParams).length > 0) {
           isUpdatingFromUrl = true
 
@@ -349,9 +363,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
             if (urlParams.yearsLater !== undefined) yearsLater.value = urlParams.yearsLater
             if (urlParams.simulationCount !== undefined)
               simulationCount.value = urlParams.simulationCount
-            if (urlParams.development !== undefined) development.value = urlParams.development
-            if (urlParams.developmentStdDev !== undefined)
-              developmentStdDev.value = urlParams.developmentStdDev
+            if (urlParams.portfolio !== undefined) portfolio.value = urlParams.portfolio
             if (urlParams.inflationRate !== undefined) inflationRate.value = urlParams.inflationRate
             if (urlParams.inflationStdDev !== undefined)
               inflationStdDev.value = urlParams.inflationStdDev
@@ -372,7 +384,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
                 iskTaxRateStdDev.value = iskScenario.iskTaxRateStdDev
             }
           } finally {
-            isUpdatingFromUrl = false
+            nextTick(() => (isUpdatingFromUrl = false))
           }
         }
       },
@@ -399,8 +411,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   return {
     // Input parameters
     initialCapital,
-    development,
-    developmentStdDev,
+    portfolio,
     balanceWithdrawalRate,
     profitWithdrawalRate,
     profitLookbackYears,

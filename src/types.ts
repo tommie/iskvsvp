@@ -1,3 +1,15 @@
+export interface PortfolioAsset {
+  name: string
+  weight: number // Weight in portfolio (should sum to 1.0 across all assets)
+  expectedReturn: number // Mean annual return
+  volatility: number // Standard deviation of returns
+}
+
+export interface Portfolio {
+  assets: PortfolioAsset[]
+  correlationMatrix: number[][] // Correlation matrix between assets (symmetric, diagonal = 1)
+}
+
 export interface ScenarioConfig {
   name: string
   balanceWithdrawalRate: number
@@ -14,8 +26,7 @@ export interface InputParameters {
   startYear: number
   yearsLater: number
   simulationCount: number
-  development: number
-  developmentStdDev: number
+  portfolio: Portfolio
   inflationRate: number
   inflationStdDev: number
   scenarios: ScenarioConfig[]

@@ -22,6 +22,71 @@ function randomNormal(mean: number, stdDev: number, rng: () => number): number {
   return mean + z0 * stdDev
 }
 
+/**
+ * Cholesky decomposition of a symmetric positive definite matrix.
+ * Returns the lower triangular matrix L such that A = L * L^T
+ */
+function choleskyDecomposition(matrix: number[][]): number[][] {
+  const n = matrix.length
+  const L: number[][] = Array.from({ length: n }, () => Array(n).fill(0))
+
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j <= i; j++) {
+      let sum = 0
+      for (let k = 0; k < j; k++) {
+        sum += L[i]![k]! * L[j]![k]!
+      }
+
+      if (i === j) {
+        L[i]![j] = Math.sqrt(matrix[i]![i]! - sum)
+      } else {
+        L[i]![j] = (matrix[i]![j]! - sum) / L[j]![j]!
+      }
+    }
+  }
+
+  return L
+}
+
+/**
+ * Generate correlated normal random variables using Cholesky decomposition.
+ * @param means Array of means for each variable
+ * @param stdDevs Array of standard deviations for each variable
+ * @param correlationMatrix Correlation matrix (symmetric, diagonal = 1)
+ * @param rng Random number generator
+ * @returns Array of correlated samples
+ */
+function sampleCorrelatedNormals(
+  means: number[],
+  stdDevs: number[],
+  correlationMatrix: number[][],
+  rng: () => number,
+): number[] {
+  const n = means.length
+
+  // Generate independent standard normal samples
+  const z: number[] = []
+  for (let i = 0; i < n; i++) {
+    z.push(randomNormal(0, 1, rng))
+  }
+
+  // Compute Cholesky decomposition of correlation matrix
+  const L = choleskyDecomposition(correlationMatrix)
+
+  // Transform to correlated samples: X = μ + Σ^(1/2) * Z
+  // where Σ^(1/2) = diag(σ) * L * diag(σ)^T = diag(σ) * L (since L is lower triangular)
+  const samples: number[] = []
+  for (let i = 0; i < n; i++) {
+    let sum = 0
+    for (let j = 0; j <= i; j++) {
+      sum += L[i]![j]! * z[j]!
+    }
+    samples.push(means[i]! + stdDevs[i]! * sum)
+  }
+
+  return samples
+}
+
 interface ScenarioState {
   amount: number
   cumulativePaidTax: number
@@ -69,7 +134,21 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
 
     // Generate shared stochastics for this year (same across all scenarios for fair comparison)
     const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev, rng)
-    const development = randomNormal(params.development, params.developmentStdDev, rng)
+
+    // Sample correlated asset returns
+    const assetReturns = sampleCorrelatedNormals(
+      params.portfolio.assets.map((a) => a.expectedReturn),
+      params.portfolio.assets.map((a) => a.volatility),
+      params.portfolio.correlationMatrix,
+      rng,
+    )
+
+    // Calculate portfolio return as weighted sum
+    const development = params.portfolio.assets.reduce(
+      (sum, asset, idx) => sum + asset.weight * assetReturns[idx]!,
+      0,
+    )
+
     cumulativeInflation *= 1 + inflationRate
 
     const scenarioYearlyData: Record<string, ScenarioYearlyData> = {}
