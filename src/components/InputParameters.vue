@@ -458,18 +458,18 @@ const expectedTotalWithdrawalRate = computed(() => {
             <div v-if="portfolio.assets.length > 1" class="mt-3">
               <label class="form-label">Korrelationsmatris</label>
               <div class="table-responsive">
-                <table class="table table-sm correlation-matrix-table">
+                <table class="table table-sm table-striped correlation-matrix-table">
                   <tbody>
                     <tr v-for="(assetRow, i) in portfolio.assets" :key="i">
                       <td
-                        v-for="(assetCol, j) in portfolio.assets"
+                        v-for="(_assetCol, j) in portfolio.assets.slice(0, i + 1)"
                         :key="j"
                         :class="{
                           'diagonal-cell': i === j,
                           'lower-triangle': i > j,
-                          'upper-triangle': i < j,
                           'last-column': j === portfolio.assets.length - 1,
                         }"
+                        :colspan="i === j ? portfolio.assets.length - i : undefined"
                       >
                         <span v-if="i === j" class="asset-name" :title="assetRow.name">
                           {{ assetRow.name }}
@@ -752,12 +752,6 @@ const expectedTotalWithdrawalRate = computed(() => {
   width: auto;
 }
 
-.correlation-matrix-table .diagonal-cell {
-  background-color: #f8f9fa;
-  font-weight: 500;
-  padding: 0.5rem 0.25rem;
-}
-
 .correlation-matrix-table .asset-name {
   display: block;
   overflow: hidden;
@@ -766,12 +760,13 @@ const expectedTotalWithdrawalRate = computed(() => {
   font-size: 0.85rem;
 }
 
-.correlation-matrix-table .upper-triangle {
-  background-color: #f8f9fa;
-}
-
 .correlation-matrix-table .lower-triangle input {
   font-size: 0.875rem;
   width: 100%;
+}
+
+.correlation-matrix-table .diagonal-cell {
+  font-weight: 500;
+  padding: 0.5rem 0.25rem;
 }
 </style>
