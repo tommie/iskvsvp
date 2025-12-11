@@ -209,7 +209,7 @@ const handleRunSimulation = async () => {
   await store.runSimulation()
 }
 
-const getTargetValue = (event: UIEvent) => {
+const getTargetValue = (event: Event) => {
   return parseFloat((event.target as HTMLInputElement)?.value)
 }
 
@@ -271,7 +271,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(balanceWithdrawalRate * 100).toFixed(1)"
-                    @input="balanceWithdrawalRate = getTargetValue($event) / 100"
+                    @change="balanceWithdrawalRate = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -298,7 +298,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(profitWithdrawalRate * 100).toFixed(1)"
-                    @input="profitWithdrawalRate = getTargetValue($event) / 100"
+                    @change="profitWithdrawalRate = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -312,7 +312,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                     step="1"
                     class="form-control text-end"
                     :value="profitLookbackYears"
-                    @input="profitLookbackYears = getTargetValue($event)"
+                    @change="profitLookbackYears = getTargetValue($event)"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">år</span>
@@ -385,7 +385,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                         step="0.1"
                         class="form-control form-control-sm text-end"
                         :value="(asset.expectedReturn * 100).toFixed(1)"
-                        @input="asset.expectedReturn = getTargetValue($event) / 100"
+                        @change="asset.expectedReturn = getTargetValue($event) / 100"
                         :disabled="isRunning"
                       />
                     </td>
@@ -395,7 +395,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                         step="0.1"
                         class="form-control form-control-sm text-end"
                         :value="(asset.volatility * 100).toFixed(1)"
-                        @input="asset.volatility = getTargetValue($event) / 100"
+                        @change="asset.volatility = getTargetValue($event) / 100"
                         :disabled="isRunning"
                       />
                     </td>
@@ -405,7 +405,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                         step="0.1"
                         class="form-control form-control-sm text-end"
                         :value="(asset.weight * 100).toFixed(1)"
-                        @input="asset.weight = getTargetValue($event) / 100"
+                        @change="asset.weight = getTargetValue($event) / 100"
                         :disabled="isRunning"
                       />
                     </td>
@@ -481,7 +481,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                           max="1"
                           class="form-control form-control-sm text-center"
                           :value="getCorrelation(i, j)"
-                          @input="
+                          @change="
                             updateCorrelation(i, j, ($event.target as HTMLInputElement).value)
                           "
                           :disabled="isRunning"
@@ -551,7 +551,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(inflationRate * 100).toFixed(1)"
-                    @input="inflationRate = getTargetValue($event) / 100"
+                    @change="inflationRate = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -565,7 +565,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(inflationStdDev * 100).toFixed(1)"
-                    @input="inflationStdDev = getTargetValue($event) / 100"
+                    @change="inflationStdDev = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -586,7 +586,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                     step="0.1"
                     class="form-control text-end"
                     :value="(capitalGainsTax * 100).toFixed(1)"
-                    @input="capitalGainsTax = getTargetValue($event) / 100"
+                    @change="capitalGainsTax = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -600,7 +600,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                     step="0.01"
                     class="form-control text-end"
                     :value="(iskTaxRate * 100).toFixed(2)"
-                    @input="iskTaxRate = getTargetValue($event) / 100"
+                    @change="iskTaxRate = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
@@ -615,7 +615,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                     step="0.01"
                     class="form-control text-end"
                     :value="(iskTaxRateStdDev * 100).toFixed(2)"
-                    @input="iskTaxRateStdDev = getTargetValue($event) / 100"
+                    @change="iskTaxRateStdDev = getTargetValue($event) / 100"
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
