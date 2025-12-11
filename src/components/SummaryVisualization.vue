@@ -286,7 +286,7 @@ const renderLiquidValueChart = (svg: SVGSVGElement, container: HTMLDivElement) =
     liquidValueSeries,
     'Likvidvärde',
     (d) => d3.format(',.0f')(d) + ' kr',
-    4,
+    3,
     90,
   )
 }
@@ -312,7 +312,7 @@ const renderWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) =>
     withdrawalSeries,
     'Uttag reellt (sista året)',
     (d) => d3.format(',.0f')(d) + ' kr',
-    4,
+    3,
     90,
   )
 }
