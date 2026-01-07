@@ -63,7 +63,7 @@ watch(statistics, (newStats) => {
               type="button"
               role="tab"
             >
-              Grafer
+              Fördelning
             </button>
           </li>
           <li class="nav-item" role="presentation">
