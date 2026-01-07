@@ -87,8 +87,14 @@ function sampleCorrelatedNormals(
   return samples
 }
 
+interface AssetPosition {
+  value: number // Current market value
+  costBasis: number // Original cost basis (for VP tax calculation)
+}
+
 interface ScenarioState {
-  amount: number
+  amount: number // Total portfolio value (sum of asset values)
+  assetPositions: AssetPosition[] // One per asset in portfolio
   cumulativePaidTax: number
   accumulatedRealWithdrawal: number
   accumulatedNominalWithdrawal: number
@@ -112,8 +118,15 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
   // Initialize state for each scenario
   const scenarioStates: Record<string, ScenarioState> = {}
   for (const scenario of params.scenarios) {
+    // Initialize asset positions based on target weights
+    const assetPositions: AssetPosition[] = params.portfolio.assets.map((asset) => ({
+      value: params.initialCapital * asset.weight,
+      costBasis: params.initialCapital * asset.weight,
+    }))
+
     scenarioStates[scenario.name] = {
       amount: params.initialCapital,
+      assetPositions,
       cumulativePaidTax: 0,
       accumulatedRealWithdrawal: 0,
       accumulatedNominalWithdrawal: 0,
@@ -166,7 +179,17 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
         )
       }
 
-      // Calculate balance-based withdrawal
+      // Step 1: Apply returns to each asset
+      for (let assetIdx = 0; assetIdx < state.assetPositions.length; assetIdx++) {
+        const position = state.assetPositions[assetIdx]!
+        const assetReturn = assetReturns[assetIdx]!
+        position.value *= 1 + assetReturn
+      }
+
+      // Calculate total portfolio value
+      state.amount = state.assetPositions.reduce((sum, pos) => sum + pos.value, 0)
+
+      // Step 2: Calculate balance-based withdrawal
       const balanceWithdrawal = state.amount * scenario.balanceWithdrawalRate
 
       // Calculate profit-based withdrawal
@@ -184,30 +207,161 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
       const withdrawn = balanceWithdrawal + profitWithdrawal
       const withdrawalRate = state.amount > 0 ? withdrawn / state.amount : 0
 
-      // Calculate liquidation value and withdrawal
-      let liquidValue: number
+      // Step 3: Execute withdrawals (tax efficiently by withdrawing from overweight assets first)
+      let withdrawalTax = 0
+      if (withdrawn > 0 && params.portfolio.rebalanceFrequency === 'annually' && state.amount > 0) {
+        // Calculate current and target weights
+        let remainingToWithdraw = withdrawn
 
-      if (scenario.isISK) {
-        // ISK: tax is ISK basis rate × capital gains tax rate, applied to account value
-        // currentTaxRate is the ISK basis rate (e.g., 2.96%)
-        liquidValue = state.amount
-      } else {
-        // Calculate future tax if liquidated
-        const capitalGain = state.amount - params.initialCapital
-        // We allow negative future tax, though it will only be valid if offset by other tax
-        liquidValue = state.amount - capitalGain * scenario.capitalGainsTax
+        // First pass: withdraw from overweight assets to move toward target
+        const targetValues = params.portfolio.assets.map((asset) => state.amount * asset.weight)
+
+        for (let assetIdx = 0; assetIdx < state.assetPositions.length; assetIdx++) {
+          const position = state.assetPositions[assetIdx]!
+          const targetValue = targetValues[assetIdx]!
+          const targetAfterWithdrawal = targetValue * (1 - withdrawn / state.amount)
+
+          if (position.value > targetAfterWithdrawal && remainingToWithdraw > 0) {
+            // Withdraw excess from overweight position
+            const excessAmount = Math.min(
+              position.value - targetAfterWithdrawal,
+              remainingToWithdraw,
+            )
+            const withdrawalFraction = excessAmount / position.value
+
+            if (!scenario.isISK) {
+              const costBasisWithdrawn = position.costBasis * withdrawalFraction
+              const gainOnWithdrawal = excessAmount - costBasisWithdrawn
+              if (gainOnWithdrawal > 0) {
+                withdrawalTax += gainOnWithdrawal * scenario.capitalGainsTax
+              }
+            }
+
+            position.value -= excessAmount
+            position.costBasis *= 1 - withdrawalFraction
+            remainingToWithdraw -= excessAmount
+          }
+        }
+
+        // Second pass: if still need to withdraw, take proportionally from all assets
+        if (remainingToWithdraw > 0.001) {
+          const currentTotal = state.assetPositions.reduce((sum, pos) => sum + pos.value, 0)
+
+          for (const position of state.assetPositions) {
+            const proportionalWithdrawal = (position.value / currentTotal) * remainingToWithdraw
+            const withdrawalFraction = proportionalWithdrawal / position.value
+
+            if (!scenario.isISK) {
+              const costBasisWithdrawn = position.costBasis * withdrawalFraction
+              const gainOnWithdrawal = proportionalWithdrawal - costBasisWithdrawn
+              if (gainOnWithdrawal > 0) {
+                withdrawalTax += gainOnWithdrawal * scenario.capitalGainsTax
+              }
+            }
+
+            position.value -= proportionalWithdrawal
+            position.costBasis *= 1 - withdrawalFraction
+          }
+        }
+      } else if (withdrawn > 0) {
+        // No rebalancing: withdraw proportionally from all assets
+        for (const position of state.assetPositions) {
+          const withdrawalFraction = withdrawn / state.amount
+          const amountWithdrawn = position.value * withdrawalFraction
+
+          if (!scenario.isISK) {
+            const costBasisWithdrawn = position.costBasis * withdrawalFraction
+            const gainOnWithdrawal = amountWithdrawn - costBasisWithdrawn
+            if (gainOnWithdrawal > 0) {
+              withdrawalTax += gainOnWithdrawal * scenario.capitalGainsTax
+            }
+          }
+
+          position.value -= amountWithdrawn
+          position.costBasis *= 1 - withdrawalFraction
+        }
       }
 
-      // Calculate tax
+      // Recalculate total after withdrawals
+      state.amount = state.assetPositions.reduce((sum, pos) => sum + pos.value, 0)
+
+      // Step 4: Rebalance remaining portfolio (both ISK and VP)
+      let rebalancingTax = 0
+      if (params.portfolio.rebalanceFrequency === 'annually' && i > 0 && state.amount > 0) {
+        // Calculate target values for remaining portfolio
+        const targetValues = params.portfolio.assets.map((asset) => state.amount * asset.weight)
+
+        // Sell overweight assets
+        for (let assetIdx = 0; assetIdx < state.assetPositions.length; assetIdx++) {
+          const position = state.assetPositions[assetIdx]!
+          const targetValue = targetValues[assetIdx]!
+
+          if (position.value > targetValue + 0.01) {
+            // Small tolerance for rounding
+            const sellValue = position.value - targetValue
+            const sellFraction = sellValue / position.value
+
+            // Only VP pays capital gains tax on rebalancing
+            if (!scenario.isISK) {
+              const gainOnSale = sellValue - position.costBasis * sellFraction
+              if (gainOnSale > 0) {
+                rebalancingTax += gainOnSale * scenario.capitalGainsTax
+              }
+            }
+
+            position.value = targetValue
+            position.costBasis *= 1 - sellFraction
+          }
+        }
+
+        // Buy underweight assets
+        for (let assetIdx = 0; assetIdx < state.assetPositions.length; assetIdx++) {
+          const position = state.assetPositions[assetIdx]!
+          const targetValue = targetValues[assetIdx]!
+
+          if (position.value < targetValue - 0.01) {
+            // Small tolerance for rounding
+            const buyValue = targetValue - position.value
+            position.value = targetValue
+            position.costBasis += buyValue
+          }
+        }
+      }
+
+      // Step 5: Calculate total tax
       let tax: number
 
       if (scenario.isISK) {
-        // ISK: tax is ISK basis rate × capital gains tax rate, applied to account value
-        // currentTaxRate is the ISK basis rate (e.g., 2.96%)
+        // ISK: only pays the ISK basis tax (schablonsskatt), no capital gains tax
         tax = state.amount * state.currentTaxRate * scenario.capitalGainsTax
       } else {
-        // VP: capital gains tax applied to actual sold value
-        tax = withdrawn * scenario.capitalGainsTax
+        // VP: pays fund tax (CGT on vpWealthTaxRate of fund value) + capital gains tax on withdrawals and rebalancing
+        const fundTax = state.amount * params.vpWealthTaxRate * scenario.capitalGainsTax
+        tax = fundTax + withdrawalTax + rebalancingTax
+      }
+
+      tax = Math.min(Math.max(0, tax), state.amount)
+
+      // Pay tax
+      for (const position of state.assetPositions) {
+        const taxFraction = tax / state.amount
+        const taxFromAsset = position.value * taxFraction
+        position.value -= taxFromAsset
+        position.costBasis *= 1 - taxFraction
+      }
+
+      // Recalculate total amount after withdrawals and tax
+      state.amount = state.assetPositions.reduce((sum, pos) => sum + pos.value, 0)
+
+      // Calculate liquidation value
+      let liquidValue: number
+      if (scenario.isISK) {
+        liquidValue = state.amount
+      } else {
+        // Calculate total unrealized gains
+        const totalCostBasis = state.assetPositions.reduce((sum, pos) => sum + pos.costBasis, 0)
+        const unrealizedGain = state.amount - totalCostBasis
+        liquidValue = state.amount - unrealizedGain * scenario.capitalGainsTax
       }
 
       // Update cumulative taxes
@@ -244,14 +398,8 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
         inflationRate, // Shared but stored for reference
       }
 
-      // Update amount for next year, ensure non-negative
-      if (scenario.isISK) {
-        state.amount = Math.max(0, state.amount * (1 + development) - withdrawn - tax)
-      } else {
-        state.amount = Math.max(0, state.amount * (1 + development) - withdrawn)
-      }
-
       // Track yearly amount for profit calculation
+      // (amount already updated by per-asset operations)
       state.yearlyAmounts.push(state.amount)
 
       // Track drawdown

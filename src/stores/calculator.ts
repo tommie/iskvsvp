@@ -27,7 +27,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
         volatility: 0.202,
       },
     ],
-    correlationMatrix: [],
+    correlationMatrix: [[1.0]],
+    rebalanceFrequency: 'never',
   })
 
   const balanceWithdrawalRate = ref(0.015)
@@ -37,6 +38,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const iskTaxRateStdDev = ref(0.005)
   const inflationRate = ref(0.02)
   const inflationStdDev = ref(0.009) // Barely any negative years
+  const vpFundTaxRate = ref(0.004) // VP fund tax rate (0.4%)
   const capitalGainsTax = ref(0.3)
   const startYear = ref(45)
   const yearsLater = ref(36)
@@ -61,6 +63,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     portfolio: portfolio.value,
     inflationRate: inflationRate.value,
     inflationStdDev: inflationStdDev.value,
+    vpWealthTaxRate: vpFundTaxRate.value,
     scenarios: [
       {
         name: 'ISK',
@@ -326,6 +329,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     portfolio.value = params.portfolio
     inflationRate.value = params.inflationRate
     inflationStdDev.value = params.inflationStdDev
+    vpFundTaxRate.value = params.vpWealthTaxRate
     seed.value = params.seed
 
     const firstScenario = params.scenarios[0]!
@@ -367,6 +371,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
             if (urlParams.inflationRate !== undefined) inflationRate.value = urlParams.inflationRate
             if (urlParams.inflationStdDev !== undefined)
               inflationStdDev.value = urlParams.inflationStdDev
+            if (urlParams.vpWealthTaxRate !== undefined)
+              vpFundTaxRate.value = urlParams.vpWealthTaxRate
             if (urlParams.seed !== undefined) seed.value = urlParams.seed
 
             if (urlParams.scenarios && urlParams.scenarios.length > 0) {
@@ -419,6 +425,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     iskTaxRateStdDev,
     inflationRate,
     inflationStdDev,
+    vpFundTaxRate,
     capitalGainsTax,
     startYear,
     yearsLater,

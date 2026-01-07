@@ -121,6 +121,7 @@ export function encodeParamsToUrl(
   query.yl = params.yearsLater.toString()
   query.ir = params.inflationRate.toString()
   query.is = params.inflationStdDev.toString()
+  query.vft = params.vpWealthTaxRate.toString()
   query.sc = params.simulationCount.toString()
 
   // Encode portfolio assets as multiple p= parameters
@@ -132,6 +133,11 @@ export function encodeParamsToUrl(
       query.cm = encodeCorrelationMatrix(params.portfolio.correlationMatrix)
     } else {
       query.cm = []
+    }
+
+    // Encode rebalance frequency (only if not default 'never')
+    if (params.portfolio.rebalanceFrequency !== 'never') {
+      query.rb = params.portfolio.rebalanceFrequency
     }
   }
 
@@ -207,6 +213,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   const yl = parseNum('yl')
   const ir = parseNum('ir')
   const is = parseNum('is')
+  const vft = parseNum('vft')
   const sc = parseNum('sc')
   const seed = getString('s')
 
@@ -215,6 +222,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   if (yl !== undefined) params.yearsLater = yl
   if (ir !== undefined) params.inflationRate = ir
   if (is !== undefined) params.inflationStdDev = is
+  if (vft !== undefined) params.vpWealthTaxRate = vft
   if (sc !== undefined) params.simulationCount = sc
   if (seed) params.seed = seed
 
@@ -243,9 +251,13 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
         }
       }
 
+      // Parse rebalance frequency
+      const rebalanceFrequency = getString('rb')
+
       params.portfolio = {
         assets,
         correlationMatrix,
+        rebalanceFrequency: rebalanceFrequency === 'annually' ? 'annually' : 'never',
       }
     }
   }

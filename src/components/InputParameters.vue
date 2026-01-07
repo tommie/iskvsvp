@@ -15,6 +15,7 @@ const {
   iskTaxRateStdDev,
   inflationRate,
   inflationStdDev,
+  vpFundTaxRate,
   capitalGainsTax,
   startYear,
   yearsLater,
@@ -456,6 +457,18 @@ const expectedTotalWithdrawalRate = computed(() => {
             </div>
 
             <div v-if="portfolio.assets.length > 1" class="mt-3">
+              <label class="form-label">Ombalansering</label>
+              <select
+                class="form-select form-select-sm"
+                v-model="portfolio.rebalanceFrequency"
+                :disabled="isRunning"
+              >
+                <option value="never">Aldrig</option>
+                <option value="annually">Årligen</option>
+              </select>
+            </div>
+
+            <div v-if="portfolio.assets.length > 1" class="mt-3">
               <label class="form-label">Korrelationsmatris</label>
               <div class="table-responsive">
                 <table class="table table-sm table-striped correlation-matrix-table">
@@ -579,7 +592,7 @@ const expectedTotalWithdrawalRate = computed(() => {
           <div class="param-section">
             <h5 class="section-title">Skatt</h5>
             <div class="row g-3">
-              <div class="col-12">
+              <div class="col-12 col-md-6">
                 <label class="form-label">Vinstskatt</label>
                 <div class="input-group">
                   <input
@@ -592,6 +605,23 @@ const expectedTotalWithdrawalRate = computed(() => {
                   />
                   <span class="input-group-text">%</span>
                 </div>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Fondskatt VP</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="0.01"
+                    class="form-control text-end"
+                    :value="(vpFundTaxRate * 100).toFixed(2)"
+                    @change="vpFundTaxRate = getTargetValue($event) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+                <small class="form-text text-muted"
+                  >Andel av fondvärdet som beskattas årligen.</small
+                >
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label">Schablonskattesats</label>

@@ -5,9 +5,12 @@ export interface PortfolioAsset {
   volatility: number // Standard deviation of returns
 }
 
+export type RebalanceFrequency = 'never' | 'annually'
+
 export interface Portfolio {
   assets: PortfolioAsset[]
   correlationMatrix: number[][] // Correlation matrix between assets (symmetric, diagonal = 1)
+  rebalanceFrequency: RebalanceFrequency // How often to rebalance portfolio
 }
 
 export interface ScenarioConfig {
@@ -29,6 +32,7 @@ export interface InputParameters {
   portfolio: Portfolio
   inflationRate: number
   inflationStdDev: number
+  vpWealthTaxRate: number // VP wealth tax rate (e.g., 0.004 for 0.4%)
   scenarios: ScenarioConfig[]
   seed: string // Random seed for reproducibility
 }

@@ -380,6 +380,7 @@ const renderPaidTaxChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
     buildSeries('paidTax'),
     'Betald skatt',
     (d) => d3.format(',.0f')(d) + ' kr',
+    3,
   )
 }
 
