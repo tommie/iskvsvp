@@ -204,7 +204,10 @@ export function runSingleSimulation(params: InputParameters): SimulationResult {
         }
       }
 
-      const withdrawn = balanceWithdrawal + profitWithdrawal
+      // Calculate inflation-based withdrawal
+      const inflationWithdrawal = scenario.inflationBasedWithdrawal * cumulativeInflation
+
+      const withdrawn = balanceWithdrawal + profitWithdrawal + inflationWithdrawal
       const withdrawalRate = state.amount > 0 ? withdrawn / state.amount : 0
 
       // Step 3: Execute withdrawals (tax efficiently by withdrawing from overweight assets first)

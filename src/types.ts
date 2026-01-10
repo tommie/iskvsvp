@@ -18,6 +18,7 @@ export interface ScenarioConfig {
   balanceWithdrawalRate: number
   profitWithdrawalRate: number
   profitLookbackYears: number
+  inflationBasedWithdrawal: number // Fixed withdrawal amount adjusted by inflation each year
   capitalGainsTax: number // Capital gains tax rate (used by both ISK and VP)
   iskTaxRate?: number // ISK basis rate (only for ISK scenarios)
   iskTaxRateStdDev?: number // ISK basis rate volatility (only for ISK scenarios)

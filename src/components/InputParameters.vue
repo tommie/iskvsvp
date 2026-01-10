@@ -11,6 +11,7 @@ const {
   balanceWithdrawalRate,
   profitWithdrawalRate,
   profitLookbackYears,
+  inflationBasedWithdrawal,
   iskTaxRate,
   iskTaxRateStdDev,
   inflationRate,
@@ -233,7 +234,9 @@ const expectedTotalWithdrawalRate = computed(() => {
   const growthFactor = Math.pow(1 + netGrowth, n)
   const profitComponent = (p * (growthFactor - 1)) / (n * growthFactor)
 
-  return balanceComponent + profitComponent
+  const inflationComponent = inflationBasedWithdrawal.value / initialCapital.value
+
+  return balanceComponent + profitComponent + inflationComponent
 })
 </script>
 
@@ -277,20 +280,27 @@ const expectedTotalWithdrawalRate = computed(() => {
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
+                  <small class="form-text text-muted">
+                    Belopp baserat på kapitalets värde.
+                  </small>
                 </div>
               </div>
               <div class="col-12 col-md-6">
-                <label class="form-label">Förväntad total uttagsgrad</label>
+                <label class="form-label">Inflationsbaserat uttag</label>
                 <div class="input-group">
                   <input
-                    type="text"
+                    type="number"
+                    step="1000"
                     class="form-control text-end"
-                    :value="(expectedTotalWithdrawalRate * 100).toFixed(1)"
-                    readonly
-                    disabled
+                    v-model.number="inflationBasedWithdrawal"
+                    :disabled="isRunning"
                   />
-                  <span class="input-group-text">%</span>
+                  <span class="input-group-text">kr</span>
                 </div>
+                <small class="form-text text-muted">
+                  Fast belopp som ökas med inflation varje år.
+                  Kan användas t.ex. för nödvändiga kostnader.
+                </small>
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label">Vinstbaserad uttagsgrad</label>
@@ -305,6 +315,9 @@ const expectedTotalWithdrawalRate = computed(() => {
                   />
                   <span class="input-group-text">%</span>
                 </div>
+                <small class="form-text text-muted">
+                  Belopp baserat på medel av de senaste årens vinst.
+                </small>
               </div>
               <div class="col-12 col-md-6">
                 <label class="form-label">Lookback-period (vinst)</label>
@@ -319,6 +332,22 @@ const expectedTotalWithdrawalRate = computed(() => {
                   />
                   <span class="input-group-text">år</span>
                 </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Total uttagsgrad</label>
+                <div class="input-group">
+                  <input
+                    type="text"
+                    class="form-control text-end"
+                    :value="(expectedTotalWithdrawalRate * 100).toFixed(1)"
+                    readonly
+                    disabled
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+                <small class="form-text text-muted">
+                  Första åren.
+                </small>
               </div>
             </div>
           </div>

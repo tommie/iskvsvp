@@ -147,6 +147,7 @@ export function encodeParamsToUrl(
     query.bwr = firstScenario.balanceWithdrawalRate.toString()
     query.pwr = firstScenario.profitWithdrawalRate.toString()
     query.ply = firstScenario.profitLookbackYears.toString()
+    query.ibw = firstScenario.inflationBasedWithdrawal.toString()
     query.cgt = firstScenario.capitalGainsTax.toString()
   }
 
@@ -266,6 +267,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   const bwr = parseNum('bwr')
   const pwr = parseNum('pwr')
   const ply = parseNum('ply')
+  const ibw = parseNum('ibw')
   const cgt = parseNum('cgt')
   const itr = parseNum('itr')
   const its = parseNum('its')
@@ -278,6 +280,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
         balanceWithdrawalRate: bwr ?? 0.015,
         profitWithdrawalRate: pwr ?? 0.15,
         profitLookbackYears: ply ?? 5,
+        inflationBasedWithdrawal: ibw ?? 0,
         capitalGainsTax: cgt ?? 0.3,
         iskTaxRate: itr ?? 0.0296,
         iskTaxRateStdDev: its ?? 0.005,
@@ -288,6 +291,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
         balanceWithdrawalRate: bwr ?? 0.015,
         profitWithdrawalRate: pwr ?? 0.15,
         profitLookbackYears: ply ?? 5,
+        inflationBasedWithdrawal: ibw ?? 0,
         capitalGainsTax: cgt ?? 0.3,
         isISK: false,
       },

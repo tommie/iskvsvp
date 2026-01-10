@@ -34,6 +34,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const balanceWithdrawalRate = ref(0.015)
   const profitWithdrawalRate = ref(0.15)
   const profitLookbackYears = ref(5)
+  const inflationBasedWithdrawal = ref(0)
   const iskTaxRate = ref(0.0296)
   const iskTaxRateStdDev = ref(0.005)
   const inflationRate = ref(0.02)
@@ -70,6 +71,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         balanceWithdrawalRate: balanceWithdrawalRate.value,
         profitWithdrawalRate: profitWithdrawalRate.value,
         profitLookbackYears: profitLookbackYears.value,
+        inflationBasedWithdrawal: inflationBasedWithdrawal.value,
         capitalGainsTax: capitalGainsTax.value,
         iskTaxRate: iskTaxRate.value,
         iskTaxRateStdDev: iskTaxRateStdDev.value,
@@ -80,6 +82,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         balanceWithdrawalRate: balanceWithdrawalRate.value,
         profitWithdrawalRate: profitWithdrawalRate.value,
         profitLookbackYears: profitLookbackYears.value,
+        inflationBasedWithdrawal: inflationBasedWithdrawal.value,
         capitalGainsTax: capitalGainsTax.value,
         isISK: false,
       },
@@ -336,6 +339,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     balanceWithdrawalRate.value = firstScenario.balanceWithdrawalRate
     profitWithdrawalRate.value = firstScenario.profitWithdrawalRate
     profitLookbackYears.value = firstScenario.profitLookbackYears
+    inflationBasedWithdrawal.value = firstScenario.inflationBasedWithdrawal
     capitalGainsTax.value = firstScenario.capitalGainsTax
 
     const iskScenario = params.scenarios.find((s) => s.isISK)!
@@ -381,6 +385,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
                 balanceWithdrawalRate.value = firstScenario.balanceWithdrawalRate
                 profitWithdrawalRate.value = firstScenario.profitWithdrawalRate
                 profitLookbackYears.value = firstScenario.profitLookbackYears
+                inflationBasedWithdrawal.value = firstScenario.inflationBasedWithdrawal
                 capitalGainsTax.value = firstScenario.capitalGainsTax
               }
 
@@ -421,6 +426,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     balanceWithdrawalRate,
     profitWithdrawalRate,
     profitLookbackYears,
+    inflationBasedWithdrawal,
     iskTaxRate,
     iskTaxRateStdDev,
     inflationRate,
