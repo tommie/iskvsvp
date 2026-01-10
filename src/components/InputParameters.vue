@@ -537,48 +537,6 @@ const expectedTotalWithdrawalRate = computed(() => {
               <small class="form-text text-muted"> Korrelationer mellan -1 och 1. </small>
             </div>
           </div>
-
-          <!-- Time Period and Simulation Settings -->
-          <div class="param-section">
-            <h5 class="section-title">Simulering</h5>
-            <div class="row g-3">
-              <div class="col-12 col-md-6">
-                <label class="form-label">Startår (ålder)</label>
-                <input
-                  type="number"
-                  class="form-control text-end"
-                  v-model.number="startYear"
-                  :disabled="isRunning"
-                />
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label">Antal år</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    class="form-control text-end"
-                    v-model.number="yearsLater"
-                    min="1"
-                    max="100"
-                    :disabled="isRunning"
-                  />
-                  <span class="input-group-text">år</span>
-                </div>
-              </div>
-              <div class="col-12">
-                <label class="form-label">Antal simuleringar</label>
-                <input
-                  type="number"
-                  class="form-control text-end"
-                  v-model.number="simulationCount"
-                  min="100"
-                  max="100000"
-                  step="100"
-                  :disabled="isRunning"
-                />
-              </div>
-            </div>
-          </div>
         </div>
 
         <div class="params-column">
@@ -684,6 +642,48 @@ const expectedTotalWithdrawalRate = computed(() => {
               </div>
             </div>
           </div>
+
+          <!-- Time Period and Simulation Settings -->
+          <div class="param-section">
+            <h5 class="section-title">Simulering</h5>
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Startår (ålder)</label>
+                <input
+                  type="number"
+                  class="form-control text-end"
+                  v-model.number="startYear"
+                  :disabled="isRunning"
+                />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Antal år</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    class="form-control text-end"
+                    v-model.number="yearsLater"
+                    min="1"
+                    max="100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">år</span>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Antal simuleringar</label>
+                <input
+                  type="number"
+                  class="form-control text-end"
+                  v-model.number="simulationCount"
+                  min="100"
+                  max="100000"
+                  step="100"
+                  :disabled="isRunning"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -759,10 +759,12 @@ const expectedTotalWithdrawalRate = computed(() => {
 .section-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #495057;
   margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid #e9ecef;
+  padding: 0.5rem;
+  background-color: var(--bs-primary-bg-subtle);
+  border-bottom: 2px solid var(--bs-primary);
+  border-top-left-radius: 0.5rem;
+  border-top-right-radius: 0.5rem;
 }
 
 .portfolio-table {
