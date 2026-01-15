@@ -2,25 +2,156 @@
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
-import type { ScenarioSummary, Summary } from '../types'
 
 const store = useCalculatorStore()
-const { statistics, showDetailedStatistics, yearsLater } = storeToRefs(store)
+const { simulationResults, showDetailedStatistics, yearsLater } = storeToRefs(store)
 
-// Get scenario names dynamically
-const scenarioNames = computed(() => {
-  if (!statistics.value?.median?.scenarios) return []
-  return Object.keys(statistics.value.median.scenarios)
+const labels = computed(() => simulationResults.value?.labels ?? [])
+const statistics = computed(() => simulationResults.value?.statistics ?? [])
+const finalPeriod = computed(() => {
+  if (statistics.value.length === 0) return 0
+  return statistics.value[0]!.median.snapshots.liquidValue.length - 1
 })
 
-// Helper to get scenario value from a Summary
-const getScenario = (
-  summary: Summary | undefined,
-  scenarioName: string,
-  key: keyof ScenarioSummary,
+const COLORS = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
+
+// Helper to get a value from statistics for a specific scenario and percentile
+const getValue = (
+  scenarioIdx: number,
+  statKey:
+    | 'mean'
+    | 'stdDev'
+    | 'percentile5'
+    | 'percentile25'
+    | 'median'
+    | 'percentile75'
+    | 'percentile95',
+  field:
+    | 'liquidValue'
+    | 'totalValue'
+    | 'tax'
+    | 'taxationDegree'
+    | 'withdrawalReal'
+    | 'withdrawalRealSnapshot'
+    | 'withdrawal'
+    | 'maxDrawdown'
+    | 'maxDrawdownPeriod'
+    | 'iskTaxRate',
+  periodIdx?: number,
 ): number => {
-  if (!summary?.scenarios?.[scenarioName]) return 0
-  return summary.scenarios[scenarioName]![key] ?? 0
+  if (!statistics.value[scenarioIdx]) return 0
+  const stat = statistics.value[scenarioIdx]![statKey]
+  const period = periodIdx ?? finalPeriod.value
+
+  switch (field) {
+    case 'liquidValue':
+      return stat.snapshots.liquidValue[period] ?? 0
+    case 'totalValue':
+      return stat.snapshots.totalValue[period] ?? 0
+    case 'tax':
+      return stat.snapshots.tax[period] ?? 0
+    case 'taxationDegree':
+      return stat.snapshots.taxationDegree[period] ?? 0
+    case 'withdrawalReal':
+      return stat.periodData.withdrawalReal[period] ?? 0
+    case 'withdrawalRealSnapshot':
+      return stat.snapshots.withdrawalReal[period] ?? 0
+    case 'withdrawal':
+      return stat.snapshots.withdrawal[period] ?? 0
+    case 'maxDrawdown':
+      return stat.snapshots.maxDrawdown[period] ?? 0
+    case 'maxDrawdownPeriod':
+      return stat.snapshots.maxDrawdownPeriod[period] ?? 0
+    case 'iskTaxRate':
+      return stat.periodData.iskTaxRate[period] ?? 0
+    default:
+      return 0
+  }
+}
+
+// Average values across periods
+const getAverageInflation = (
+  scenarioIdx: number,
+  statKey:
+    | 'mean'
+    | 'stdDev'
+    | 'percentile5'
+    | 'percentile25'
+    | 'median'
+    | 'percentile75'
+    | 'percentile95',
+): number => {
+  if (!statistics.value[scenarioIdx]) return 0
+  const rates = statistics.value[scenarioIdx]![statKey].periodData.inflationRate
+  return rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : 0
+}
+
+const getAverageDevelopment = (
+  scenarioIdx: number,
+  statKey:
+    | 'mean'
+    | 'stdDev'
+    | 'percentile5'
+    | 'percentile25'
+    | 'median'
+    | 'percentile75'
+    | 'percentile95',
+): number => {
+  if (!statistics.value[scenarioIdx]) return 0
+  const assetReturns = statistics.value[scenarioIdx]![statKey].periodData.assetReturnRates
+  if (assetReturns.length === 0) return 0
+  return (
+    assetReturns.reduce((sum, periodReturns) => {
+      const periodAvg = periodReturns.reduce((a, b) => a + b, 0) / periodReturns.length
+      return sum + periodAvg
+    }, 0) / assetReturns.length
+  )
+}
+
+const getAverageIskTaxRate = (
+  scenarioIdx: number,
+  statKey:
+    | 'mean'
+    | 'stdDev'
+    | 'percentile5'
+    | 'percentile25'
+    | 'median'
+    | 'percentile75'
+    | 'percentile95',
+): number => {
+  if (!statistics.value[scenarioIdx]) return 0
+  const rates = statistics.value[scenarioIdx]![statKey].periodData.iskTaxRate
+  return rates.length > 0 ? rates.reduce((a, b) => a + b, 0) / rates.length : 0
+}
+
+// Helper to determine best scenario for highlighting
+const getBestScenario = (
+  statKey: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+  field:
+    | 'liquidValue'
+    | 'totalValue'
+    | 'tax'
+    | 'taxationDegree'
+    | 'withdrawalReal'
+    | 'withdrawalRealSnapshot'
+    | 'maxDrawdown'
+    | 'maxDrawdownPeriod',
+  higherIsBetter: boolean,
+): number | null => {
+  if (labels.value.length === 0) return null
+
+  let bestIdx = 0
+  let bestValue = getValue(0, statKey, field)
+
+  for (let i = 1; i < labels.value.length; i++) {
+    const value = getValue(i, statKey, field)
+    if (higherIsBetter ? value > bestValue : value < bestValue) {
+      bestIdx = i
+      bestValue = value
+    }
+  }
+
+  return bestIdx
 }
 
 const formatNumber = (value: number | undefined): string => {
@@ -58,47 +189,30 @@ const formatPercent = (value: number | undefined): string => {
   }).format(rounded)
 }
 
-// Helper to determine which scenario is best for a given metric
-// Returns scenario name or null if tie/no clear winner
-const getBestScenario = (
-  summary: Summary | undefined,
-  field: keyof ScenarioSummary,
+// Helper to get cell style based on whether this scenario is the best
+const getCellStyle = (
+  statKey: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+  scenarioIdx: number,
+  field:
+    | 'liquidValue'
+    | 'totalValue'
+    | 'tax'
+    | 'taxationDegree'
+    | 'withdrawalReal'
+    | 'withdrawalRealSnapshot'
+    | 'maxDrawdown'
+    | 'maxDrawdownPeriod',
   higherIsBetter: boolean,
-): string | null => {
-  if (!summary?.scenarios) return null
+) => {
+  const best = getBestScenario(statKey, field, higherIsBetter)
+  if (best === null || best !== scenarioIdx) return {}
 
-  const values = Object.entries(summary.scenarios).map(([name, data]) => ({
-    name,
-    value: data[field] ?? 0,
-  }))
-
-  if (values.length === 0) return null
-
-  const sorted = values.sort((a, b) => (higherIsBetter ? b.value - a.value : a.value - b.value))
-
-  // Check if there's a clear winner (not a tie)
-  if (sorted.length > 1 && Math.abs(sorted[0]!.value - sorted[1]!.value) < 0.0001) {
-    return null // Tie
-  }
-
-  return sorted[0]!.name
+  // Use color from palette with opacity for subtle effect
+  const color = COLORS[scenarioIdx % COLORS.length]!
+  return { backgroundColor: color + '33' } // Add 20% opacity (33 in hex)
 }
 
-// Helper to get cell class based on whether this scenario is the best
-const getCellClass = (
-  summary: Summary | undefined,
-  scenarioName: string,
-  field: keyof ScenarioSummary,
-  higherIsBetter: boolean,
-): string => {
-  const best = getBestScenario(summary, field, higherIsBetter)
-  if (!best || best !== scenarioName) return ''
-
-  // Color based on scenario name
-  return scenarioName === 'ISK' ? 'bg-primary-subtle' : 'bg-warning-subtle'
-}
-
-const hasResults = computed(() => statistics.value !== null)
+const hasResults = computed(() => statistics.value.length > 0)
 </script>
 
 <template>
@@ -126,783 +240,351 @@ const hasResults = computed(() => statistics.value !== null)
           </tr>
         </thead>
         <tbody>
-          <!-- Total Value (Liquidation + Withdrawals) -->
-          <template
-            v-for="(scenarioName, index) in scenarioNames"
-            :key="`totalValue-${scenarioName}`"
-          >
+          <!-- Total Value -->
+          <template v-for="(label, idx) in labels" :key="`totalValue-${idx}`">
             <tr>
-              <th
-                v-if="index === 0"
-                :rowspan="scenarioNames.length"
-                class="align-middle"
-                scope="row"
-              >
+              <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                 Totalt värde
               </th>
-              <th scope="row">{{ scenarioName }}</th>
-              <td :class="getCellClass(statistics?.percentile5, scenarioName, 'totalValue', true)">
-                {{ formatNumber(getScenario(statistics?.percentile5, scenarioName, 'totalValue')) }}
+              <th scope="row">{{ label }}</th>
+              <td :style="getCellStyle('percentile5', idx, 'totalValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile5', 'totalValue')) }}
               </td>
-              <td :class="getCellClass(statistics?.percentile25, scenarioName, 'totalValue', true)">
-                {{
-                  formatNumber(getScenario(statistics?.percentile25, scenarioName, 'totalValue'))
-                }}
+              <td :style="getCellStyle('percentile25', idx, 'totalValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile25', 'totalValue')) }}
               </td>
-              <td :class="getCellClass(statistics?.median, scenarioName, 'totalValue', true)">
-                {{ formatNumber(getScenario(statistics?.median, scenarioName, 'totalValue')) }}
+              <td :style="getCellStyle('median', idx, 'totalValue', true)">
+                {{ formatNumber(getValue(idx, 'median', 'totalValue')) }}
               </td>
-              <td :class="getCellClass(statistics?.percentile75, scenarioName, 'totalValue', true)">
-                {{
-                  formatNumber(getScenario(statistics?.percentile75, scenarioName, 'totalValue'))
-                }}
+              <td :style="getCellStyle('percentile75', idx, 'totalValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile75', 'totalValue')) }}
               </td>
-              <td :class="getCellClass(statistics?.percentile95, scenarioName, 'totalValue', true)">
-                {{
-                  formatNumber(getScenario(statistics?.percentile95, scenarioName, 'totalValue'))
-                }}
+              <td :style="getCellStyle('percentile95', idx, 'totalValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile95', 'totalValue')) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="getCellClass(statistics?.mean, scenarioName, 'totalValue', true)"
-              >
-                {{ formatNumber(getScenario(statistics?.mean, scenarioName, 'totalValue')) }}
+              <td v-if="showDetailedStatistics">
+                {{ formatNumber(getValue(idx, 'mean', 'totalValue')) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="getCellClass(statistics?.stdDev, scenarioName, 'totalValue', true)"
-              >
-                {{ formatNumber(getScenario(statistics?.stdDev, scenarioName, 'totalValue')) }}
+              <td v-if="showDetailedStatistics">
+                {{ formatNumber(getValue(idx, 'stdDev', 'totalValue')) }}
               </td>
             </tr>
           </template>
 
           <!-- Liquid Value -->
-          <template
-            v-for="(scenarioName, index) in scenarioNames"
-            :key="`liquidValue-${scenarioName}`"
-          >
+          <template v-for="(label, idx) in labels" :key="`liquidValue-${idx}`">
             <tr>
-              <th
-                v-if="index === 0"
-                :rowspan="scenarioNames.length"
-                class="align-middle"
-                scope="row"
-              >
+              <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                 Likvidvärde
               </th>
-              <th scope="row">{{ scenarioName }}</th>
-              <td :class="getCellClass(statistics?.percentile5, scenarioName, 'liquidValue', true)">
-                {{
-                  formatNumber(getScenario(statistics?.percentile5, scenarioName, 'liquidValue'))
-                }}
+              <th scope="row">{{ label }}</th>
+              <td :style="getCellStyle('percentile5', idx, 'liquidValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile5', 'liquidValue')) }}
               </td>
-              <td
-                :class="getCellClass(statistics?.percentile25, scenarioName, 'liquidValue', true)"
-              >
-                {{
-                  formatNumber(getScenario(statistics?.percentile25, scenarioName, 'liquidValue'))
-                }}
+              <td :style="getCellStyle('percentile25', idx, 'liquidValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile25', 'liquidValue')) }}
               </td>
-              <td :class="getCellClass(statistics?.median, scenarioName, 'liquidValue', true)">
-                {{ formatNumber(getScenario(statistics?.median, scenarioName, 'liquidValue')) }}
+              <td :style="getCellStyle('median', idx, 'liquidValue', true)">
+                {{ formatNumber(getValue(idx, 'median', 'liquidValue')) }}
               </td>
-              <td
-                :class="getCellClass(statistics?.percentile75, scenarioName, 'liquidValue', true)"
-              >
-                {{
-                  formatNumber(getScenario(statistics?.percentile75, scenarioName, 'liquidValue'))
-                }}
+              <td :style="getCellStyle('percentile75', idx, 'liquidValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile75', 'liquidValue')) }}
               </td>
-              <td
-                :class="getCellClass(statistics?.percentile95, scenarioName, 'liquidValue', true)"
-              >
-                {{
-                  formatNumber(getScenario(statistics?.percentile95, scenarioName, 'liquidValue'))
-                }}
+              <td :style="getCellStyle('percentile95', idx, 'liquidValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile95', 'liquidValue')) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="getCellClass(statistics?.mean, scenarioName, 'liquidValue', true)"
-              >
-                {{ formatNumber(getScenario(statistics?.mean, scenarioName, 'liquidValue')) }}
+              <td v-if="showDetailedStatistics">
+                {{ formatNumber(getValue(idx, 'mean', 'liquidValue')) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="getCellClass(statistics?.stdDev, scenarioName, 'liquidValue', true)"
-              >
-                {{ formatNumber(getScenario(statistics?.stdDev, scenarioName, 'liquidValue')) }}
+              <td v-if="showDetailedStatistics">
+                {{ formatNumber(getValue(idx, 'stdDev', 'liquidValue')) }}
               </td>
             </tr>
           </template>
 
           <!-- First Year Withdrawal -->
-          <template
-            v-for="(scenarioName, index) in scenarioNames"
-            :key="`firstYearWithdrawal-${scenarioName}`"
-          >
+          <template v-for="(label, idx) in labels" :key="`firstYearWithdrawal-${idx}`">
             <tr>
-              <th
-                v-if="index === 0"
-                :rowspan="scenarioNames.length"
-                class="align-middle"
-                scope="row"
-              >
+              <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                 Uttag reellt (första året)
               </th>
-              <th scope="row">{{ scenarioName }}</th>
-              <td
-                :class="
-                  getCellClass(statistics?.percentile5, scenarioName, 'firstYearWithdrawal', true)
-                "
-              >
-                {{
-                  formatNumber(
-                    getScenario(statistics?.percentile5, scenarioName, 'firstYearWithdrawal'),
-                  )
-                }}
+              <th scope="row">{{ label }}</th>
+              <td :style="getCellStyle('percentile5', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'percentile5', 'withdrawalReal', 0)) }}
               </td>
-              <td
-                :class="
-                  getCellClass(statistics?.percentile25, scenarioName, 'firstYearWithdrawal', true)
-                "
-              >
-                {{
-                  formatNumber(
-                    getScenario(statistics?.percentile25, scenarioName, 'firstYearWithdrawal'),
-                  )
-                }}
+              <td :style="getCellStyle('percentile25', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'percentile25', 'withdrawalReal', 0)) }}
               </td>
-              <td
-                :class="getCellClass(statistics?.median, scenarioName, 'firstYearWithdrawal', true)"
-              >
-                {{
-                  formatNumber(getScenario(statistics?.median, scenarioName, 'firstYearWithdrawal'))
-                }}
+              <td :style="getCellStyle('median', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'median', 'withdrawalReal', 0)) }}
               </td>
-              <td
-                :class="
-                  getCellClass(statistics?.percentile75, scenarioName, 'firstYearWithdrawal', true)
-                "
-              >
-                {{
-                  formatNumber(
-                    getScenario(statistics?.percentile75, scenarioName, 'firstYearWithdrawal'),
-                  )
-                }}
+              <td :style="getCellStyle('percentile75', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'percentile75', 'withdrawalReal', 0)) }}
               </td>
-              <td
-                :class="
-                  getCellClass(statistics?.percentile95, scenarioName, 'firstYearWithdrawal', true)
-                "
-              >
-                {{
-                  formatNumber(
-                    getScenario(statistics?.percentile95, scenarioName, 'firstYearWithdrawal'),
-                  )
-                }}
+              <td :style="getCellStyle('percentile95', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'percentile95', 'withdrawalReal', 0)) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="getCellClass(statistics?.mean, scenarioName, 'firstYearWithdrawal', true)"
-              >
-                {{
-                  formatNumber(getScenario(statistics?.mean, scenarioName, 'firstYearWithdrawal'))
-                }}
+              <td v-if="showDetailedStatistics">
+                {{ formatNumber(getValue(idx, 'mean', 'withdrawalReal', 0)) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="getCellClass(statistics?.stdDev, scenarioName, 'firstYearWithdrawal', true)"
-              >
-                {{
-                  formatNumber(getScenario(statistics?.stdDev, scenarioName, 'firstYearWithdrawal'))
-                }}
+              <td v-if="showDetailedStatistics">
+                {{ formatNumber(getValue(idx, 'stdDev', 'withdrawalReal', 0)) }}
               </td>
             </tr>
           </template>
 
           <!-- Real Withdrawal Last Year -->
-          <template
-            v-for="(scenarioName, index) in scenarioNames"
-            :key="`realWithdrawal-${scenarioName}`"
-          >
+          <template v-for="(label, idx) in labels" :key="`realWithdrawal-${idx}`">
             <tr>
-              <th
-                v-if="index === 0"
-                :rowspan="scenarioNames.length"
-                class="align-middle"
-                scope="row"
-              >
+              <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                 Uttag reellt (sista året)
               </th>
-              <th scope="row">{{ scenarioName }}</th>
-              <td
-                :class="getCellClass(statistics?.percentile5, scenarioName, 'realWithdrawal', true)"
-              >
-                {{
-                  formatNumber(getScenario(statistics?.percentile5, scenarioName, 'realWithdrawal'))
-                }}
+              <th scope="row">{{ label }}</th>
+              <td :style="getCellStyle('percentile5', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'percentile5', 'withdrawalReal')) }}
               </td>
-              <td
-                :class="
-                  getCellClass(statistics?.percentile25, scenarioName, 'realWithdrawal', true)
-                "
-              >
-                {{
-                  formatNumber(
-                    getScenario(statistics?.percentile25, scenarioName, 'realWithdrawal'),
-                  )
-                }}
+              <td :style="getCellStyle('percentile25', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'percentile25', 'withdrawalReal')) }}
               </td>
-              <td :class="getCellClass(statistics?.median, scenarioName, 'realWithdrawal', true)">
-                {{ formatNumber(getScenario(statistics?.median, scenarioName, 'realWithdrawal')) }}
+              <td :style="getCellStyle('median', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'median', 'withdrawalReal')) }}
               </td>
-              <td
-                :class="
-                  getCellClass(statistics?.percentile75, scenarioName, 'realWithdrawal', true)
-                "
-              >
-                {{
-                  formatNumber(
-                    getScenario(statistics?.percentile75, scenarioName, 'realWithdrawal'),
-                  )
-                }}
+              <td :style="getCellStyle('percentile75', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'percentile75', 'withdrawalReal')) }}
               </td>
-              <td
-                :class="
-                  getCellClass(statistics?.percentile95, scenarioName, 'realWithdrawal', true)
-                "
-              >
-                {{
-                  formatNumber(
-                    getScenario(statistics?.percentile95, scenarioName, 'realWithdrawal'),
-                  )
-                }}
+              <td :style="getCellStyle('percentile95', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'percentile95', 'withdrawalReal')) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="getCellClass(statistics?.mean, scenarioName, 'realWithdrawal', true)"
-              >
-                {{ formatNumber(getScenario(statistics?.mean, scenarioName, 'realWithdrawal')) }}
+              <td v-if="showDetailedStatistics">
+                {{ formatNumber(getValue(idx, 'mean', 'withdrawalReal')) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="getCellClass(statistics?.stdDev, scenarioName, 'realWithdrawal', true)"
-              >
-                {{ formatNumber(getScenario(statistics?.stdDev, scenarioName, 'realWithdrawal')) }}
+              <td v-if="showDetailedStatistics">
+                {{ formatNumber(getValue(idx, 'stdDev', 'withdrawalReal')) }}
               </td>
             </tr>
           </template>
 
           <!-- Average Annual Real Withdrawal -->
-          <template
-            v-for="(scenarioName, index) in scenarioNames"
-            :key="`avgWithdrawal-${scenarioName}`"
-          >
+          <template v-for="(label, idx) in labels" :key="`avgWithdrawal-${idx}`">
             <tr>
-              <th
-                v-if="index === 0"
-                :rowspan="scenarioNames.length"
-                class="align-middle"
-                scope="row"
-              >
+              <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                 Genomsnittligt uttag reellt per år
               </th>
-              <th scope="row">{{ scenarioName }}</th>
-              <td
-                :class="
-                  getCellClass(
-                    statistics?.percentile5,
-                    scenarioName,
-                    'accumulatedRealWithdrawal',
-                    true,
-                  )
-                "
-              >
+              <th scope="row">{{ label }}</th>
+              <td :style="getCellStyle('percentile5', idx, 'withdrawalRealSnapshot', true)">
                 {{
-                  formatNumber(
-                    getScenario(
-                      statistics?.percentile5,
-                      scenarioName,
-                      'accumulatedRealWithdrawal',
-                    ) / yearsLater,
-                  )
+                  formatNumber(getValue(idx, 'percentile5', 'withdrawalRealSnapshot') / yearsLater)
                 }}
               </td>
-              <td
-                :class="
-                  getCellClass(
-                    statistics?.percentile25,
-                    scenarioName,
-                    'accumulatedRealWithdrawal',
-                    true,
-                  )
-                "
-              >
+              <td :style="getCellStyle('percentile25', idx, 'withdrawalRealSnapshot', true)">
                 {{
-                  formatNumber(
-                    getScenario(
-                      statistics?.percentile25,
-                      scenarioName,
-                      'accumulatedRealWithdrawal',
-                    ) / yearsLater,
-                  )
+                  formatNumber(getValue(idx, 'percentile25', 'withdrawalRealSnapshot') / yearsLater)
                 }}
               </td>
-              <td
-                :class="
-                  getCellClass(statistics?.median, scenarioName, 'accumulatedRealWithdrawal', true)
-                "
-              >
+              <td :style="getCellStyle('median', idx, 'withdrawalRealSnapshot', true)">
+                {{ formatNumber(getValue(idx, 'median', 'withdrawalRealSnapshot') / yearsLater) }}
+              </td>
+              <td :style="getCellStyle('percentile75', idx, 'withdrawalRealSnapshot', true)">
                 {{
-                  formatNumber(
-                    getScenario(statistics?.median, scenarioName, 'accumulatedRealWithdrawal') /
-                      yearsLater,
-                  )
+                  formatNumber(getValue(idx, 'percentile75', 'withdrawalRealSnapshot') / yearsLater)
                 }}
               </td>
-              <td
-                :class="
-                  getCellClass(
-                    statistics?.percentile75,
-                    scenarioName,
-                    'accumulatedRealWithdrawal',
-                    true,
-                  )
-                "
-              >
+              <td :style="getCellStyle('percentile95', idx, 'withdrawalRealSnapshot', true)">
                 {{
-                  formatNumber(
-                    getScenario(
-                      statistics?.percentile75,
-                      scenarioName,
-                      'accumulatedRealWithdrawal',
-                    ) / yearsLater,
-                  )
+                  formatNumber(getValue(idx, 'percentile95', 'withdrawalRealSnapshot') / yearsLater)
                 }}
               </td>
-              <td
-                :class="
-                  getCellClass(
-                    statistics?.percentile95,
-                    scenarioName,
-                    'accumulatedRealWithdrawal',
-                    true,
-                  )
-                "
-              >
-                {{
-                  formatNumber(
-                    getScenario(
-                      statistics?.percentile95,
-                      scenarioName,
-                      'accumulatedRealWithdrawal',
-                    ) / yearsLater,
-                  )
-                }}
+              <td v-if="showDetailedStatistics">
+                {{ formatNumber(getValue(idx, 'mean', 'withdrawalRealSnapshot') / yearsLater) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="
-                  getCellClass(statistics?.mean, scenarioName, 'accumulatedRealWithdrawal', true)
-                "
-              >
-                {{
-                  formatNumber(
-                    getScenario(statistics?.mean, scenarioName, 'accumulatedRealWithdrawal') /
-                      yearsLater,
-                  )
-                }}
-              </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="
-                  getCellClass(statistics?.stdDev, scenarioName, 'accumulatedRealWithdrawal', true)
-                "
-              >
-                {{
-                  formatNumber(
-                    getScenario(statistics?.stdDev, scenarioName, 'accumulatedRealWithdrawal') /
-                      yearsLater,
-                  )
-                }}
+              <td v-if="showDetailedStatistics">
+                {{ formatNumber(getValue(idx, 'stdDev', 'withdrawalRealSnapshot') / yearsLater) }}
               </td>
             </tr>
           </template>
 
           <!-- Max Drawdown -->
-          <template
-            v-for="(scenarioName, index) in scenarioNames"
-            :key="`maxDrawdown-${scenarioName}`"
-          >
+          <template v-for="(label, idx) in labels" :key="`maxDrawdown-${idx}`">
             <tr>
-              <th
-                v-if="index === 0"
-                :rowspan="scenarioNames.length"
-                class="align-middle"
-                scope="row"
-              >
+              <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                 Maximalt drawdown
               </th>
-              <th scope="row">{{ scenarioName }}</th>
-              <td
-                :class="getCellClass(statistics?.percentile5, scenarioName, 'maxDrawdown', false)"
-              >
-                {{
-                  formatPercent(getScenario(statistics?.percentile5, scenarioName, 'maxDrawdown'))
-                }}
+              <th scope="row">{{ label }}</th>
+              <td :style="getCellStyle('percentile5', idx, 'maxDrawdown', false)">
+                {{ formatPercent(getValue(idx, 'percentile5', 'maxDrawdown')) }}
               </td>
-              <td
-                :class="getCellClass(statistics?.percentile25, scenarioName, 'maxDrawdown', false)"
-              >
-                {{
-                  formatPercent(getScenario(statistics?.percentile25, scenarioName, 'maxDrawdown'))
-                }}
+              <td :style="getCellStyle('percentile25', idx, 'maxDrawdown', false)">
+                {{ formatPercent(getValue(idx, 'percentile25', 'maxDrawdown')) }}
               </td>
-              <td :class="getCellClass(statistics?.median, scenarioName, 'maxDrawdown', false)">
-                {{ formatPercent(getScenario(statistics?.median, scenarioName, 'maxDrawdown')) }}
+              <td :style="getCellStyle('median', idx, 'maxDrawdown', false)">
+                {{ formatPercent(getValue(idx, 'median', 'maxDrawdown')) }}
               </td>
-              <td
-                :class="getCellClass(statistics?.percentile75, scenarioName, 'maxDrawdown', false)"
-              >
-                {{
-                  formatPercent(getScenario(statistics?.percentile75, scenarioName, 'maxDrawdown'))
-                }}
+              <td :style="getCellStyle('percentile75', idx, 'maxDrawdown', false)">
+                {{ formatPercent(getValue(idx, 'percentile75', 'maxDrawdown')) }}
               </td>
-              <td
-                :class="getCellClass(statistics?.percentile95, scenarioName, 'maxDrawdown', false)"
-              >
-                {{
-                  formatPercent(getScenario(statistics?.percentile95, scenarioName, 'maxDrawdown'))
-                }}
+              <td :style="getCellStyle('percentile95', idx, 'maxDrawdown', false)">
+                {{ formatPercent(getValue(idx, 'percentile95', 'maxDrawdown')) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="getCellClass(statistics?.mean, scenarioName, 'maxDrawdown', false)"
-              >
-                {{ formatPercent(getScenario(statistics?.mean, scenarioName, 'maxDrawdown')) }}
+              <td v-if="showDetailedStatistics">
+                {{ formatPercent(getValue(idx, 'mean', 'maxDrawdown')) }}
               </td>
-              <td
-                v-if="showDetailedStatistics"
-                :class="getCellClass(statistics?.stdDev, scenarioName, 'maxDrawdown', false)"
-              >
-                {{ formatPercent(getScenario(statistics?.stdDev, scenarioName, 'maxDrawdown')) }}
+              <td v-if="showDetailedStatistics">
+                {{ formatPercent(getValue(idx, 'stdDev', 'maxDrawdown')) }}
               </td>
             </tr>
           </template>
 
           <template v-if="showDetailedStatistics">
             <!-- Max Drawdown Period -->
-            <template
-              v-for="(scenarioName, index) in scenarioNames"
-              :key="`maxDrawdownPeriod-${scenarioName}`"
-            >
+            <template v-for="(label, idx) in labels" :key="`maxDrawdownPeriod-${idx}`">
               <tr>
-                <th
-                  v-if="index === 0"
-                  :rowspan="scenarioNames.length"
-                  class="align-middle"
-                  scope="row"
-                >
+                <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                   Längsta drawdown-period
                 </th>
-                <th scope="row">{{ scenarioName }}</th>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile5, scenarioName, 'maxDrawdownPeriod', false)
-                  "
-                >
-                  {{
-                    formatNumber(
-                      getScenario(statistics?.percentile5, scenarioName, 'maxDrawdownPeriod'),
-                    )
-                  }}
-                  år
+                <th scope="row">{{ label }}</th>
+                <td :style="getCellStyle('percentile5', idx, 'maxDrawdownPeriod', false)">
+                  {{ formatNumber(getValue(idx, 'percentile5', 'maxDrawdownPeriod')) }} år
                 </td>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile25, scenarioName, 'maxDrawdownPeriod', false)
-                  "
-                >
-                  {{
-                    formatNumber(
-                      getScenario(statistics?.percentile25, scenarioName, 'maxDrawdownPeriod'),
-                    )
-                  }}
-                  år
+                <td :style="getCellStyle('percentile25', idx, 'maxDrawdownPeriod', false)">
+                  {{ formatNumber(getValue(idx, 'percentile25', 'maxDrawdownPeriod')) }} år
                 </td>
-                <td
-                  :class="
-                    getCellClass(statistics?.median, scenarioName, 'maxDrawdownPeriod', false)
-                  "
-                >
-                  {{
-                    formatNumber(getScenario(statistics?.median, scenarioName, 'maxDrawdownPeriod'))
-                  }}
-                  år
+                <td :style="getCellStyle('median', idx, 'maxDrawdownPeriod', false)">
+                  {{ formatNumber(getValue(idx, 'median', 'maxDrawdownPeriod')) }} år
                 </td>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile75, scenarioName, 'maxDrawdownPeriod', false)
-                  "
-                >
-                  {{
-                    formatNumber(
-                      getScenario(statistics?.percentile75, scenarioName, 'maxDrawdownPeriod'),
-                    )
-                  }}
-                  år
+                <td :style="getCellStyle('percentile75', idx, 'maxDrawdownPeriod', false)">
+                  {{ formatNumber(getValue(idx, 'percentile75', 'maxDrawdownPeriod')) }} år
                 </td>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile95, scenarioName, 'maxDrawdownPeriod', false)
-                  "
-                >
-                  {{
-                    formatNumber(
-                      getScenario(statistics?.percentile95, scenarioName, 'maxDrawdownPeriod'),
-                    )
-                  }}
-                  år
+                <td :style="getCellStyle('percentile95', idx, 'maxDrawdownPeriod', false)">
+                  {{ formatNumber(getValue(idx, 'percentile95', 'maxDrawdownPeriod')) }} år
                 </td>
-                <td
-                  v-if="showDetailedStatistics"
-                  :class="getCellClass(statistics?.mean, scenarioName, 'maxDrawdownPeriod', false)"
-                >
-                  {{
-                    formatNumber(getScenario(statistics?.mean, scenarioName, 'maxDrawdownPeriod'))
-                  }}
-                  år
+                <td v-if="showDetailedStatistics">
+                  {{ formatNumber(getValue(idx, 'mean', 'maxDrawdownPeriod')) }} år
                 </td>
-                <td
-                  v-if="showDetailedStatistics"
-                  :class="
-                    getCellClass(statistics?.stdDev, scenarioName, 'maxDrawdownPeriod', false)
-                  "
-                >
-                  {{
-                    formatNumber(getScenario(statistics?.stdDev, scenarioName, 'maxDrawdownPeriod'))
-                  }}
-                  år
+                <td v-if="showDetailedStatistics">
+                  {{ formatNumber(getValue(idx, 'stdDev', 'maxDrawdownPeriod')) }} år
                 </td>
               </tr>
             </template>
 
             <!-- Paid Tax -->
-            <template
-              v-for="(scenarioName, index) in scenarioNames"
-              :key="`paidTax-${scenarioName}`"
-            >
+            <template v-for="(label, idx) in labels" :key="`paidTax-${idx}`">
               <tr>
-                <th
-                  v-if="index === 0"
-                  :rowspan="scenarioNames.length"
-                  class="align-middle"
-                  scope="row"
-                >
+                <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                   Betald skatt
                 </th>
-                <th scope="row">{{ scenarioName }}</th>
-                <td :class="getCellClass(statistics?.percentile5, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.percentile5, scenarioName, 'paidTax')) }}
+                <th scope="row">{{ label }}</th>
+                <td :style="getCellStyle('percentile5', idx, 'tax', false)">
+                  {{ formatNumber(getValue(idx, 'percentile5', 'tax')) }}
                 </td>
-                <td :class="getCellClass(statistics?.percentile25, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.percentile25, scenarioName, 'paidTax')) }}
+                <td :style="getCellStyle('percentile25', idx, 'tax', false)">
+                  {{ formatNumber(getValue(idx, 'percentile25', 'tax')) }}
                 </td>
-                <td :class="getCellClass(statistics?.median, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.median, scenarioName, 'paidTax')) }}
+                <td :style="getCellStyle('median', idx, 'tax', false)">
+                  {{ formatNumber(getValue(idx, 'median', 'tax')) }}
                 </td>
-                <td :class="getCellClass(statistics?.percentile75, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.percentile75, scenarioName, 'paidTax')) }}
+                <td :style="getCellStyle('percentile75', idx, 'tax', false)">
+                  {{ formatNumber(getValue(idx, 'percentile75', 'tax')) }}
                 </td>
-                <td :class="getCellClass(statistics?.percentile95, scenarioName, 'paidTax', false)">
-                  {{ formatNumber(getScenario(statistics?.percentile95, scenarioName, 'paidTax')) }}
+                <td :style="getCellStyle('percentile95', idx, 'tax', false)">
+                  {{ formatNumber(getValue(idx, 'percentile95', 'tax')) }}
                 </td>
-                <td
-                  v-if="showDetailedStatistics"
-                  :class="getCellClass(statistics?.mean, scenarioName, 'paidTax', false)"
-                >
-                  {{ formatNumber(getScenario(statistics?.mean, scenarioName, 'paidTax')) }}
+                <td v-if="showDetailedStatistics">
+                  {{ formatNumber(getValue(idx, 'mean', 'tax')) }}
                 </td>
-                <td
-                  v-if="showDetailedStatistics"
-                  :class="getCellClass(statistics?.stdDev, scenarioName, 'paidTax', false)"
-                >
-                  {{ formatNumber(getScenario(statistics?.stdDev, scenarioName, 'paidTax')) }}
+                <td v-if="showDetailedStatistics">
+                  {{ formatNumber(getValue(idx, 'stdDev', 'tax')) }}
                 </td>
               </tr>
             </template>
 
             <!-- Taxation Degree -->
-            <template
-              v-for="(scenarioName, index) in scenarioNames"
-              :key="`taxationDegree-${scenarioName}`"
-            >
+            <template v-for="(label, idx) in labels" :key="`taxationDegree-${idx}`">
               <tr>
-                <th
-                  v-if="index === 0"
-                  :rowspan="scenarioNames.length"
-                  class="align-middle"
-                  scope="row"
-                >
+                <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                   Beskattningsgrad
                 </th>
-                <th scope="row">{{ scenarioName }}</th>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile5, scenarioName, 'taxationDegree', false)
-                  "
-                >
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile5, scenarioName, 'taxationDegree'),
-                    )
-                  }}
+                <th scope="row">{{ label }}</th>
+                <td :style="getCellStyle('percentile5', idx, 'taxationDegree', false)">
+                  {{ formatPercent(getValue(idx, 'percentile5', 'taxationDegree')) }}
                 </td>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile25, scenarioName, 'taxationDegree', false)
-                  "
-                >
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile25, scenarioName, 'taxationDegree'),
-                    )
-                  }}
+                <td :style="getCellStyle('percentile25', idx, 'taxationDegree', false)">
+                  {{ formatPercent(getValue(idx, 'percentile25', 'taxationDegree')) }}
                 </td>
-                <td
-                  :class="getCellClass(statistics?.median, scenarioName, 'taxationDegree', false)"
-                >
-                  {{
-                    formatPercent(getScenario(statistics?.median, scenarioName, 'taxationDegree'))
-                  }}
+                <td :style="getCellStyle('median', idx, 'taxationDegree', false)">
+                  {{ formatPercent(getValue(idx, 'median', 'taxationDegree')) }}
                 </td>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile75, scenarioName, 'taxationDegree', false)
-                  "
-                >
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile75, scenarioName, 'taxationDegree'),
-                    )
-                  }}
+                <td :style="getCellStyle('percentile75', idx, 'taxationDegree', false)">
+                  {{ formatPercent(getValue(idx, 'percentile75', 'taxationDegree')) }}
                 </td>
-                <td
-                  :class="
-                    getCellClass(statistics?.percentile95, scenarioName, 'taxationDegree', false)
-                  "
-                >
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile95, scenarioName, 'taxationDegree'),
-                    )
-                  }}
+                <td :style="getCellStyle('percentile95', idx, 'taxationDegree', false)">
+                  {{ formatPercent(getValue(idx, 'percentile95', 'taxationDegree')) }}
                 </td>
-                <td
-                  v-if="showDetailedStatistics"
-                  :class="getCellClass(statistics?.mean, scenarioName, 'taxationDegree', false)"
-                >
-                  {{ formatPercent(getScenario(statistics?.mean, scenarioName, 'taxationDegree')) }}
+                <td v-if="showDetailedStatistics">
+                  {{ formatPercent(getValue(idx, 'mean', 'taxationDegree')) }}
                 </td>
-                <td
-                  v-if="showDetailedStatistics"
-                  :class="getCellClass(statistics?.stdDev, scenarioName, 'taxationDegree', false)"
-                >
-                  {{
-                    formatPercent(getScenario(statistics?.stdDev, scenarioName, 'taxationDegree'))
-                  }}
+                <td v-if="showDetailedStatistics">
+                  {{ formatPercent(getValue(idx, 'stdDev', 'taxationDegree')) }}
                 </td>
               </tr>
             </template>
 
-            <!-- Annual Averages -->
-            <tr class="table-light">
-              <th scope="row">Avkastning</th>
-              <th scope="row"></th>
-              <td>{{ formatPercent(statistics?.percentile5.averageDevelopment) }}</td>
-              <td>{{ formatPercent(statistics?.percentile25.averageDevelopment) }}</td>
-              <td>{{ formatPercent(statistics?.median.averageDevelopment) }}</td>
-              <td>{{ formatPercent(statistics?.percentile75.averageDevelopment) }}</td>
-              <td>{{ formatPercent(statistics?.percentile95.averageDevelopment) }}</td>
-              <td v-if="showDetailedStatistics">
-                {{ formatPercent(statistics?.mean.averageDevelopment) }}
-              </td>
-              <td v-if="showDetailedStatistics">
-                {{ formatPercent(statistics?.stdDev.averageDevelopment) }}
-              </td>
-            </tr>
-            <tr class="table-light">
-              <th scope="row">Inflationstakt</th>
-              <th scope="row"></th>
-              <td>{{ formatPercent(statistics?.percentile5.averageInflationRate) }}</td>
-              <td>{{ formatPercent(statistics?.percentile25.averageInflationRate) }}</td>
-              <td>{{ formatPercent(statistics?.median.averageInflationRate) }}</td>
-              <td>{{ formatPercent(statistics?.percentile75.averageInflationRate) }}</td>
-              <td>{{ formatPercent(statistics?.percentile95.averageInflationRate) }}</td>
-              <td v-if="showDetailedStatistics">
-                {{ formatPercent(statistics?.mean.averageInflationRate) }}
-              </td>
-              <td v-if="showDetailedStatistics">
-                {{ formatPercent(statistics?.stdDev.averageInflationRate) }}
-              </td>
-            </tr>
-            <template
-              v-for="(scenarioName, index) in scenarioNames.filter(
-                (name) => getScenario(statistics?.percentile95, name, 'averageTaxRate') > 0,
-              )"
-              :key="`iskTax-${scenarioName}`"
-            >
+            <!-- Asset Return (per scenario) -->
+            <template v-for="(label, idx) in labels" :key="`assetReturn-${idx}`">
               <tr class="table-light">
-                <th
-                  v-if="index === 0"
-                  :rowspan="scenarioNames.length"
-                  class="align-middle"
-                  scope="row"
-                >
-                  ISK-skattesats
+                <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
+                  Avkastning
                 </th>
-                <th scope="row">{{ scenarioName }}</th>
-                <td>
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile5, scenarioName, 'averageTaxRate'),
-                    )
-                  }}
-                </td>
-                <td>
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile25, scenarioName, 'averageTaxRate'),
-                    )
-                  }}
-                </td>
-                <td>
-                  {{
-                    formatPercent(getScenario(statistics?.median, scenarioName, 'averageTaxRate'))
-                  }}
-                </td>
-                <td>
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile75, scenarioName, 'averageTaxRate'),
-                    )
-                  }}
-                </td>
-                <td>
-                  {{
-                    formatPercent(
-                      getScenario(statistics?.percentile95, scenarioName, 'averageTaxRate'),
-                    )
-                  }}
+                <th scope="row">{{ label }}</th>
+                <td>{{ formatPercent(getAverageDevelopment(idx, 'percentile5')) }}</td>
+                <td>{{ formatPercent(getAverageDevelopment(idx, 'percentile25')) }}</td>
+                <td>{{ formatPercent(getAverageDevelopment(idx, 'median')) }}</td>
+                <td>{{ formatPercent(getAverageDevelopment(idx, 'percentile75')) }}</td>
+                <td>{{ formatPercent(getAverageDevelopment(idx, 'percentile95')) }}</td>
+                <td v-if="showDetailedStatistics">
+                  {{ formatPercent(getAverageDevelopment(idx, 'mean')) }}
                 </td>
                 <td v-if="showDetailedStatistics">
-                  {{ formatPercent(getScenario(statistics?.mean, scenarioName, 'averageTaxRate')) }}
+                  {{ formatPercent(getAverageDevelopment(idx, 'stdDev')) }}
+                </td>
+              </tr>
+            </template>
+
+            <!-- Inflation Rate (per scenario) -->
+            <template v-for="(label, idx) in labels" :key="`inflation-${idx}`">
+              <tr class="table-light">
+                <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
+                  Inflationstakt
+                </th>
+                <th scope="row">{{ label }}</th>
+                <td>{{ formatPercent(getAverageInflation(idx, 'percentile5')) }}</td>
+                <td>{{ formatPercent(getAverageInflation(idx, 'percentile25')) }}</td>
+                <td>{{ formatPercent(getAverageInflation(idx, 'median')) }}</td>
+                <td>{{ formatPercent(getAverageInflation(idx, 'percentile75')) }}</td>
+                <td>{{ formatPercent(getAverageInflation(idx, 'percentile95')) }}</td>
+                <td v-if="showDetailedStatistics">
+                  {{ formatPercent(getAverageInflation(idx, 'mean')) }}
                 </td>
                 <td v-if="showDetailedStatistics">
-                  {{
-                    formatPercent(getScenario(statistics?.stdDev, scenarioName, 'averageTaxRate'))
-                  }}
+                  {{ formatPercent(getAverageInflation(idx, 'stdDev')) }}
+                </td>
+              </tr>
+            </template>
+
+            <!-- ISK Tax Rate (only for scenarios that have it) -->
+            <template v-for="(label, idx) in labels" :key="`iskTax-${idx}`">
+              <tr v-if="getAverageIskTaxRate(idx, 'percentile95') > 0" class="table-light">
+                <th scope="row">ISK-skattesats</th>
+                <th scope="row">{{ label }}</th>
+                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile5')) }}</td>
+                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile25')) }}</td>
+                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'median')) }}</td>
+                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile75')) }}</td>
+                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile95')) }}</td>
+                <td v-if="showDetailedStatistics">
+                  {{ formatPercent(getAverageIskTaxRate(idx, 'mean')) }}
+                </td>
+                <td v-if="showDetailedStatistics">
+                  {{ formatPercent(getAverageIskTaxRate(idx, 'stdDev')) }}
                 </td>
               </tr>
             </template>

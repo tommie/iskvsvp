@@ -1,5 +1,5 @@
-export interface PortfolioAsset {
-  name: string
+export interface SimulationAsset {
+  name: string // Display name for the asset
   weight: number // Weight in portfolio (should sum to 1.0 across all assets)
   expectedReturn: number // Mean annual return
   volatility: number // Standard deviation of returns
@@ -7,98 +7,88 @@ export interface PortfolioAsset {
 
 export type RebalanceFrequency = 'never' | 'annually'
 
-export interface Portfolio {
-  assets: PortfolioAsset[]
-  correlationMatrix: number[][] // Correlation matrix between assets (symmetric, diagonal = 1)
-  rebalanceFrequency: RebalanceFrequency // How often to rebalance portfolio
-}
-
-export interface ScenarioConfig {
-  name: string
-  balanceWithdrawalRate: number
-  profitWithdrawalRate: number
-  profitLookbackYears: number
-  inflationBasedWithdrawal: number // Fixed withdrawal amount adjusted by inflation each year
-  capitalGainsTax: number // Capital gains tax rate (used by both ISK and VP)
-  iskTaxRate?: number // ISK basis rate (only for ISK scenarios)
-  iskTaxRateStdDev?: number // ISK basis rate volatility (only for ISK scenarios)
-  isISK: boolean // Whether this scenario uses ISK tax model
-}
-
 export interface InputParameters {
+  seed: string // Random seed for reproducibility
+
   initialCapital: number
   startYear: number
   yearsLater: number
   simulationCount: number
-  portfolio: Portfolio
+
+  assets: SimulationAsset[]
+  assetCorrelationMatrix: number[][] // Correlation matrix between assets (symmetric, diagonal = 1)
+  assetRebalanceFrequency: RebalanceFrequency // How often to rebalance portfolio
+
+  balanceWithdrawalRate: number
+  profitWithdrawalRate: number
+  profitLookbackYears: number
+  inflationBasedWithdrawal: number // Fixed withdrawal amount adjusted by inflation each year
+
+  vpWealthTaxRate: number // VP wealth tax rate (e.g., 0.004 for 0.4%)
+  capitalGainsTaxRate: number // Capital gains tax rate (used by both ISK and VP)
+  iskTaxRate?: number // ISK basis rate (only for ISK scenarios)
+  iskTaxRateStdDev?: number // ISK basis rate volatility (only for ISK scenarios)
+
   inflationRate: number
   inflationStdDev: number
-  vpWealthTaxRate: number // VP wealth tax rate (e.g., 0.004 for 0.4%)
-  scenarios: ScenarioConfig[]
-  seed: string // Random seed for reproducibility
 }
 
-export interface ScenarioYearlyData {
-  amount: number
-  withdrawn: number
-  tax: number
-  paidTax: number
-  liquidValue: number
-  taxationDegree: number
-  withdrawnReal: number
-  withdrawalRate: number
-  taxRate: number // Current tax rate (for ISK varies, for VP constant)
-  development: number // Actual development this year for this scenario
-  inflationRate: number // Shared inflation rate (same across scenarios)
+export interface SimulationPeriodData<T = number> {
+  withdrawal: T
+  withdrawalReal: T
+  withdrawalRate: T
+  tax: T
+  taxationDegree: T
+  iskTaxRate: T
+  inflationRate: T
+
+  // assetReturnRates is special - it's always a 2D array (period x asset) for single simulations
+  // For statistics, we just leave it as an empty array since per-asset stats are complex
+  assetReturnRates: number[][]
 }
 
-export interface YearlyData {
-  year: number
-  development: number
-  inflationRate: number
-  inflation: number
-  scenarios: Record<string, ScenarioYearlyData>
+export interface SimulationSummary<T = number> extends SimulationPeriodData<T> {
+  capital: T
+  liquidValue: T
+  totalValue: T // liquidValue + accumulated nominal withdrawals
+  maxDrawdown: T
+  maxDrawdownPeriod: T
 }
 
-export interface ScenarioSummary {
-  liquidValue: number
-  firstYearLiquidValue: number
-  paidTax: number
-  taxationDegree: number
-  realWithdrawal: number
-  firstYearWithdrawal: number // Second year if profitWithdrawalRate > 0
-  accumulatedRealWithdrawal: number
-  accumulatedNominalWithdrawal: number
-  totalValue: number // liquidValue + accumulatedNominalWithdrawal
-  averageTaxRate: number
-  maxDrawdown: number
-  maxDrawdownPeriod: number
+export interface SimulationResult<T> {
+  // Per-period information
+  periodData: SimulationPeriodData<T[]>
+
+  // Cumulative information since simulation start, with one snapshot per period
+  snapshots: SimulationSummary<T[]>
 }
 
-export interface Summary {
-  scenarios: Record<string, ScenarioSummary>
-  averageInflationRate: number
-  averageDevelopment: number
+export interface SimulationStatistics<T> {
+  mean: T
+  stdDev: T
+  percentile5: T
+  percentile25: T
+  median: T
+  percentile75: T
+  percentile95: T
 }
 
-export interface SimulationResult {
-  summary: Summary
-  yearlyData: YearlyData[]
+export interface Histogram {
+  lowest: number
+  uppers: number[]
+  buckets: number[]
 }
 
-export interface SimulationStatistics {
-  mean: Summary
-  stdDev: Summary
-  percentile5: Summary
-  percentile25: Summary
-  median: Summary
-  percentile75: Summary
-  percentile95: Summary
-}
+export interface SimulationResults {
+  // Labels for each scenario (e.g., ["ISK", "VP"])
+  labels: string[]
 
-export interface TimeSeriesPoint {
-  simulationId: number
-  year: number
-  liquidValue: Record<string, number> // scenario name -> liquidValue
-  withdrawalsReal: Record<string, number>
+  // Histograms for each scenario and period
+  histograms: SimulationResult<number[]>[] // number[bucket]
+
+  // Statistics for each scenario and period
+  statistics: SimulationStatistics<SimulationResult<number>>[]
+
+  // A representative sample of the median for each scenario
+  medianSamples: SimulationResult<number>[]
 }

@@ -1,13 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { InputParameters, SimulationStatistics } from '../types'
+import type { InputParameters, SimulationResults } from '../types'
 
 export interface HistoryRecord {
   id: string
   timestamp: number
   title: string
   parameters: InputParameters
-  statistics: SimulationStatistics
+  results: SimulationResults
 }
 
 export const useHistoryStore = defineStore('history', () => {
@@ -36,14 +36,14 @@ export const useHistoryStore = defineStore('history', () => {
   }
 
   // Add a new simulation record
-  const addRecord = (parameters: InputParameters, statistics: SimulationStatistics) => {
+  const addRecord = (parameters: InputParameters, results: SimulationResults) => {
     const timestamp = Date.now()
     const record: HistoryRecord = {
       id: `sim-${timestamp}`,
       timestamp,
       title: new Date(timestamp).toLocaleString('sv-SE'),
       parameters,
-      statistics,
+      results,
     }
 
     records.value.unshift(record)

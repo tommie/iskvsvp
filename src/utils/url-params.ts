@@ -1,20 +1,20 @@
-import type { InputParameters, PortfolioAsset } from '../types'
+import type { InputParameters, SimulationAsset } from '../types'
 import type { LocationQuery } from 'vue-router'
 
 /**
  * Encode a single asset to compact format: m:0.1299,sd:0.202,w:1,n:Global Equity
  */
-function encodeAsset(asset: PortfolioAsset): string {
+function encodeAsset(asset: SimulationAsset): string {
   return `m:${asset.expectedReturn},sd:${asset.volatility},w:${asset.weight},n:${asset.name}`
 }
 
 /**
  * Decode a single asset from compact format
  */
-function decodeAsset(encoded: string): PortfolioAsset | null {
+function decodeAsset(encoded: string): SimulationAsset | null {
   try {
     const parts = encoded.split(',')
-    const asset: Partial<PortfolioAsset> = {}
+    const asset: Partial<SimulationAsset> = {}
 
     for (const part of parts) {
       const colonIndex = part.indexOf(':')
@@ -45,7 +45,7 @@ function decodeAsset(encoded: string): PortfolioAsset | null {
       asset.weight !== undefined &&
       asset.name !== undefined
     ) {
-      return asset as PortfolioAsset
+      return asset as SimulationAsset
     }
 
     return null
@@ -124,40 +124,36 @@ export function encodeParamsToUrl(
   query.vft = params.vpWealthTaxRate.toString()
   query.sc = params.simulationCount.toString()
 
-  // Encode portfolio assets as multiple p= parameters
-  if (params.portfolio && params.portfolio.assets.length > 0) {
-    query.pa = params.portfolio.assets.map(encodeAsset)
+  // Encode assets as multiple pa= parameters
+  if (params.assets.length > 0) {
+    query.pa = params.assets.map(encodeAsset)
 
     // Encode correlation matrix if more than one asset
-    if (params.portfolio.assets.length > 1) {
-      query.cm = encodeCorrelationMatrix(params.portfolio.correlationMatrix)
+    if (params.assets.length > 1) {
+      query.cm = encodeCorrelationMatrix(params.assetCorrelationMatrix)
     } else {
       query.cm = []
     }
 
     // Encode rebalance frequency (only if not default 'never')
-    if (params.portfolio.rebalanceFrequency !== 'never') {
-      query.rb = params.portfolio.rebalanceFrequency
+    if (params.assetRebalanceFrequency !== 'never') {
+      query.rb = params.assetRebalanceFrequency
     }
   }
 
-  // Get from first scenario (shared across ISK and VP)
-  const firstScenario = params.scenarios[0]
-  if (firstScenario) {
-    query.bwr = firstScenario.balanceWithdrawalRate.toString()
-    query.pwr = firstScenario.profitWithdrawalRate.toString()
-    query.ply = firstScenario.profitLookbackYears.toString()
-    query.ibw = firstScenario.inflationBasedWithdrawal.toString()
-    query.cgt = firstScenario.capitalGainsTax.toString()
-  }
+  // Withdrawal parameters
+  query.bwr = params.balanceWithdrawalRate.toString()
+  query.pwr = params.profitWithdrawalRate.toString()
+  query.ply = params.profitLookbackYears.toString()
+  query.ibw = params.inflationBasedWithdrawal.toString()
+  query.cgt = params.capitalGainsTaxRate.toString()
 
-  // Get ISK-specific params
-  const iskScenario = params.scenarios.find((s) => s.isISK)
-  if (iskScenario?.iskTaxRate !== undefined) {
-    query.itr = iskScenario.iskTaxRate.toString()
+  // ISK-specific params (optional)
+  if (params.iskTaxRate !== undefined) {
+    query.itr = params.iskTaxRate.toString()
   }
-  if (iskScenario?.iskTaxRateStdDev !== undefined) {
-    query.its = iskScenario.iskTaxRateStdDev.toString()
+  if (params.iskTaxRateStdDev !== undefined) {
+    query.its = params.iskTaxRateStdDev.toString()
   }
 
   // Include seed if present
@@ -227,12 +223,14 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   if (sc !== undefined) params.simulationCount = sc
   if (seed) params.seed = seed
 
-  // Parse portfolio assets from multiple pa= parameters
+  // Parse assets from multiple pa= parameters
   const assetStrings = getStringArray('pa')
   if (assetStrings.length > 0) {
-    const assets = assetStrings.map(decodeAsset).filter((a): a is PortfolioAsset => a !== null)
+    const assets = assetStrings.map(decodeAsset).filter((a): a is SimulationAsset => a !== null)
 
     if (assets.length > 0) {
+      params.assets = assets
+
       // Parse correlation matrix
       const correlationStr = getString('cm')
       let correlationMatrix: number[][] | null = null
@@ -252,18 +250,15 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
         }
       }
 
+      params.assetCorrelationMatrix = correlationMatrix
+
       // Parse rebalance frequency
       const rebalanceFrequency = getString('rb')
-
-      params.portfolio = {
-        assets,
-        correlationMatrix,
-        rebalanceFrequency: rebalanceFrequency === 'annually' ? 'annually' : 'never',
-      }
+      params.assetRebalanceFrequency = rebalanceFrequency === 'annually' ? 'annually' : 'never'
     }
   }
 
-  // Parse scenario parameters
+  // Parse withdrawal and tax parameters
   const bwr = parseNum('bwr')
   const pwr = parseNum('pwr')
   const ply = parseNum('ply')
@@ -272,31 +267,13 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   const itr = parseNum('itr')
   const its = parseNum('its')
 
-  // Only create scenarios if we have at least some scenario params
-  if (bwr !== undefined || pwr !== undefined || ply !== undefined || cgt !== undefined) {
-    params.scenarios = [
-      {
-        name: 'ISK',
-        balanceWithdrawalRate: bwr ?? 0.015,
-        profitWithdrawalRate: pwr ?? 0.15,
-        profitLookbackYears: ply ?? 5,
-        inflationBasedWithdrawal: ibw ?? 0,
-        capitalGainsTax: cgt ?? 0.3,
-        iskTaxRate: itr ?? 0.0296,
-        iskTaxRateStdDev: its ?? 0.005,
-        isISK: true,
-      },
-      {
-        name: 'VP',
-        balanceWithdrawalRate: bwr ?? 0.015,
-        profitWithdrawalRate: pwr ?? 0.15,
-        profitLookbackYears: ply ?? 5,
-        inflationBasedWithdrawal: ibw ?? 0,
-        capitalGainsTax: cgt ?? 0.3,
-        isISK: false,
-      },
-    ]
-  }
+  if (bwr !== undefined) params.balanceWithdrawalRate = bwr
+  if (pwr !== undefined) params.profitWithdrawalRate = pwr
+  if (ply !== undefined) params.profitLookbackYears = ply
+  if (ibw !== undefined) params.inflationBasedWithdrawal = ibw
+  if (cgt !== undefined) params.capitalGainsTaxRate = cgt
+  if (itr !== undefined) params.iskTaxRate = itr
+  if (its !== undefined) params.iskTaxRateStdDev = its
 
   return params
 }

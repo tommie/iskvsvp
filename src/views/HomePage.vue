@@ -10,7 +10,7 @@ import ParameterVisualization from '../components/ParameterVisualization.vue'
 import SimulationHistory from '../components/SimulationHistory.vue'
 
 const store = useCalculatorStore()
-const { simulationCount, statistics, showDetailedStatistics } = storeToRefs(store)
+const { simulationCount, simulationResults, showDetailedStatistics } = storeToRefs(store)
 
 const activeTab = ref('statistics')
 
@@ -20,10 +20,10 @@ onMounted(() => {
 })
 
 // Auto-switch to statistics tab when results are available
-watch(statistics, (newStats) => {
-  if (newStats && activeTab.value === 'statistics') {
+watch(simulationResults, (newResults) => {
+  if (newResults && activeTab.value === 'statistics') {
     // Already on the right tab, keep it
-  } else if (newStats) {
+  } else if (newResults) {
     activeTab.value = 'statistics'
   }
 })
@@ -41,7 +41,7 @@ watch(statistics, (newStats) => {
 
     <InputParameters />
 
-    <div v-if="statistics" class="mt-4">
+    <div v-if="simulationResults" class="mt-4">
       <div class="d-flex align-items-center border-bottom">
         <ul class="nav nav-tabs border-0 flex-grow-1" role="tablist">
           <li class="nav-item" role="presentation">

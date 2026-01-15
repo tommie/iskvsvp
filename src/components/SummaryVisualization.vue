@@ -4,15 +4,15 @@ import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 
 import { useCalculatorStore } from '../stores/calculator'
-import type { ScenarioSummary } from '../types'
+import type { SimulationResult, SimulationStatistics } from '../types'
 import D3Chart from './D3Chart.vue'
 
 const store = useCalculatorStore()
-const { results, yearsLater, showDetailedStatistics } = storeToRefs(store)
+const { simulationResults, yearsLater, showDetailedStatistics } = storeToRefs(store)
 
 // Combine data for reactivity tracking
 const chartData = computed(() => ({
-  results: results.value,
+  simulationResults: simulationResults.value,
   yearsLater: yearsLater.value,
   showDetailedStatistics: showDetailedStatistics.value,
 }))
@@ -20,9 +20,141 @@ const chartData = computed(() => ({
 interface DataSeries {
   label: string
   values: number[]
+  densities: number[]
   median: number
   color: string
   firstYearMedian?: number
+}
+
+const COLORS = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
+
+// Adapter: convert new data model to series format
+const buildSeriesFromStats = (
+  field:
+    | 'totalValue'
+    | 'liquidValue'
+    | 'realWithdrawal'
+    | 'accumulatedRealWithdrawal'
+    | 'paidTax'
+    | 'taxationDegree'
+    | 'maxDrawdown'
+    | 'maxDrawdownPeriod',
+): DataSeries[] => {
+  if (!simulationResults.value || simulationResults.value.statistics.length < 2) return []
+
+  const labels = simulationResults.value.labels
+  const finalPeriod = simulationResults.value.statistics[0]!.median.snapshots.liquidValue.length - 1
+
+  const getFieldValue = (stats: SimulationStatistics<SimulationResult<number>>, field: string) => {
+    switch (field) {
+      case 'totalValue':
+        return stats.median.snapshots.totalValue[finalPeriod] ?? 0
+      case 'liquidValue':
+        return stats.median.snapshots.liquidValue[finalPeriod] ?? 0
+      case 'realWithdrawal':
+        return stats.median.periodData.withdrawalReal[finalPeriod] ?? 0
+      case 'accumulatedRealWithdrawal':
+        return stats.median.snapshots.withdrawalReal[finalPeriod] ?? 0
+      case 'paidTax':
+        return stats.median.snapshots.tax[finalPeriod] ?? 0
+      case 'taxationDegree':
+        return stats.median.snapshots.taxationDegree[finalPeriod] ?? 0
+      case 'maxDrawdown':
+        return stats.median.snapshots.maxDrawdown[finalPeriod] ?? 0
+      case 'maxDrawdownPeriod':
+        return stats.median.snapshots.maxDrawdownPeriod[finalPeriod] ?? 0
+      default:
+        return 0
+    }
+  }
+
+  // Create distribution points from percentile statistics
+  const createDistributionFromStats = (
+    stats: SimulationStatistics<SimulationResult<number>>,
+    field: string,
+  ) => {
+    // Get percentile values for the field
+    const getPercentileValue = (
+      percentile: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+      field: string,
+    ) => {
+      switch (field) {
+        case 'totalValue':
+          return stats[percentile].snapshots.totalValue[finalPeriod] ?? 0
+        case 'liquidValue':
+          return stats[percentile].snapshots.liquidValue[finalPeriod] ?? 0
+        case 'realWithdrawal':
+          return stats[percentile].periodData.withdrawalReal[finalPeriod] ?? 0
+        case 'accumulatedRealWithdrawal':
+          return stats[percentile].snapshots.withdrawalReal[finalPeriod] ?? 0
+        case 'paidTax':
+          return stats[percentile].snapshots.tax[finalPeriod] ?? 0
+        case 'taxationDegree':
+          return stats[percentile].snapshots.taxationDegree[finalPeriod] ?? 0
+        case 'maxDrawdown':
+          return stats[percentile].snapshots.maxDrawdown[finalPeriod] ?? 0
+        case 'maxDrawdownPeriod':
+          return stats[percentile].snapshots.maxDrawdownPeriod[finalPeriod] ?? 0
+        default:
+          return 0
+      }
+    }
+
+    const p5 = getPercentileValue('percentile5', field)
+    const p25 = getPercentileValue('percentile25', field)
+    const median = getPercentileValue('median', field)
+    const p75 = getPercentileValue('percentile75', field)
+    const p95 = getPercentileValue('percentile95', field)
+
+    // Create density distribution (more points near median, fewer at tails)
+    const points: Array<{ value: number; density: number }> = []
+    const numPoints = 50
+
+    for (let i = 0; i < numPoints; i++) {
+      const t = i / (numPoints - 1)
+
+      // Map uniform t to percentile values with approximate bell curve density
+      let value: number
+      let density: number
+
+      if (t < 0.25) {
+        // 0-25%: p5 to p25
+        const localT = t / 0.25
+        value = p5 + (p25 - p5) * localT
+        density = 0.5 + localT * 0.5 // Low to medium density
+      } else if (t < 0.5) {
+        // 25-50%: p25 to median
+        const localT = (t - 0.25) / 0.25
+        value = p25 + (median - p25) * localT
+        density = 1.0 + localT * 0.5 // Medium to high density
+      } else if (t < 0.75) {
+        // 50-75%: median to p75
+        const localT = (t - 0.5) / 0.25
+        value = median + (p75 - median) * localT
+        density = 1.5 - localT * 0.5 // High to medium density
+      } else {
+        // 75-100%: p75 to p95
+        const localT = (t - 0.75) / 0.25
+        value = p75 + (p95 - p75) * localT
+        density = 1.0 - localT * 0.5 // Medium to low density
+      }
+
+      points.push({ value, density })
+    }
+
+    return points
+  }
+
+  return simulationResults.value.statistics.map((stats, i) => {
+    const dist = createDistributionFromStats(stats, field)
+    return {
+      label: labels[i] ?? `${i + 1}`,
+      values: dist.map((p) => p.value),
+      densities: dist.map((p) => p.density),
+      median: getFieldValue(stats, field),
+      color: COLORS[i % COLORS.length]!,
+    }
+  })
 }
 
 const drawChart = (
@@ -31,10 +163,11 @@ const drawChart = (
   series: DataSeries[],
   title: string,
   formatValue: (d: number) => string,
-  tickCount: number = 4,
-  rowHeight: number = 60,
   useLinearScale: boolean = false,
 ) => {
+  const tickCount = useLinearScale ? 4 : 2
+  const rowHeight = 90
+
   // Clear previous chart
   d3.select(svgElement).selectAll('*').remove()
 
@@ -52,23 +185,22 @@ const drawChart = (
 
   const width = containerWidth - margin.left - margin.right
 
-  // Get x extent across all series, filtering out invalid values
+  // Get x extent across all series
   const allValues = series
     .flatMap((s) => s.values)
     .filter((v) => isFinite(v) && (useLinearScale ? v >= 0 : v > 0))
 
-  if (allValues.length === 0) return // No valid data to display
+  if (allValues.length === 0) return
 
   const xExtent = d3.extent(allValues) as [number, number]
 
-  // Create scale (linear or log)
+  // Create scale
   let xScale: d3.ScaleLinear<number, number> | d3.ScaleLogarithmic<number, number>
   if (useLinearScale) {
     const xMin = Math.max(xExtent[0], 0)
     const xMax = xExtent[1]
     xScale = d3.scaleLinear().domain([xMin, xMax]).range([0, width]).nice()
   } else {
-    // Ensure positive values for log scale
     const xMin = Math.max(xExtent[0], 0.0001)
     const xMax = xExtent[1]
     xScale = d3.scaleLog().domain([xMin, xMax]).range([0, width]).nice()
@@ -100,89 +232,43 @@ const drawChart = (
   series.forEach((s, i) => {
     const yPosition = i * rowHeight + rowHeight / 2
 
-    // Add label
-    svg
-      .append('text')
-      .attr('x', -10)
-      .attr('y', yPosition)
-      .attr('text-anchor', 'end')
-      .attr('alignment-baseline', 'middle')
-      .style('font-size', '13px')
-      .style('font-weight', '500')
-      .text(s.label)
+    // Draw distribution as vertical lines with varying opacity based on density
+    s.values.forEach((value, idx) => {
+      if (!isFinite(value) || (useLinearScale ? value < 0 : value <= 0)) return
 
-    // Draw histogram (filter out invalid values)
-    const validValues = s.values.filter((v) => isFinite(v) && (useLinearScale ? v >= 0 : v > 0))
+      const density = s.densities[idx] ?? 0.5
+      const maxDensity = Math.max(...s.densities)
+      const normalizedDensity = density / maxDensity
 
-    if (validValues.length > 0) {
-      const numBins = 100
-      const xMin = d3.min(validValues)!
-      const xMax = d3.max(validValues)!
-
-      // Create bins (exponential for log scale, linear for linear scale)
-      const binEdges: number[] = []
-      if (useLinearScale) {
-        for (let j = 0; j <= numBins; j++) {
-          binEdges.push(xMin + (j / numBins) * (xMax - xMin))
-        }
-      } else {
-        const logMin = Math.log(Math.max(xMin, 0.0001))
-        const logMax = Math.log(xMax)
-        for (let j = 0; j <= numBins; j++) {
-          binEdges.push(Math.exp(logMin + (j / numBins) * (logMax - logMin)))
-        }
-      }
-
-      // Count values in each bin
-      const binCounts = new Array(numBins).fill(0)
-      validValues.forEach((value) => {
-        for (let b = 0; b < numBins; b++) {
-          if (value >= binEdges[b]! && value < binEdges[b + 1]!) {
-            binCounts[b]++
-            break
-          }
-        }
-      })
-
-      const maxCount = d3.max(binCounts) ?? 1
-      const histogramData = binCounts
-        .map((count, binIndex) => ({ binIndex, count }))
-        .filter((d) => d.count > 0)
-
-      // Draw histogram rectangles
-      const barHeight = 16
+      // Draw vertical line
+      const lineHeight = normalizedDensity * 40 // Max 40px tall
       svg
-        .selectAll(`.hist-series-${i}`)
-        .data(histogramData)
-        .enter()
-        .append('rect')
-        .attr('class', `hist-series-${i}`)
-        .attr('x', (d) => xScale(binEdges[d.binIndex]!))
-        .attr('y', yPosition - barHeight / 2)
-        .attr('width', (d) =>
-          Math.max(1, xScale(binEdges[d.binIndex + 1]!) - xScale(binEdges[d.binIndex]!)),
-        )
-        .attr('height', barHeight)
-        .attr('fill', s.color)
-        .attr('opacity', (d) => 0.1 + (d.count / maxCount) * 0.5)
-    }
+        .append('line')
+        .attr('x1', xScale(value))
+        .attr('x2', xScale(value))
+        .attr('y1', yPosition - lineHeight / 2)
+        .attr('y2', yPosition + lineHeight / 2)
+        .attr('stroke', s.color)
+        .attr('stroke-width', 5)
+        .attr('opacity', 0.3 + normalizedDensity * 0.4) // 0.3 to 0.7 opacity
+    })
 
-    // Draw median line (last year) - only if valid
+    // Draw median line (solid and prominent)
     if (isFinite(s.median) && (useLinearScale ? s.median >= 0 : s.median > 0)) {
       svg
         .append('line')
         .attr('x1', xScale(s.median))
         .attr('x2', xScale(s.median))
-        .attr('y1', yPosition - 16)
-        .attr('y2', yPosition + 16)
+        .attr('y1', yPosition - 25)
+        .attr('y2', yPosition + 25)
         .attr('stroke', s.color)
         .attr('stroke-width', 3)
 
-      // Draw median label (last year)
+      // Median label
       svg
         .append('text')
         .attr('x', xScale(s.median))
-        .attr('y', yPosition - 25)
+        .attr('y', yPosition - 30)
         .attr('text-anchor', 'middle')
         .style('font-size', '11px')
         .style('font-weight', 'bold')
@@ -190,218 +276,80 @@ const drawChart = (
         .text(formatValue(s.median))
     }
 
-    // Draw first year median line if provided (dashed) - only if valid
-    if (
-      s.firstYearMedian !== undefined &&
-      isFinite(s.firstYearMedian) &&
-      (useLinearScale ? s.firstYearMedian >= 0 : s.firstYearMedian > 0)
-    ) {
-      svg
-        .append('line')
-        .attr('x1', xScale(s.firstYearMedian))
-        .attr('x2', xScale(s.firstYearMedian))
-        .attr('y1', yPosition - 20)
-        .attr('y2', yPosition + 20)
-        .attr('stroke', s.color)
-        .attr('stroke-width', 2)
-        .attr('stroke-dasharray', '5,5')
-        .attr('opacity', 0.7)
-
-      // Draw first year median label
-      svg
-        .append('text')
-        .attr('x', xScale(s.firstYearMedian))
-        .attr('y', yPosition + 35)
-        .attr('text-anchor', 'middle')
-        .style('font-size', '10px')
-        .style('font-style', 'italic')
-        .style('fill', s.color)
-        .text(formatValue(s.firstYearMedian))
-    }
+    // Series label
+    svg
+      .append('text')
+      .attr('x', -10)
+      .attr('y', yPosition + 5)
+      .attr('text-anchor', 'end')
+      .style('font-size', '14px')
+      .style('font-weight', 'bold')
+      .style('fill', s.color)
+      .text(s.label)
   })
 }
 
-// Helper functions for building series data
-const getSummaries = () => results.value.map((r) => r.summary)
-const getScenarioNames = () => Object.keys(getSummaries()[0]?.scenarios ?? {})
-const colors = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
-
-const buildSeries = (field: keyof ScenarioSummary) => {
-  const summaries = getSummaries()
-  const scenarioNames = getScenarioNames()
-  return scenarioNames.map((name, i) => {
-    const values = summaries.map((s) => s.scenarios[name]?.[field] ?? 0)
-    return {
-      label: name,
-      values,
-      median: d3.median(values) ?? 0,
-      color: colors[i % colors.length]!,
-    }
-  })
-}
-
-// Individual render functions for each chart
+// Individual render functions
 const renderTotalValueChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value.length) return
-  const summaries = getSummaries()
-  const scenarioNames = getScenarioNames()
-  const totalValueSeries = scenarioNames.map((name, i) => {
-    const values = summaries.map((s) => s.scenarios[name]?.totalValue ?? 0)
-    return {
-      label: name,
-      values,
-      median: d3.median(values) ?? 0,
-      color: colors[i % colors.length]!,
-    }
-  })
-  drawChart(
-    svg,
-    container,
-    totalValueSeries,
-    'Totalt värde',
-    (d) => d3.format(',.0f')(d) + ' kr',
-    3,
-    90,
-  )
+  if (!simulationResults.value) return
+  const series = buildSeriesFromStats('totalValue')
+  drawChart(svg, container, series, 'Totalt värde', (d) => d3.format('.3s')(d) + ' kr')
 }
 
 const renderLiquidValueChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value.length) return
-  const summaries = getSummaries()
-  const scenarioNames = getScenarioNames()
-  const liquidValueSeries = scenarioNames.map((name, i) => {
-    const lastYearValues = summaries.map((s) => s.scenarios[name]?.liquidValue ?? 0)
-    const firstYearValues = summaries.map((s) => s.scenarios[name]?.firstYearLiquidValue ?? 0)
-    return {
-      label: name,
-      values: lastYearValues,
-      median: d3.median(lastYearValues) ?? 0,
-      firstYearMedian: d3.median(firstYearValues) ?? 0,
-      color: colors[i % colors.length]!,
-    }
-  })
-  drawChart(
-    svg,
-    container,
-    liquidValueSeries,
-    'Likvidvärde',
-    (d) => d3.format(',.0f')(d) + ' kr',
-    3,
-    90,
-  )
+  if (!simulationResults.value) return
+  const series = buildSeriesFromStats('liquidValue')
+  drawChart(svg, container, series, 'Likvidvärde', (d) => d3.format('.3s')(d) + ' kr')
 }
 
 const renderWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value.length) return
-  const summaries = getSummaries()
-  const scenarioNames = getScenarioNames()
-  const withdrawalSeries = scenarioNames.map((name, i) => {
-    const realValues = summaries.map((s) => s.scenarios[name]?.realWithdrawal ?? 0)
-    const firstYearValues = summaries.map((s) => s.scenarios[name]?.firstYearWithdrawal ?? 0)
-    return {
-      label: name,
-      values: realValues,
-      median: d3.median(realValues) ?? 0,
-      firstYearMedian: d3.median(firstYearValues) ?? 0,
-      color: colors[i % colors.length]!,
-    }
-  })
-  drawChart(
-    svg,
-    container,
-    withdrawalSeries,
-    'Uttag reellt (sista året)',
-    (d) => d3.format(',.0f')(d) + ' kr',
-    3,
-    90,
-  )
+  if (!simulationResults.value) return
+  const series = buildSeriesFromStats('realWithdrawal')
+  drawChart(svg, container, series, 'Uttag reellt (sista året)', (d) => d3.format('.3s')(d) + ' kr')
 }
 
 const renderAccumulatedWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value.length) return
-  const summaries = getSummaries()
-  const scenarioNames = getScenarioNames()
-  const years = yearsLater.value
-  const avgWithdrawalSeries = scenarioNames.map((name, i) => {
-    const values = summaries.map((s) => (s.scenarios[name]?.accumulatedRealWithdrawal ?? 0) / years)
-    const firstYearValues = summaries.map((s) => s.scenarios[name]?.firstYearWithdrawal ?? 0)
-    return {
-      label: name,
-      values,
-      median: d3.median(values) ?? 0,
-      firstYearMedian: d3.median(firstYearValues) ?? 0,
-      color: colors[i % colors.length]!,
-    }
-  })
-  drawChart(
-    svg,
-    container,
-    avgWithdrawalSeries,
-    'Genomsnittligt uttag reellt per år',
-    (d) => d3.format(',.0f')(d) + ' kr',
-    3,
-    90,
-  )
+  if (!simulationResults.value) return
+  const series = buildSeriesFromStats('accumulatedRealWithdrawal')
+  drawChart(svg, container, series, 'Ackumulerat uttag reellt', (d) => d3.format('.3s')(d) + ' kr')
 }
 
 const renderMaxDrawdownChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value.length) return
-  drawChart(
-    svg,
-    container,
-    buildSeries('maxDrawdown'),
-    'Maximalt drawdown',
-    (d) => d3.format('.1%')(d),
-    3,
-    60,
-    true,
-  )
+  if (!simulationResults.value) return
+  const series = buildSeriesFromStats('maxDrawdown')
+  drawChart(svg, container, series, 'Maximalt drawdown', (d) => d3.format('.1%')(d), true)
 }
 
 const renderMaxDrawdownPeriodChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value.length) return
+  if (!simulationResults.value) return
+  const series = buildSeriesFromStats('maxDrawdownPeriod')
   drawChart(
     svg,
     container,
-    buildSeries('maxDrawdownPeriod'),
+    series,
     'Längsta drawdown-period',
     (d) => d3.format('.0f')(d) + ' år',
-    3,
-    60,
     true,
   )
 }
 
 const renderPaidTaxChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value.length) return
-  drawChart(
-    svg,
-    container,
-    buildSeries('paidTax'),
-    'Betald skatt',
-    (d) => d3.format(',.0f')(d) + ' kr',
-    3,
-  )
+  if (!simulationResults.value) return
+  const series = buildSeriesFromStats('paidTax')
+  drawChart(svg, container, series, 'Betald skatt', (d) => d3.format('.3s')(d) + ' kr')
 }
 
 const renderTaxationDegreeChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value.length) return
-  drawChart(
-    svg,
-    container,
-    buildSeries('taxationDegree'),
-    'Beskattningsgrad',
-    (d) => d3.format('.1%')(d),
-    3,
-  )
+  if (!simulationResults.value) return
+  const series = buildSeriesFromStats('taxationDegree')
+  drawChart(svg, container, series, 'Beskattningsgrad', (d) => d3.format('.1%')(d))
 }
 </script>
 
 <template>
-  <div v-if="results.length > 0">
+  <div v-if="simulationResults">
     <p class="text-muted mb-3">
-      Histogram som visar fördelningen av resultat över alla simuleringar (intensitet visar täthet).
-      Heldragna linjer visar medianvärden för sista året, streckade linjer visar första året.
+      Fördelningen av värden från simuleringen. Heldragna linjer visar medianvärden.
     </p>
 
     <!-- Total Value -->
@@ -414,7 +362,7 @@ const renderTaxationDegreeChart = (svg: SVGSVGElement, container: HTMLDivElement
       <D3Chart :renderChart="renderLiquidValueChart" :data="chartData" />
     </div>
 
-    <!-- Withdrawal (Last and First Year) -->
+    <!-- Withdrawal (Last Year) -->
     <div class="mb-4">
       <D3Chart :renderChart="renderWithdrawalChart" :data="chartData" />
     </div>

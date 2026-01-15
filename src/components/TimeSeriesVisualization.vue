@@ -1,35 +1,198 @@
 <script setup lang="ts">
-import { useCalculatorStore } from '../stores/calculator'
+import * as d3 from 'd3'
 import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
-import * as d3 from 'd3'
+
+import { useCalculatorStore } from '../stores/calculator'
+import type { SimulationResult, SimulationStatistics } from '../types'
 import D3Chart from './D3Chart.vue'
-import type { TimeSeriesPoint } from '../types'
 
 const store = useCalculatorStore()
-const { timeSeriesData, representativeSimulationId } = storeToRefs(store)
+const { simulationResults, startYear } = storeToRefs(store)
+
+// Data structure for percentile-based distributions over time
+interface TimeSeriesDistribution {
+  year: number
+  distributions: {
+    scenarioName: string
+    values: number[]
+    densities: number[]
+    median: number
+  }[]
+}
+
+const COLORS = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
+
+// Generate distribution points from percentile statistics for each time period
+const timeSeriesDistributions = computed<TimeSeriesDistribution[]>(() => {
+  if (!simulationResults.value || simulationResults.value.statistics.length < 2) return []
+
+  const labels = simulationResults.value.labels
+  const numPeriods = simulationResults.value.statistics[0]!.median.snapshots.liquidValue.length
+
+  return Array.from({ length: numPeriods }, (_, periodIndex) => {
+    const year = startYear.value + periodIndex
+
+    // Helper to get percentile value for a given field and period
+    const getPercentileValue = (
+      stats: SimulationStatistics<SimulationResult<number>>,
+      percentile: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+      field: 'liquidValue' | 'withdrawalReal',
+      periodIndex: number,
+    ) => {
+      if (field === 'liquidValue') {
+        return stats[percentile].snapshots.liquidValue[periodIndex] ?? 0
+      } else {
+        return stats[percentile].periodData.withdrawalReal[periodIndex] ?? 0
+      }
+    }
+
+    // Create distribution from percentiles
+    const createDistribution = (
+      stats: SimulationStatistics<SimulationResult<number>>,
+      field: 'liquidValue' | 'withdrawalReal',
+    ) => {
+      const p5 = getPercentileValue(stats, 'percentile5', field, periodIndex)
+      const p25 = getPercentileValue(stats, 'percentile25', field, periodIndex)
+      const median = getPercentileValue(stats, 'median', field, periodIndex)
+      const p75 = getPercentileValue(stats, 'percentile75', field, periodIndex)
+      const p95 = getPercentileValue(stats, 'percentile95', field, periodIndex)
+
+      // Create density distribution (more points near median, fewer at tails)
+      const points: Array<{ value: number; density: number }> = []
+      const numPoints = 30
+
+      for (let i = 0; i < numPoints; i++) {
+        const t = i / (numPoints - 1)
+
+        let value: number
+        let density: number
+
+        if (t < 0.25) {
+          const localT = t / 0.25
+          value = p5 + (p25 - p5) * localT
+          density = 0.5 + localT * 0.5
+        } else if (t < 0.5) {
+          const localT = (t - 0.25) / 0.25
+          value = p25 + (median - p25) * localT
+          density = 1.0 + localT * 0.5
+        } else if (t < 0.75) {
+          const localT = (t - 0.5) / 0.25
+          value = median + (p75 - median) * localT
+          density = 1.5 - localT * 0.5
+        } else {
+          const localT = (t - 0.75) / 0.25
+          value = p75 + (p95 - p75) * localT
+          density = 1.0 - localT * 0.5
+        }
+
+        points.push({ value, density })
+      }
+
+      return {
+        values: points.map((p) => p.value),
+        densities: points.map((p) => p.density),
+        median,
+      }
+    }
+
+    return {
+      year,
+      distributions: simulationResults.value!.statistics.map((stats, i) => ({
+        scenarioName: labels[i]!,
+        ...createDistribution(stats, 'liquidValue'),
+      })),
+    }
+  })
+})
+
+// Withdrawal distributions
+const withdrawalDistributions = computed<TimeSeriesDistribution[]>(() => {
+  if (!simulationResults.value || simulationResults.value.statistics.length < 2) return []
+
+  const labels = simulationResults.value.labels
+  const numPeriods = simulationResults.value.statistics[0]!.median.snapshots.liquidValue.length
+
+  return Array.from({ length: numPeriods }, (_, periodIndex) => {
+    const year = startYear.value + periodIndex
+
+    const getPercentileValue = (
+      stats: SimulationStatistics<SimulationResult<number>>,
+      percentile: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+    ) => {
+      return stats[percentile].periodData.withdrawalReal[periodIndex] ?? 0
+    }
+
+    const createDistribution = (stats: SimulationStatistics<SimulationResult<number>>) => {
+      const p5 = getPercentileValue(stats, 'percentile5')
+      const p25 = getPercentileValue(stats, 'percentile25')
+      const median = getPercentileValue(stats, 'median')
+      const p75 = getPercentileValue(stats, 'percentile75')
+      const p95 = getPercentileValue(stats, 'percentile95')
+
+      const points: Array<{ value: number; density: number }> = []
+      const numPoints = 30
+
+      for (let i = 0; i < numPoints; i++) {
+        const t = i / (numPoints - 1)
+        let value: number
+        let density: number
+
+        if (t < 0.25) {
+          const localT = t / 0.25
+          value = p5 + (p25 - p5) * localT
+          density = 0.5 + localT * 0.5
+        } else if (t < 0.5) {
+          const localT = (t - 0.25) / 0.25
+          value = p25 + (median - p25) * localT
+          density = 1.0 + localT * 0.5
+        } else if (t < 0.75) {
+          const localT = (t - 0.5) / 0.25
+          value = median + (p75 - median) * localT
+          density = 1.5 - localT * 0.5
+        } else {
+          const localT = (t - 0.75) / 0.25
+          value = p75 + (p95 - p75) * localT
+          density = 1.0 - localT * 0.5
+        }
+
+        points.push({ value, density })
+      }
+
+      return {
+        values: points.map((p) => p.value),
+        densities: points.map((p) => p.density),
+        median,
+      }
+    }
+
+    return {
+      year,
+      distributions: simulationResults.value!.statistics.map((stats, i) => ({
+        scenarioName: labels[i]!,
+        ...createDistribution(stats),
+      })),
+    }
+  })
+})
 
 // Combine data for reactivity tracking
 const chartData = computed(() => ({
-  timeSeriesData: timeSeriesData.value,
-  representativeSimulationId: representativeSimulationId.value,
+  liquidValue: timeSeriesDistributions.value,
+  withdrawalReal: withdrawalDistributions.value,
 }))
 
 const drawGenericChart = (
   svgElement: SVGSVGElement,
   containerElement: HTMLDivElement,
-  dataExtractor: (d: TimeSeriesPoint, scenarioName: string) => number,
+  data: TimeSeriesDistribution[],
   title: string,
   yAxisLabel: string,
 ) => {
   // Clear previous chart
   d3.select(svgElement).selectAll('*').remove()
 
-  // Get scenario names from first data point
-  const scenarioNames = Object.keys(timeSeriesData.value[0]?.liquidValue ?? {})
-  if (scenarioNames.length === 0) return
-
-  const colors = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
+  if (data.length === 0) return
 
   // Get container dimensions
   const containerWidth = containerElement.clientWidth
@@ -44,22 +207,19 @@ const drawGenericChart = (
     .append('g')
     .attr('transform', `translate(${margin.left},${margin.top})`)
 
-  // Get data extent
-  const xExtent = d3.extent(timeSeriesData.value, (d) => d.year) as [number, number]
+  // Get data extents
+  const xExtent = d3.extent(data, (d) => d.year) as [number, number]
 
-  // Get y extent across all scenarios
-  const allScenarioValues = timeSeriesData.value.flatMap((d) =>
-    scenarioNames.map((name) => dataExtractor(d, name)),
+  // Get y extent across all distributions
+  const allValues = data.flatMap((d) =>
+    d.distributions.flatMap((dist) => dist.values.filter((v) => isFinite(v) && v > 0)),
   )
-  const yExtent = d3.extent(allScenarioValues.filter((v) => isFinite(v) && v > 0)) as [
-    number,
-    number,
-  ]
+  const yExtent = d3.extent(allValues) as [number, number]
 
   // Create scales
   const xScale = d3.scaleLinear().domain(xExtent).range([0, width])
 
-  // Use log scale for y-axis to better show distribution
+  // Use log scale for y-axis
   const yMin = Math.max(yExtent[0], 1)
   const yMax = yExtent[1]
   const yScale = d3.scaleLog().domain([yMin, yMax]).range([height, 0]).nice()
@@ -68,7 +228,7 @@ const drawGenericChart = (
   svg
     .append('g')
     .attr('transform', `translate(0,${height})`)
-    .call(d3.axisBottom(xScale).ticks(5).tickFormat(d3.format('d')))
+    .call(d3.axisBottom(xScale).ticks(3).tickFormat(d3.format('d')))
     .append('text')
     .attr('x', width / 2)
     .attr('y', 45)
@@ -80,7 +240,7 @@ const drawGenericChart = (
   // Add Y axis
   svg
     .append('g')
-    .call(d3.axisLeft(yScale).ticks(3).tickFormat(d3.format('.2s')))
+    .call(d3.axisLeft(yScale).ticks(5).tickFormat(d3.format('.2s')))
     .append('text')
     .attr('transform', 'rotate(-90)')
     .attr('x', -height / 2)
@@ -100,9 +260,9 @@ const drawGenericChart = (
     .style('font-weight', 'bold')
     .text(title)
 
-  // Add horizontal line at initial value
-  const initialValue = dataExtractor(timeSeriesData.value[0]!, scenarioNames[0]!)
-  if (initialValue > 0 && isFinite(initialValue)) {
+  // Add horizontal line at initial value (first year median of first scenario)
+  const initialValue = data[0]?.distributions[0]?.median
+  if (initialValue && initialValue > 0 && isFinite(initialValue)) {
     svg
       .append('line')
       .attr('x1', 0)
@@ -115,119 +275,83 @@ const drawGenericChart = (
       .attr('opacity', 0.7)
   }
 
-  // Create histogram bins (30 bins, exponentially spaced for log scale)
-  const numBins = 30
-  const logMin = Math.log(yMin)
-  const logMax = Math.log(yMax)
-  const binEdges: number[] = []
-  for (let i = 0; i <= numBins; i++) {
-    binEdges.push(Math.exp(logMin + (i / numBins) * (logMax - logMin)))
-  }
+  // Draw distributions
+  const scenarioNames = data[0]?.distributions.map((d) => d.scenarioName) ?? []
+  const offsetRange = 0.8
+  const offsetPerSeries = scenarioNames.length > 1 ? offsetRange / (scenarioNames.length - 1) : 0
 
-  // Draw histograms and median lines for each scenario
-  scenarioNames.forEach((scenarioName, i) => {
-    const color = colors[i % colors.length]!
+  data.forEach((yearData) => {
+    yearData.distributions.forEach((dist, scenarioIndex) => {
+      const color = COLORS[scenarioIndex % COLORS.length] ?? '#999'
+      const xOffset = scenarioIndex * offsetPerSeries - offsetRange / 2
 
-    // Calculate offset for this series (distribute evenly across a small range)
-    const offsetRange = 0.3 // Total year range for offsets
-    const offsetPerSeries = offsetRange / Math.max(1, scenarioNames.length - 1)
-    const xOffset = i * offsetPerSeries - offsetRange / 2
+      // Find max density for normalization
+      const maxDensity = Math.max(...dist.densities)
 
-    // Filter valid data for this scenario
-    const validData = timeSeriesData.value.filter((d) => {
-      const value = dataExtractor(d, scenarioName)
-      return isFinite(value) && value > 0
-    })
+      // Draw density lines
+      dist.values.forEach((value, idx) => {
+        if (!isFinite(value) || value <= 0) return
 
-    // Group by year and create 2D histogram
-    const yearGroups = d3.group(validData, (d) => d.year)
-    const years = Array.from(yearGroups.keys()).sort((a, b) => a - b)
+        const density = dist.densities[idx] ?? 0
+        const normalizedDensity = density / maxDensity
 
-    // Find max count for opacity scaling
-    let maxCount = 0
-    const histogramData: Array<{ year: number; binIndex: number; count: number }> = []
-
-    years.forEach((year) => {
-      const yearData = yearGroups.get(year)!
-      const values = yearData.map((d) => dataExtractor(d, scenarioName))
-
-      // Count values in each bin
-      const binCounts = new Array(numBins).fill(0)
-      values.forEach((value) => {
-        // Find which bin this value belongs to
-        for (let b = 0; b < numBins; b++) {
-          if (value >= binEdges[b]! && value < binEdges[b + 1]!) {
-            binCounts[b]++
-            break
-          }
-        }
-      })
-
-      // Store histogram data
-      binCounts.forEach((count, binIndex) => {
-        if (count > 0) {
-          histogramData.push({ year, binIndex, count })
-          maxCount = Math.max(maxCount, count)
-        }
-      })
-    })
-
-    // Draw histogram rectangles
-    const yearWidth = years.length > 1 ? Math.abs(xScale(years[1]!) - xScale(years[0]!)) : 10
-    const rectWidth = (yearWidth * 0.4) / scenarioNames.length
-
-    svg
-      .selectAll(`.hist-${scenarioName}`)
-      .data(histogramData)
-      .enter()
-      .append('rect')
-      .attr('class', `hist-${scenarioName}`)
-      .attr('x', (d) => xScale(d.year + xOffset) - rectWidth / 2)
-      .attr('y', (d) => yScale(binEdges[d.binIndex + 1]!))
-      .attr('width', rectWidth)
-      .attr('height', (d) => yScale(binEdges[d.binIndex]!) - yScale(binEdges[d.binIndex + 1]!))
-      .attr('fill', color)
-      .attr('opacity', (d) => Math.pow(d.count / maxCount, 0.5) * 0.7 + 0.1)
-  })
-
-  // Draw representative simulation line if available
-  if (representativeSimulationId.value !== null) {
-    const repSimData = timeSeriesData.value.filter(
-      (d) => d.simulationId === representativeSimulationId.value,
-    )
-
-    scenarioNames.forEach((scenarioName, i) => {
-      const color = colors[i % colors.length]!
-      const offsetRange = 0.3
-      const offsetPerSeries = offsetRange / Math.max(1, scenarioNames.length - 1)
-      const xOffset = i * offsetPerSeries - offsetRange / 2
-
-      const repData = repSimData
-        .map((d) => ({
-          year: d.year,
-          value: dataExtractor(d, scenarioName),
-        }))
-        .filter((d) => isFinite(d.value) && d.value > 0)
-        .sort((a, b) => a.year - b.year)
-
-      if (repData.length > 0) {
-        const repLine = d3
-          .line<{ year: number; value: number }>()
-          .x((d) => xScale(d.year + xOffset))
-          .y((d) => yScale(d.value))
-
+        // Draw vertical line at this position
+        const lineWidth = normalizedDensity * 8 // Max 8px wide
         svg
-          .append('path')
-          .datum(repData)
-          .attr('class', `line-${scenarioName}-representative`)
-          .attr('fill', 'none')
+          .append('line')
+          .attr('x1', xScale(yearData.year + xOffset) - lineWidth / 2)
+          .attr('x2', xScale(yearData.year + xOffset) + lineWidth / 2)
+          .attr('y1', yScale(value))
+          .attr('y2', yScale(value))
           .attr('stroke', color)
-          .attr('stroke-width', 2)
-          .attr('stroke-dasharray', '5,5')
-          .attr('d', repLine)
+          .attr('stroke-width', 1)
+          .attr('opacity', 0.3 + normalizedDensity * 0.4)
+      })
+
+      // Draw median marker
+      if (isFinite(dist.median) && dist.median > 0) {
+        svg
+          .append('circle')
+          .attr('cx', xScale(yearData.year + xOffset))
+          .attr('cy', yScale(dist.median))
+          .attr('r', 2)
+          .attr('fill', color)
+          .attr('stroke', 'white')
+          .attr('stroke-width', 0.5)
       }
     })
-  }
+  })
+
+  // Draw median lines connecting the medians
+  scenarioNames.forEach((scenarioName, scenarioIndex) => {
+    const color = COLORS[scenarioIndex % COLORS.length] ?? '#999'
+    const xOffset = scenarioIndex * offsetPerSeries - offsetRange / 2
+
+    const medianPoints = data
+      .map((yearData) => {
+        const dist = yearData.distributions.find((d) => d.scenarioName === scenarioName)
+        return dist && isFinite(dist.median) && dist.median > 0
+          ? { year: yearData.year, value: dist.median }
+          : null
+      })
+      .filter((d): d is { year: number; value: number } => d !== null)
+
+    if (medianPoints.length > 0) {
+      const medianLine = d3
+        .line<{ year: number; value: number }>()
+        .x((d) => xScale(d.year + xOffset))
+        .y((d) => yScale(d.value))
+
+      svg
+        .append('path')
+        .datum(medianPoints)
+        .attr('class', `line-${scenarioName}-median`)
+        .attr('fill', 'none')
+        .attr('stroke', color)
+        .attr('stroke-width', 2)
+        .attr('d', medianLine)
+    }
+  })
 
   // Add legend
   const legend = svg
@@ -236,10 +360,10 @@ const drawGenericChart = (
     .attr('transform', `translate(${width + 10}, 0)`)
 
   scenarioNames.forEach((scenarioName, i) => {
-    const color = colors[i % colors.length]!
-    const yOffset = i * 50
+    const color = COLORS[i % COLORS.length] ?? '#999'
+    const yOffset = i * 24
 
-    // Simulation histogram
+    // Distribution area
     legend
       .append('rect')
       .attr('x', -6)
@@ -254,48 +378,28 @@ const drawGenericChart = (
       .attr('x', 15)
       .attr('y', yOffset + 5)
       .style('font-size', '11px')
-      .text(`${scenarioName} (hist.)`)
-
-    // Representative simulation line
-    if (representativeSimulationId.value !== null) {
-      legend
-        .append('line')
-        .attr('x1', -8)
-        .attr('x2', 8)
-        .attr('y1', yOffset + 25)
-        .attr('y2', yOffset + 25)
-        .attr('stroke', color)
-        .attr('stroke-width', 2)
-        .attr('stroke-dasharray', '5,5')
-
-      legend
-        .append('text')
-        .attr('x', 15)
-        .attr('y', yOffset + 30)
-        .style('font-size', '11px')
-        .text(`${scenarioName} (repr.)`)
-    }
+      .text(scenarioName)
   })
 }
 
 // Render functions for D3Chart component
 const renderValueChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
-  if (!timeSeriesData.value.length) return
+  if (!timeSeriesDistributions.value.length) return
   drawGenericChart(
     svg,
     container,
-    (d, scenarioName) => d.liquidValue[scenarioName] ?? 0,
-    'Värde (logaritmisk skala)',
+    timeSeriesDistributions.value,
+    'Värde över tid (logaritmisk skala)',
     'Värde (SEK)',
   )
 }
 
 const renderWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
-  if (!timeSeriesData.value.length) return
+  if (!withdrawalDistributions.value.length) return
   drawGenericChart(
     svg,
     container,
-    (d, scenarioName) => d.withdrawalsReal[scenarioName] ?? 0,
+    withdrawalDistributions.value,
     'Uttag per år (reellt, logaritmisk skala)',
     'Uttag reellt (SEK)',
   )
@@ -303,11 +407,10 @@ const renderWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) =>
 </script>
 
 <template>
-  <div v-if="timeSeriesData.length > 0">
+  <div v-if="timeSeriesDistributions.length > 0">
     <p class="text-muted mb-3">
-      Histogram som visar fördelningen av kontovärden och uttag över tid för alla simuleringar
-      (intensitet visar täthet). Färgade streckade linjer visar ett representativt exempel (närmast
-      median), horisontell grå linje visar initialt värde.
+      Fördelningar över tid baserade på percentiler från alla simuleringar (intensitet visar
+      täthet). Heldragna linjer visar medianvärden, horisontell grå linje visar initialt värde.
     </p>
     <div class="mb-4">
       <D3Chart :renderChart="renderValueChart" :data="chartData" />

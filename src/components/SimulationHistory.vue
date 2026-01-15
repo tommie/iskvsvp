@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { useHistoryStore } from '../stores/history'
 import { storeToRefs } from 'pinia'
-import { ref, useId } from 'vue'
+import { ref, useId, computed } from 'vue'
 import { encodeParamsToUrl } from '../utils/url-params'
 import type { HistoryRecord } from '../stores/history'
 
 const historyStore = useHistoryStore()
 const { records } = storeToRefs(historyStore)
+
+const COLORS = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
 
 const clearAllPopoverId = useId()
 const getDeletePopoverId = (recordId: string) => `delete-popover-${recordId}`
@@ -47,33 +49,110 @@ const formatPercent = (value: number | undefined): string => {
   }).format(value)
 }
 
-const getWinner = (record: HistoryRecord): string => {
-  const scenarios = record.statistics.median.scenarios ?? {}
-  const scenarioNames = Object.keys(scenarios)
+// Get the index of the winning scenario based on total value
+const getWinnerIndex = (record: HistoryRecord): number => {
+  if (!record.results || record.results.statistics.length === 0) return -1
 
-  if (scenarioNames.length === 0) return 'N/A'
+  const finalPeriod = record.results.statistics[0]!.median.snapshots.liquidValue.length - 1
 
-  let bestScenario = scenarioNames[0]!
-  let bestValue = scenarios[bestScenario]?.realWithdrawal ?? 0
+  let bestIdx = 0
+  let bestValue = record.results.statistics[0]!.median.snapshots.totalValue[finalPeriod] ?? 0
 
-  for (const name of scenarioNames) {
-    const value = scenarios[name]?.realWithdrawal ?? 0
+  for (let i = 1; i < record.results.statistics.length; i++) {
+    const value = record.results.statistics[i]!.median.snapshots.totalValue[finalPeriod] ?? 0
     if (value > bestValue) {
       bestValue = value
-      bestScenario = name
+      bestIdx = i
     }
   }
 
-  return bestScenario
+  return bestIdx
 }
 
-const getWinnerClass = (winner: string): string => {
-  // Map specific scenario names to colors
-  const colorMap: Record<string, string> = {
-    ISK: 'text-primary',
-    VP: 'text-warning',
+// Get the index of the second-best scenario based on total value
+const getSecondBestIndex = (record: HistoryRecord): number => {
+  if (!record.results || record.results.statistics.length < 2) return -1
+
+  const finalPeriod = record.results.statistics[0]!.median.snapshots.liquidValue.length - 1
+
+  const winnerIdx = getWinnerIndex(record)
+
+  let secondBestIdx = -1
+  let secondBestValue = -Infinity
+
+  for (let i = 0; i < record.results.statistics.length; i++) {
+    if (i === winnerIdx) continue
+    const value = record.results.statistics[i]!.median.snapshots.totalValue[finalPeriod] ?? 0
+    if (value > secondBestValue) {
+      secondBestValue = value
+      secondBestIdx = i
+    }
   }
-  return colorMap[winner] ?? 'text-success'
+
+  return secondBestIdx
+}
+
+// Get winner label
+const getWinnerLabel = (record: HistoryRecord): string => {
+  const winnerIdx = getWinnerIndex(record)
+  if (winnerIdx === -1) return 'N/A'
+  return record.results?.labels[winnerIdx] ?? 'N/A'
+}
+
+// Get color for winner
+const getWinnerColor = (record: HistoryRecord): string => {
+  const winnerIdx = getWinnerIndex(record)
+  if (winnerIdx === -1) return '#198754'
+  return COLORS[winnerIdx % COLORS.length]!
+}
+
+// Get other scenario labels (non-winners)
+const getOtherLabels = (record: HistoryRecord): string[] => {
+  if (!record.results) return []
+  const winnerIdx = getWinnerIndex(record)
+  return record.results.labels.filter((_, idx) => idx !== winnerIdx)
+}
+
+// Get winner's statistics
+const getWinnerStats = (record: HistoryRecord) => {
+  const winnerIdx = getWinnerIndex(record)
+  if (winnerIdx === -1 || !record.results) return null
+
+  const stats = record.results.statistics[winnerIdx]!
+  const finalPeriod = stats.median.snapshots.liquidValue.length - 1
+
+  return {
+    totalValue: stats.median.snapshots.totalValue[finalPeriod] ?? 0,
+    liquidValue: stats.median.snapshots.liquidValue[finalPeriod] ?? 0,
+    accumulatedRealWithdrawal: stats.median.snapshots.withdrawalReal[finalPeriod] ?? 0,
+    taxationDegree: stats.median.snapshots.taxationDegree[finalPeriod] ?? 0,
+    maxDrawdown: stats.median.snapshots.maxDrawdown[finalPeriod] ?? 0,
+  }
+}
+
+// Get second-best statistics
+const getSecondBestStats = (record: HistoryRecord) => {
+  const secondBestIdx = getSecondBestIndex(record)
+  if (secondBestIdx === -1 || !record.results) return null
+
+  const stats = record.results.statistics[secondBestIdx]!
+  const finalPeriod = stats.median.snapshots.liquidValue.length - 1
+
+  return {
+    totalValue: stats.median.snapshots.totalValue[finalPeriod] ?? 0,
+    liquidValue: stats.median.snapshots.liquidValue[finalPeriod] ?? 0,
+    accumulatedRealWithdrawal: stats.median.snapshots.withdrawalReal[finalPeriod] ?? 0,
+    taxationDegree: stats.median.snapshots.taxationDegree[finalPeriod] ?? 0,
+    maxDrawdown: stats.median.snapshots.maxDrawdown[finalPeriod] ?? 0,
+  }
+}
+
+// Calculate percentage difference between winner and second-best
+const getPercentDiff = (winnerValue: number, secondBestValue: number): string => {
+  if (secondBestValue === 0) return ''
+  const diff = ((winnerValue - secondBestValue) / secondBestValue) * 100
+  const sign = diff > 0 ? '+' : ''
+  return `${sign}${diff.toFixed(0)}%`
 }
 
 const getRecordQueryParams = (record: HistoryRecord) => {
@@ -120,7 +199,8 @@ const positionPopover = (popoverId: string, anchorId: string) => {
       <div>
         <h3>Simuleringshistorik</h3>
         <p class="mb-0 text-muted">
-          Tidigare simuleringar ({{ records.length }} st). Värden visar medianresultat.
+          Tidigare simuleringar ({{ records.length }} st). Värden visar medianresultat för vinnande
+          scenario.
         </p>
       </div>
       <div>
@@ -221,95 +301,165 @@ const positionPopover = (popoverId: string, anchorId: string) => {
           </div>
           <div class="history-card-body">
             <div class="result-summary">
-              <strong>Vinnare (reellt uttag):</strong>
-              <span :class="['winner-badge', getWinnerClass(getWinner(record))]">
-                {{ getWinner(record) }}
+              <strong>Vinnare (totalt värde):</strong>
+              <span class="winner-badge" :style="{ color: getWinnerColor(record) }">
+                {{ getWinnerLabel(record) }}
+              </span>
+              <span v-if="getOtherLabels(record).length > 0" class="text-muted small">
+                vs {{ getOtherLabels(record).join(', ') }}
               </span>
             </div>
-            <div class="parameters-summary">
+            <div v-if="getWinnerStats(record)" class="parameters-summary">
+              <div class="param-row">
+                <span class="param-label">Totalt värde:</span>
+                <span class="param-value-group">
+                  <span class="param-value">
+                    {{ formatNumber(getWinnerStats(record)!.totalValue) }} kr
+                  </span>
+                  <span
+                    v-if="getSecondBestStats(record)"
+                    class="param-diff"
+                    :class="{
+                      positive:
+                        getWinnerStats(record)!.totalValue > getSecondBestStats(record)!.totalValue,
+                      negative:
+                        getWinnerStats(record)!.totalValue < getSecondBestStats(record)!.totalValue,
+                    }"
+                  >
+                    {{
+                      getPercentDiff(
+                        getWinnerStats(record)!.totalValue,
+                        getSecondBestStats(record)!.totalValue,
+                      )
+                    }}
+                  </span>
+                </span>
+              </div>
               <div class="param-row">
                 <span class="param-label">Genomsnittligt uttag reellt per år:</span>
-                <span class="param-value">
-                  <template
-                    v-for="(scenarioName, idx) in Object.keys(
-                      record.statistics.median.scenarios ?? {},
-                    )"
-                    :key="scenarioName"
-                  >
-                    <span v-if="idx > 0">, </span>
-                    {{ scenarioName }}
+                <span class="param-value-group">
+                  <span class="param-value">
                     {{
                       formatPercent(
-                        (record.statistics.median.scenarios?.[scenarioName]
-                          ?.accumulatedRealWithdrawal ?? 0) /
+                        getWinnerStats(record)!.accumulatedRealWithdrawal /
                           record.parameters.yearsLater /
                           record.parameters.initialCapital,
                       )
                     }}
-                  </template>
+                  </span>
+                  <span
+                    v-if="getSecondBestStats(record)"
+                    class="param-diff"
+                    :class="{
+                      positive:
+                        getWinnerStats(record)!.accumulatedRealWithdrawal >
+                        getSecondBestStats(record)!.accumulatedRealWithdrawal,
+                      negative:
+                        getWinnerStats(record)!.accumulatedRealWithdrawal <
+                        getSecondBestStats(record)!.accumulatedRealWithdrawal,
+                    }"
+                  >
+                    {{
+                      getPercentDiff(
+                        getWinnerStats(record)!.accumulatedRealWithdrawal,
+                        getSecondBestStats(record)!.accumulatedRealWithdrawal,
+                      )
+                    }}
+                  </span>
                 </span>
               </div>
               <div class="param-row">
                 <span class="param-label">Likvidutveckling:</span>
-                <span class="param-value">
-                  <template
-                    v-for="(scenarioName, idx) in Object.keys(
-                      record.statistics.median.scenarios ?? {},
-                    )"
-                    :key="scenarioName"
-                  >
-                    <span v-if="idx > 0">, </span>
-                    {{ scenarioName }}
+                <span class="param-value-group">
+                  <span class="param-value">
                     {{
                       (
-                        (record.statistics.median.scenarios?.[scenarioName]?.liquidValue ?? 0) /
-                        record.parameters.initialCapital
+                        getWinnerStats(record)!.liquidValue / record.parameters.initialCapital
                       ).toFixed(2)
                     }}x
-                  </template>
+                  </span>
+                  <span
+                    v-if="getSecondBestStats(record)"
+                    class="param-diff"
+                    :class="{
+                      positive:
+                        getWinnerStats(record)!.liquidValue >
+                        getSecondBestStats(record)!.liquidValue,
+                      negative:
+                        getWinnerStats(record)!.liquidValue <
+                        getSecondBestStats(record)!.liquidValue,
+                    }"
+                  >
+                    {{
+                      getPercentDiff(
+                        getWinnerStats(record)!.liquidValue,
+                        getSecondBestStats(record)!.liquidValue,
+                      )
+                    }}
+                  </span>
                 </span>
               </div>
               <div class="param-row">
                 <span class="param-label">Beskattningsgrad:</span>
-                <span class="param-value">
-                  <template
-                    v-for="(scenarioName, idx) in Object.keys(
-                      record.statistics.median.scenarios ?? {},
-                    )"
-                    :key="scenarioName"
+                <span class="param-value-group">
+                  <span class="param-value">
+                    {{ formatPercent(getWinnerStats(record)!.taxationDegree) }}
+                  </span>
+                  <span
+                    v-if="getSecondBestStats(record)"
+                    class="param-diff"
+                    :class="{
+                      positive:
+                        getWinnerStats(record)!.taxationDegree <
+                        getSecondBestStats(record)!.taxationDegree,
+                      negative:
+                        getWinnerStats(record)!.taxationDegree >
+                        getSecondBestStats(record)!.taxationDegree,
+                    }"
                   >
-                    <span v-if="idx > 0">, </span>
-                    {{ scenarioName }}
                     {{
-                      formatPercent(
-                        record.statistics.median.scenarios?.[scenarioName]?.taxationDegree,
+                      getPercentDiff(
+                        getWinnerStats(record)!.taxationDegree,
+                        getSecondBestStats(record)!.taxationDegree,
                       )
                     }}
-                  </template>
+                  </span>
                 </span>
               </div>
               <div class="param-row">
                 <span class="param-label">Maximalt drawdown:</span>
-                <span class="param-value">
-                  <template
-                    v-for="(scenarioName, idx) in Object.keys(
-                      record.statistics.median.scenarios ?? {},
-                    )"
-                    :key="scenarioName"
+                <span class="param-value-group">
+                  <span class="param-value">
+                    {{ formatPercent(getWinnerStats(record)!.maxDrawdown) }}
+                  </span>
+                  <span
+                    v-if="getSecondBestStats(record)"
+                    class="param-diff"
+                    :class="{
+                      positive:
+                        getWinnerStats(record)!.maxDrawdown <
+                        getSecondBestStats(record)!.maxDrawdown,
+                      negative:
+                        getWinnerStats(record)!.maxDrawdown >
+                        getSecondBestStats(record)!.maxDrawdown,
+                    }"
                   >
-                    <span v-if="idx > 0">, </span>
-                    {{ scenarioName }}
                     {{
-                      formatPercent(record.statistics.median.scenarios?.[scenarioName]?.maxDrawdown)
+                      getPercentDiff(
+                        getWinnerStats(record)!.maxDrawdown,
+                        getSecondBestStats(record)!.maxDrawdown,
+                      )
                     }}
-                  </template>
+                  </span>
                 </span>
               </div>
               <div class="param-row">
                 <span class="param-label">Simulering:</span>
-                <span class="param-value">
-                  {{ record.parameters.yearsLater }} år,
-                  {{ formatNumber(record.parameters.simulationCount) }} gånger
+                <span class="param-value-group">
+                  <span class="param-value">
+                    {{ record.parameters.yearsLater }} år,
+                    {{ formatNumber(record.parameters.simulationCount) }} gånger
+                  </span>
                 </span>
               </div>
             </div>
@@ -419,6 +569,7 @@ const positionPopover = (popoverId: string, anchorId: string) => {
   align-items: center;
   gap: 0.5rem;
   font-size: 0.9rem;
+  flex-wrap: wrap;
 }
 
 .winner-badge {
@@ -444,8 +595,32 @@ const positionPopover = (popoverId: string, anchorId: string) => {
   white-space: nowrap;
 }
 
+.param-value-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .param-value {
   font-weight: 500;
   text-align: right;
+}
+
+.param-diff {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6c757d;
+  min-width: 3rem;
+  text-align: right;
+}
+
+.param-diff.positive {
+  color: #198754;
+}
+
+.param-diff.negative {
+  color: #dc3545;
 }
 </style>

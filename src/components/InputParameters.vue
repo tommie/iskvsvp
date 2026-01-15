@@ -2,12 +2,14 @@
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PortfolioAsset } from '../types'
+import type { SimulationAsset } from '../types'
 
 const store = useCalculatorStore()
 const {
   initialCapital,
-  portfolio,
+  assets,
+  assetCorrelationMatrix,
+  assetRebalanceFrequency,
   balanceWithdrawalRate,
   profitWithdrawalRate,
   profitLookbackYears,
@@ -54,7 +56,7 @@ const rorPresets: RORPreset[] = [
 const getNextFundName = (): string => {
   const usedNumbers = new Set<number>()
 
-  portfolio.value.assets.forEach((asset) => {
+  assets.value.forEach((asset) => {
     const match = asset.name.match(/^Fond (\d+)$/)
     if (match) {
       usedNumbers.add(parseInt(match[1]!))
@@ -73,17 +75,17 @@ const getNextFundName = (): string => {
  * Add a new asset to the portfolio
  */
 const addAsset = () => {
-  const newAsset: PortfolioAsset = {
+  const newAsset: SimulationAsset = {
     name: getNextFundName(),
     weight: 0,
     expectedReturn: 0.1,
     volatility: 0.2,
   }
 
-  portfolio.value.assets.push(newAsset)
+  assets.value.push(newAsset)
 
   // Update correlation matrix - add new row and column with identity correlations
-  const n = portfolio.value.assets.length
+  const n = assets.value.length
   const newMatrix: number[][] = []
 
   for (let i = 0; i < n; i++) {
@@ -94,26 +96,26 @@ const addAsset = () => {
         newMatrix[i]![j] = i === j ? 1.0 : 0.5
       } else {
         // Copy existing correlations
-        newMatrix[i]![j] = portfolio.value.correlationMatrix[i]![j]!
+        newMatrix[i]![j] = assetCorrelationMatrix.value[i]![j]!
       }
     }
   }
 
-  portfolio.value.correlationMatrix = newMatrix
+  assetCorrelationMatrix.value = newMatrix
 }
 
 /**
  * Remove an asset from the portfolio
  */
 const removeAsset = (index: number) => {
-  if (portfolio.value.assets.length <= 1) {
+  if (assets.value.length <= 1) {
     return // Cannot remove last asset
   }
 
-  portfolio.value.assets.splice(index, 1)
+  assets.value.splice(index, 1)
 
   // Update correlation matrix - remove row and column
-  const n = portfolio.value.assets.length
+  const n = assets.value.length
   const newMatrix: number[][] = []
 
   for (let i = 0; i < n + 1; i++) {
@@ -121,16 +123,16 @@ const removeAsset = (index: number) => {
     const newRow: number[] = []
     for (let j = 0; j < n + 1; j++) {
       if (j === index) continue
-      newRow.push(portfolio.value.correlationMatrix[i]![j]!)
+      newRow.push(assetCorrelationMatrix.value[i]![j]!)
     }
     newMatrix.push(newRow)
   }
 
-  portfolio.value.correlationMatrix = newMatrix
+  assetCorrelationMatrix.value = newMatrix
 
   // Adjust selected asset index if needed
-  if (selectedAssetIndex.value >= portfolio.value.assets.length) {
-    selectedAssetIndex.value = portfolio.value.assets.length - 1
+  if (selectedAssetIndex.value >= assets.value.length) {
+    selectedAssetIndex.value = assets.value.length - 1
   }
 }
 
@@ -139,10 +141,10 @@ const removeAsset = (index: number) => {
  */
 const applyRORPreset = () => {
   const preset = rorPresets.find((p) => p.label === rorPreset.value)
-  if (preset && portfolio.value.assets[selectedAssetIndex.value]) {
-    portfolio.value.assets[selectedAssetIndex.value]!.name = preset.label
-    portfolio.value.assets[selectedAssetIndex.value]!.expectedReturn = preset.mean
-    portfolio.value.assets[selectedAssetIndex.value]!.volatility = preset.stdDev
+  if (preset && assets.value[selectedAssetIndex.value]) {
+    assets.value[selectedAssetIndex.value]!.name = preset.label
+    assets.value[selectedAssetIndex.value]!.expectedReturn = preset.mean
+    assets.value[selectedAssetIndex.value]!.volatility = preset.stdDev
   }
 }
 
@@ -150,7 +152,7 @@ const applyRORPreset = () => {
  * Calculate total weight of all assets
  */
 const totalWeight = computed(() => {
-  return portfolio.value.assets.reduce((sum, asset) => sum + asset.weight, 0)
+  return assets.value.reduce((sum, asset) => sum + asset.weight, 0)
 })
 
 /**
@@ -167,13 +169,13 @@ const normalizeWeights = () => {
   const total = totalWeight.value
   if (total === 0) {
     // Equal distribution if all weights are zero
-    const equalWeight = 1.0 / portfolio.value.assets.length
-    portfolio.value.assets.forEach((asset) => {
+    const equalWeight = 1.0 / assets.value.length
+    assets.value.forEach((asset) => {
       asset.weight = equalWeight
     })
   } else {
     // Proportional normalization
-    portfolio.value.assets.forEach((asset) => {
+    assets.value.forEach((asset) => {
       asset.weight = asset.weight / total
     })
   }
@@ -183,7 +185,7 @@ const normalizeWeights = () => {
  * Calculate expected portfolio return (weighted average)
  */
 const expectedPortfolioReturn = computed(() => {
-  return portfolio.value.assets.reduce((sum, asset) => sum + asset.weight * asset.expectedReturn, 0)
+  return assets.value.reduce((sum, asset) => sum + asset.weight * asset.expectedReturn, 0)
 })
 
 /**
@@ -197,15 +199,15 @@ const updateCorrelation = (i: number, j: number, value: string) => {
   }
 
   // Update both symmetric positions
-  portfolio.value.correlationMatrix[i]![j] = numValue
-  portfolio.value.correlationMatrix[j]![i] = numValue
+  assetCorrelationMatrix.value[i]![j] = numValue
+  assetCorrelationMatrix.value[j]![i] = numValue
 }
 
 /**
  * Get correlation value for display (formatted)
  */
 const getCorrelation = (i: number, j: number): string => {
-  return portfolio.value.correlationMatrix[i]?.[j]?.toFixed(2) ?? '0.00'
+  return assetCorrelationMatrix.value[i]?.[j]?.toFixed(2) ?? '0.00'
 }
 
 const handleRunSimulation = async () => {
@@ -280,9 +282,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                     :disabled="isRunning"
                   />
                   <span class="input-group-text">%</span>
-                  <small class="form-text text-muted">
-                    Belopp baserat på kapitalets värde.
-                  </small>
+                  <small class="form-text text-muted"> Belopp baserat på kapitalets värde. </small>
                 </div>
               </div>
               <div class="col-12 col-md-6">
@@ -298,8 +298,8 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <span class="input-group-text">kr</span>
                 </div>
                 <small class="form-text text-muted">
-                  Fast belopp som ökas med inflation varje år.
-                  Kan användas t.ex. för nödvändiga kostnader.
+                  Fast belopp som ökas med inflation varje år. Kan användas t.ex. för nödvändiga
+                  kostnader.
                 </small>
               </div>
               <div class="col-12 col-md-6">
@@ -345,9 +345,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                   />
                   <span class="input-group-text">%</span>
                 </div>
-                <small class="form-text text-muted">
-                  Första åren.
-                </small>
+                <small class="form-text text-muted"> Första åren. </small>
               </div>
             </div>
           </div>
@@ -389,7 +387,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                 </thead>
                 <tbody>
                   <tr
-                    v-for="(asset, index) in portfolio.assets"
+                    v-for="(asset, index) in assets"
                     :key="index"
                     :class="{ 'table-active': index === selectedAssetIndex }"
                   >
@@ -445,7 +443,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                         type="button"
                         class="btn btn-sm btn-outline-danger"
                         @click="removeAsset(index)"
-                        :disabled="isRunning || portfolio.assets.length <= 1"
+                        :disabled="isRunning || assets.length <= 1"
                         title="Ta bort fond"
                       >
                         ×
@@ -485,11 +483,11 @@ const expectedTotalWithdrawalRate = computed(() => {
               <small>⚠️ Vikterna måste summera till 100%</small>
             </div>
 
-            <div v-if="portfolio.assets.length > 1" class="mt-3">
+            <div v-if="assets.length > 1" class="mt-3">
               <label class="form-label">Ombalansering</label>
               <select
                 class="form-select form-select-sm"
-                v-model="portfolio.rebalanceFrequency"
+                v-model="assetRebalanceFrequency"
                 :disabled="isRunning"
               >
                 <option value="never">Aldrig</option>
@@ -497,21 +495,21 @@ const expectedTotalWithdrawalRate = computed(() => {
               </select>
             </div>
 
-            <div v-if="portfolio.assets.length > 1" class="mt-3">
+            <div v-if="assets.length > 1" class="mt-3">
               <label class="form-label">Korrelationsmatris</label>
               <div class="table-responsive">
                 <table class="table table-sm table-striped correlation-matrix-table">
                   <tbody>
-                    <tr v-for="(assetRow, i) in portfolio.assets" :key="i">
+                    <tr v-for="(assetRow, i) in assets" :key="i">
                       <td
-                        v-for="(_assetCol, j) in portfolio.assets.slice(0, i + 1)"
+                        v-for="(_assetCol, j) in assets.slice(0, i + 1)"
                         :key="j"
                         :class="{
                           'diagonal-cell': i === j,
                           'lower-triangle': i > j,
-                          'last-column': j === portfolio.assets.length - 1,
+                          'last-column': j === assets.length - 1,
                         }"
-                        :colspan="i === j ? portfolio.assets.length - i : undefined"
+                        :colspan="i === j ? assets.length - i : undefined"
                       >
                         <span v-if="i === j" class="asset-name" :title="assetRow.name">
                           {{ assetRow.name }}
