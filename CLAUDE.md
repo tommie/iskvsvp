@@ -43,9 +43,12 @@ src/
 
 **SummaryStatistics.vue**
 - Shows percentiles (5th, 25th, median, 75th, 95th) plus mean and stddev
-- Color-coded difference cells (green for ISK advantage, red for disadvantage)
-- Sections: Likvid värde, Betald skatt, Beskattningsgrad, Uttag (sista året), Uttag (första året), Ackumulerat uttag
-- Average parameters across all simulations
+- Generic multi-scenario support: uses index-based access to SimulationResults.statistics[] and labels[]
+- Color-coded cells using COLORS array (hex with 20% opacity) for best-performing scenario in each metric
+- Helper functions: getValue(), getBestScenario(), getCellStyle() for dynamic scenario access
+- Sections: Likvid värde, Totalt värde, Betald skatt, Beskattningsgrad, Uttag (sista året), Ackumulerat uttag, Max drawdown, Längsta drawdown-period
+- Average parameters across all simulations (development, inflation, ISK tax rate when applicable)
+- Supports both "higher is better" (value, withdrawal) and "lower is better" (tax, drawdown) metrics
 
 **TimeSeriesVisualization.vue**
 - D3.js scatter plot with logarithmic y-axis
@@ -55,7 +58,12 @@ src/
 - Responsive chart with window resize handling
 
 **SimulationHistory.vue**
-- Displays past simulations with key results
+- Displays past simulations with key results for winning scenario only
+- Winner determined by highest total value (median) across all scenarios
+- Shows winner label with color coding (from COLORS array) and lists other scenario labels ("vs X, Y")
+- Displays percentage comparison between winner and second-best scenario for each metric
+- Color-coded percentages: green for favorable differences, red for unfavorable
+- Helper functions: getWinnerIndex(), getSecondBestIndex(), getWinnerStats(), getPercentDiff()
 - Load button (icon) to restore parameters
 - Delete button with HTML popover confirmation
 - Clear all button with HTML popover confirmation
@@ -109,13 +117,28 @@ vpLiquidValue = amountVP - futureTaxVP / (1 + return)
 
 ### Visualization
 
+**COLORS Array**:
+- Shared color palette: `['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']`
+- Used consistently across all visualization components
+- Scenario colors assigned by index (scenario 0 = first color, etc.)
+- Applied with opacity variations (e.g., 20% opacity for cell backgrounds, full opacity for chart lines)
+
 **Time Series Chart**:
 - X-axis: Year (age)
 - Y-axis: Value in SEK (logarithmic scale)
-- Blue dots/line: ISK simulations and median
-- Red dots/line: VP simulations and median
+- Each scenario rendered with its corresponding color from COLORS array
+- Dots for individual simulations (semi-transparent) and solid lines for medians
 - Opacity creates density visualization
 - Invalid data filtered before rendering
+
+**Summary Statistics**:
+- Best-performing scenario in each metric highlighted with background color (20% opacity)
+- Color corresponds to scenario's index in COLORS array
+
+**Distribution Charts** (SummaryVisualization.vue):
+- Vertical density lines showing value distributions
+- Median lines with labels for each scenario
+- Colors assigned by scenario index from COLORS array
 
 ## State Management
 
@@ -157,9 +180,12 @@ npm run preview # Preview production build
 
 ## Technical Notes
 
+- **Multi-Scenario Architecture**: Components use index-based access to support arbitrary number of scenarios, not hard-coded ISK/VP. SimulationResults contains `labels: string[]` and `statistics: SimulationStatistics[]` arrays accessed by index.
+- **COLORS Array**: Shared constant defining color palette, used across all components for consistent scenario coloring
 - **HTML Popover API**: Used for confirmation dialogs with manual JavaScript positioning via `beforetoggle` event
 - **D3 Data Filtering**: Essential to filter out NaN/Infinity/negative values before rendering
 - **Log Scale**: Better visualizes the wide range of simulation outcomes
 - **Median vs Mean**: Chart shows median to be robust against outliers
 - **Central Limit Theorem**: Output stddev is smaller than input stddev because it's averaging over multiple years
 - **Real Values**: All withdrawal and comparison values adjusted for cumulative inflation
+- **Metric Direction**: Components distinguish between "higher is better" (values, withdrawals) and "lower is better" (taxes, drawdowns) metrics for proper color coding
