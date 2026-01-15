@@ -7,6 +7,8 @@ import type {
   SimulationAsset,
   SimulationResults,
   RebalanceFrequency,
+  ScenarioTable,
+  ScenarioParameter,
 } from '../types'
 import { useHistoryStore } from './history'
 import { encodeParamsToUrl, decodeParamsFromUrl } from '../utils/url-params'
@@ -43,11 +45,158 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const simulationCount = ref(1000)
   const seed = ref<string | undefined>(undefined)
 
+  // Scenario table state
+  const scenarioTable = ref<ScenarioTable | null>(null)
+  const isAddToTableMode = ref(false)
+
   // Simulation state
   const isRunning = ref(false)
   const progress = ref(0)
   const simulationResults = shallowRef<SimulationResults | null>(null)
   const showDetailedStatistics = ref(false)
+
+  // Computed: get list of parameters controlled by the scenario table
+  const controlledParameters = computed(() => {
+    if (!scenarioTable.value || scenarioTable.value.scenarios.length === 0) {
+      return new Set<ScenarioParameter>()
+    }
+
+    // Collect all parameter keys from all scenarios
+    const params = new Set<ScenarioParameter>()
+    for (const scenario of scenarioTable.value.scenarios) {
+      for (const key of Object.keys(scenario.parameters) as ScenarioParameter[]) {
+        params.add(key)
+      }
+    }
+    return params
+  })
+
+  // Check if a parameter is controlled by the scenario table
+  const isParameterControlled = (paramKey: ScenarioParameter): boolean => {
+    return controlledParameters.value.has(paramKey)
+  }
+
+  // Scenario table actions
+  function enableScenarioTable() {
+    if (!scenarioTable.value) {
+      scenarioTable.value = {
+        scenarios: [
+          { label: 'Scenario 1', parameters: {} },
+          { label: 'Scenario 2', parameters: {} },
+        ],
+      }
+    }
+  }
+
+  function disableScenarioTable() {
+    scenarioTable.value = null
+    isAddToTableMode.value = false
+  }
+
+  function toggleAddToTableMode() {
+    if (!scenarioTable.value) {
+      enableScenarioTable()
+    }
+    isAddToTableMode.value = !isAddToTableMode.value
+  }
+
+  function addParameterToTable(paramKey: ScenarioParameter) {
+    if (!scenarioTable.value) {
+      enableScenarioTable()
+    }
+
+    // Get current value of the parameter
+    const currentValue = getCurrentParameterValue(paramKey)
+
+    // Add the parameter with current value to all scenarios
+    for (const scenario of scenarioTable.value!.scenarios) {
+      if (!(paramKey in scenario.parameters)) {
+        scenario.parameters[paramKey] = currentValue
+      }
+    }
+  }
+
+  function removeParameterFromTable(paramKey: ScenarioParameter) {
+    if (!scenarioTable.value) return
+
+    // Remove the parameter from all scenarios
+    for (const scenario of scenarioTable.value.scenarios) {
+      delete scenario.parameters[paramKey]
+    }
+  }
+
+  function addScenario(label?: string) {
+    if (!scenarioTable.value) {
+      enableScenarioTable()
+    }
+
+    const scenarioCount = scenarioTable.value!.scenarios.length
+    const newScenario = {
+      label: label ?? `Scenario ${scenarioCount + 1}`,
+      parameters: {} as Partial<InputParameters>,
+    }
+
+    // Copy controlled parameters from the first scenario as defaults
+    if (scenarioTable.value!.scenarios.length > 0) {
+      const firstScenario = scenarioTable.value!.scenarios[0]!
+      for (const key of Object.keys(firstScenario.parameters) as ScenarioParameter[]) {
+        const value = firstScenario.parameters[key]
+        if (value !== undefined) {
+          ;(newScenario.parameters as any)[key] = value
+        }
+      }
+    }
+
+    scenarioTable.value!.scenarios.push(newScenario)
+  }
+
+  function removeScenario(index: number) {
+    if (!scenarioTable.value) return
+    if (scenarioTable.value.scenarios.length <= 1) {
+      // Don't allow removing if only 1 scenario left
+      return
+    }
+
+    scenarioTable.value.scenarios.splice(index, 1)
+  }
+
+  function updateScenarioLabel(index: number, label: string) {
+    if (!scenarioTable.value) return
+    if (index < 0 || index >= scenarioTable.value.scenarios.length) return
+
+    scenarioTable.value.scenarios[index]!.label = label
+  }
+
+  function updateScenarioValue(scenarioIndex: number, paramKey: ScenarioParameter, value: any) {
+    if (!scenarioTable.value) return
+    if (scenarioIndex < 0 || scenarioIndex >= scenarioTable.value.scenarios.length) return
+
+    scenarioTable.value.scenarios[scenarioIndex]!.parameters[paramKey] = value
+  }
+
+  // Helper to get current parameter value from the store
+  function getCurrentParameterValue(paramKey: ScenarioParameter): any {
+    const paramMap: Record<ScenarioParameter, any> = {
+      initialCapital: initialCapital.value,
+      startYear: startYear.value,
+      yearsLater: yearsLater.value,
+      simulationCount: simulationCount.value,
+      assets: assets.value,
+      assetCorrelationMatrix: assetCorrelationMatrix.value,
+      assetRebalanceFrequency: assetRebalanceFrequency.value,
+      balanceWithdrawalRate: balanceWithdrawalRate.value,
+      profitWithdrawalRate: profitWithdrawalRate.value,
+      profitLookbackYears: profitLookbackYears.value,
+      inflationBasedWithdrawal: inflationBasedWithdrawal.value,
+      vpWealthTaxRate: vpFundTaxRate.value,
+      capitalGainsTaxRate: capitalGainsTax.value,
+      iskTaxRate: iskTaxRate.value,
+      iskTaxRateStdDev: iskTaxRateStdDev.value,
+      inflationRate: inflationRate.value,
+      inflationStdDev: inflationStdDev.value,
+    }
+    return paramMap[paramKey]
+  }
 
   // Helper to create base parameters (common to both ISK and VP)
   const createBaseParameters = (): Omit<
@@ -72,7 +221,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
   })
 
   /**
-   * Run the Monte Carlo simulation for both ISK and VP scenarios.
+   * Run the Monte Carlo simulation.
+   * If scenario table is enabled, runs scenarios from the table.
+   * Otherwise, runs default ISK vs VP comparison.
    */
   async function runSimulation() {
     const worker = new SimulationWorker()
@@ -82,24 +233,48 @@ export const useCalculatorStore = defineStore('calculator', () => {
 
     try {
       const baseSeed = seed.value ?? Math.random().toString(36).substring(2, 15)
-      const baseParams = createBaseParameters()
+      let paramSets: InputParameters[]
+      let labels: string[]
 
-      // Create ISK parameters
-      const iskParams: InputParameters = {
-        ...baseParams,
-        iskTaxRate: iskTaxRate.value,
-        iskTaxRateStdDev: iskTaxRateStdDev.value,
-        seed: baseSeed,
+      if (scenarioTable.value && scenarioTable.value.scenarios.length > 0) {
+        // Use scenario table scenarios
+        paramSets = []
+        labels = []
+
+        for (const scenario of scenarioTable.value.scenarios) {
+          const baseParams = createBaseParameters()
+
+          // Merge scenario-specific parameters
+          const scenarioParams: InputParameters = {
+            ...baseParams,
+            ...scenario.parameters,
+            seed: baseSeed,
+          }
+
+          paramSets.push(scenarioParams)
+          labels.push(scenario.label)
+        }
+      } else {
+        // Default ISK vs VP comparison
+        const baseParams = createBaseParameters()
+
+        // Create ISK parameters
+        const iskParams: InputParameters = {
+          ...baseParams,
+          iskTaxRate: iskTaxRate.value,
+          iskTaxRateStdDev: iskTaxRateStdDev.value,
+          seed: baseSeed,
+        }
+
+        // Create VP parameters
+        const vpParams: InputParameters = {
+          ...baseParams,
+          seed: baseSeed,
+        }
+
+        paramSets = [iskParams, vpParams]
+        labels = ['ISK', 'VP']
       }
-
-      // Create VP parameters
-      const vpParams: InputParameters = {
-        ...baseParams,
-        seed: baseSeed,
-      }
-
-      const paramSets = [iskParams, vpParams]
-      const labels = ['ISK', 'VP']
 
       // Create plain object copy for worker
       const plainParamSets = JSON.parse(JSON.stringify(paramSets))
@@ -131,9 +306,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
 
       simulationResults.value = results
 
-      // Save to history (save ISK params as the representative parameters)
+      // Save to history (save first scenario params as the representative parameters)
       const historyStore = useHistoryStore()
-      historyStore.addRecord(iskParams, results)
+      historyStore.addRecord(paramSets[0]!, results)
     } finally {
       worker.terminate()
       isRunning.value = false
@@ -349,10 +524,27 @@ export const useCalculatorStore = defineStore('calculator', () => {
     summaryData,
     showDetailedStatistics,
 
+    // Scenario table state
+    scenarioTable,
+    isAddToTableMode,
+    controlledParameters,
+
     // Actions
     runSimulation,
     resetResults,
     loadParameters,
     initUrlSync,
+
+    // Scenario table actions
+    isParameterControlled,
+    enableScenarioTable,
+    disableScenarioTable,
+    toggleAddToTableMode,
+    addParameterToTable,
+    removeParameterFromTable,
+    addScenario,
+    removeScenario,
+    updateScenarioLabel,
+    updateScenarioValue,
   }
 })

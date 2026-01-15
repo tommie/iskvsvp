@@ -92,3 +92,16 @@ export interface SimulationResults {
   // A representative sample of the median for each scenario
   medianSamples: SimulationResult<number>[]
 }
+
+// Scenario table for multi-scenario comparisons
+export interface Scenario {
+  label: string
+  parameters: Partial<InputParameters>
+}
+
+export interface ScenarioTable {
+  scenarios: Scenario[]
+}
+
+// Type-safe parameter keys (excludes seed which is auto-generated)
+export type ScenarioParameter = Exclude<keyof InputParameters, 'seed'>

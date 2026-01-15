@@ -3,6 +3,7 @@ import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
 import { ref, watch, onMounted } from 'vue'
 import InputParameters from '../components/InputParameters.vue'
+import ScenarioTable from '../components/ScenarioTable.vue'
 import SummaryStatistics from '../components/SummaryStatistics.vue'
 import SummaryVisualization from '../components/SummaryVisualization.vue'
 import TimeSeriesVisualization from '../components/TimeSeriesVisualization.vue'
@@ -39,7 +40,20 @@ watch(simulationResults, (newResults) => {
       </p>
     </header>
 
-    <InputParameters />
+    <InputParameters>
+      <template #actions>
+        <button
+          v-if="!store.scenarioTable"
+          type="button"
+          class="btn btn-outline-primary"
+          @click="store.enableScenarioTable()"
+        >
+          Aktivera scenariotabell
+        </button>
+      </template>
+    </InputParameters>
+
+    <ScenarioTable />
 
     <div v-if="simulationResults" class="mt-4">
       <div class="d-flex align-items-center border-bottom">

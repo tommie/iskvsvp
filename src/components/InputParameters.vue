@@ -25,7 +25,44 @@ const {
   simulationCount,
   isRunning,
   progress,
+  isAddToTableMode,
 } = storeToRefs(store)
+
+// Import ScenarioParameter type for parameter click handling
+import type { ScenarioParameter } from '../types'
+
+// Handle click on input field when in "add to table" mode
+function handleParameterClick(paramKey: ScenarioParameter, event: Event) {
+  if (!isAddToTableMode.value) return
+
+  // Prevent default input behavior
+  event.preventDefault()
+  event.stopPropagation()
+
+  // Add parameter to table
+  store.addParameterToTable(paramKey)
+
+  // Blur the input to prevent further interaction
+  const target = event.target as HTMLInputElement
+  target.blur()
+}
+
+// Check if parameter is disabled (controlled by table or simulation running)
+function isFieldDisabled(paramKey: ScenarioParameter): boolean {
+  return isRunning.value || store.isParameterControlled(paramKey)
+}
+
+// Get class for input field (add clickable styling when in add-to-table mode)
+function getInputClass(paramKey: ScenarioParameter): string {
+  const baseClass = 'form-control text-end'
+  if (isAddToTableMode.value && !store.isParameterControlled(paramKey)) {
+    return `${baseClass} clickable-input`
+  }
+  if (store.isParameterControlled(paramKey)) {
+    return `${baseClass} table-controlled`
+  }
+  return baseClass
+}
 
 const rorPreset = ref('')
 const selectedAssetIndex = ref(0)
@@ -258,9 +295,10 @@ const expectedTotalWithdrawalRate = computed(() => {
                 <label class="form-label">Initialt kapital</label>
                 <input
                   type="number"
-                  class="form-control text-end"
+                  :class="getInputClass('initialCapital')"
                   v-model.number="initialCapital"
-                  :disabled="isRunning"
+                  :disabled="isFieldDisabled('initialCapital')"
+                  @click="handleParameterClick('initialCapital', $event)"
                 />
               </div>
             </div>
@@ -276,10 +314,11 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <input
                     type="number"
                     step="0.1"
-                    class="form-control text-end"
+                    :class="getInputClass('balanceWithdrawalRate')"
                     :value="(balanceWithdrawalRate * 100).toFixed(1)"
                     @change="balanceWithdrawalRate = getTargetValue($event) / 100"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('balanceWithdrawalRate')"
+                    @click="handleParameterClick('balanceWithdrawalRate', $event)"
                   />
                   <span class="input-group-text">%</span>
                   <small class="form-text text-muted"> Belopp baserat på kapitalets värde. </small>
@@ -291,9 +330,10 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <input
                     type="number"
                     step="1000"
-                    class="form-control text-end"
+                    :class="getInputClass('inflationBasedWithdrawal')"
                     v-model.number="inflationBasedWithdrawal"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('inflationBasedWithdrawal')"
+                    @click="handleParameterClick('inflationBasedWithdrawal', $event)"
                   />
                   <span class="input-group-text">kr</span>
                 </div>
@@ -308,10 +348,11 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <input
                     type="number"
                     step="0.1"
-                    class="form-control text-end"
+                    :class="getInputClass('profitWithdrawalRate')"
                     :value="(profitWithdrawalRate * 100).toFixed(1)"
                     @change="profitWithdrawalRate = getTargetValue($event) / 100"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('profitWithdrawalRate')"
+                    @click="handleParameterClick('profitWithdrawalRate', $event)"
                   />
                   <span class="input-group-text">%</span>
                 </div>
@@ -325,10 +366,11 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <input
                     type="number"
                     step="1"
-                    class="form-control text-end"
+                    :class="getInputClass('profitLookbackYears')"
                     :value="profitLookbackYears"
                     @change="profitLookbackYears = getTargetValue($event)"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('profitLookbackYears')"
+                    @click="handleParameterClick('profitLookbackYears', $event)"
                   />
                   <span class="input-group-text">år</span>
                 </div>
@@ -487,8 +529,14 @@ const expectedTotalWithdrawalRate = computed(() => {
               <label class="form-label">Ombalansering</label>
               <select
                 class="form-select form-select-sm"
+                :class="{
+                  'table-controlled': store.isParameterControlled('assetRebalanceFrequency'),
+                  'clickable-input':
+                    isAddToTableMode && !store.isParameterControlled('assetRebalanceFrequency'),
+                }"
                 v-model="assetRebalanceFrequency"
-                :disabled="isRunning"
+                :disabled="isFieldDisabled('assetRebalanceFrequency')"
+                @click="handleParameterClick('assetRebalanceFrequency', $event)"
               >
                 <option value="never">Aldrig</option>
                 <option value="annually">Årligen</option>
@@ -548,10 +596,11 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <input
                     type="number"
                     step="0.1"
-                    class="form-control text-end"
+                    :class="getInputClass('inflationRate')"
                     :value="(inflationRate * 100).toFixed(1)"
                     @change="inflationRate = getTargetValue($event) / 100"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('inflationRate')"
+                    @click="handleParameterClick('inflationRate', $event)"
                   />
                   <span class="input-group-text">%</span>
                 </div>
@@ -562,10 +611,11 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <input
                     type="number"
                     step="0.1"
-                    class="form-control text-end"
+                    :class="getInputClass('inflationStdDev')"
                     :value="(inflationStdDev * 100).toFixed(1)"
                     @change="inflationStdDev = getTargetValue($event) / 100"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('inflationStdDev')"
+                    @click="handleParameterClick('inflationStdDev', $event)"
                   />
                   <span class="input-group-text">%</span>
                 </div>
@@ -583,10 +633,11 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <input
                     type="number"
                     step="0.1"
-                    class="form-control text-end"
+                    :class="getInputClass('capitalGainsTaxRate')"
                     :value="(capitalGainsTax * 100).toFixed(1)"
                     @change="capitalGainsTax = getTargetValue($event) / 100"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('capitalGainsTaxRate')"
+                    @click="handleParameterClick('capitalGainsTaxRate', $event)"
                   />
                   <span class="input-group-text">%</span>
                 </div>
@@ -597,10 +648,11 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <input
                     type="number"
                     step="0.01"
-                    class="form-control text-end"
+                    :class="getInputClass('vpWealthTaxRate')"
                     :value="(vpFundTaxRate * 100).toFixed(2)"
                     @change="vpFundTaxRate = getTargetValue($event) / 100"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('vpWealthTaxRate')"
+                    @click="handleParameterClick('vpWealthTaxRate', $event)"
                   />
                   <span class="input-group-text">%</span>
                 </div>
@@ -614,10 +666,11 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <input
                     type="number"
                     step="0.01"
-                    class="form-control text-end"
+                    :class="getInputClass('iskTaxRate')"
                     :value="(iskTaxRate * 100).toFixed(2)"
                     @change="iskTaxRate = getTargetValue($event) / 100"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('iskTaxRate')"
+                    @click="handleParameterClick('iskTaxRate', $event)"
                   />
                   <span class="input-group-text">%</span>
                 </div>
@@ -629,10 +682,11 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <input
                     type="number"
                     step="0.01"
-                    class="form-control text-end"
+                    :class="getInputClass('iskTaxRateStdDev')"
                     :value="(iskTaxRateStdDev * 100).toFixed(2)"
                     @change="iskTaxRateStdDev = getTargetValue($event) / 100"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('iskTaxRateStdDev')"
+                    @click="handleParameterClick('iskTaxRateStdDev', $event)"
                   />
                   <span class="input-group-text">%</span>
                 </div>
@@ -649,9 +703,10 @@ const expectedTotalWithdrawalRate = computed(() => {
                 <label class="form-label">Startår (ålder)</label>
                 <input
                   type="number"
-                  class="form-control text-end"
+                  :class="getInputClass('startYear')"
                   v-model.number="startYear"
-                  :disabled="isRunning"
+                  :disabled="isFieldDisabled('startYear')"
+                  @click="handleParameterClick('startYear', $event)"
                 />
               </div>
               <div class="col-12 col-md-6">
@@ -659,11 +714,12 @@ const expectedTotalWithdrawalRate = computed(() => {
                 <div class="input-group">
                   <input
                     type="number"
-                    class="form-control text-end"
+                    :class="getInputClass('yearsLater')"
                     v-model.number="yearsLater"
                     min="1"
                     max="100"
-                    :disabled="isRunning"
+                    :disabled="isFieldDisabled('yearsLater')"
+                    @click="handleParameterClick('yearsLater', $event)"
                   />
                   <span class="input-group-text">år</span>
                 </div>
@@ -672,12 +728,13 @@ const expectedTotalWithdrawalRate = computed(() => {
                 <label class="form-label">Antal simuleringar</label>
                 <input
                   type="number"
-                  class="form-control text-end"
+                  :class="getInputClass('simulationCount')"
                   v-model.number="simulationCount"
                   min="100"
                   max="100000"
                   step="100"
-                  :disabled="isRunning"
+                  :disabled="isFieldDisabled('simulationCount')"
+                  @click="handleParameterClick('simulationCount', $event)"
                 />
               </div>
             </div>
@@ -685,12 +742,16 @@ const expectedTotalWithdrawalRate = computed(() => {
         </div>
       </div>
 
-      <div class="mt-4 d-flex align-items-center">
+      <div class="mt-4 d-flex align-items-center gap-2">
         <button class="btn btn-primary btn-lg" @click="handleRunSimulation" :disabled="isRunning">
           <span v-if="isRunning" class="spinner-border spinner-border-sm me-2"></span>
           <span v-else class="me-2">⏵</span>
           Kör simulering
         </button>
+
+        <div class="ms-3">
+          <slot name="actions"></slot>
+        </div>
 
         <div
           v-if="isRunning"
@@ -827,5 +888,22 @@ const expectedTotalWithdrawalRate = computed(() => {
 .correlation-matrix-table .diagonal-cell {
   font-weight: 500;
   padding: 0.5rem 0.25rem;
+}
+
+/* Scenario table styling */
+.clickable-input {
+  cursor: pointer;
+  border-color: #0d6efd !important;
+  background-color: #e7f1ff !important;
+}
+
+.clickable-input:hover {
+  border-color: #0a58ca !important;
+  background-color: #cfe2ff !important;
+}
+
+.table-controlled {
+  background-color: #f8f9fa !important;
+  cursor: not-allowed;
 }
 </style>
