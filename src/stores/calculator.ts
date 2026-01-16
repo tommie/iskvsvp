@@ -11,7 +11,12 @@ import type {
   ScenarioParameter,
 } from '../types'
 import { useHistoryStore } from './history'
-import { encodeParamsToUrl, decodeParamsFromUrl } from '../utils/url-params'
+import {
+  encodeParamsToUrl,
+  decodeParamsFromUrl,
+  encodeScenarioTableToUrl,
+  decodeScenarioTableFromUrl,
+} from '../utils/url-params'
 import SimulationWorker from '../simulation.worker?worker'
 
 export const useCalculatorStore = defineStore('calculator', () => {
@@ -231,6 +236,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     const worker = new SimulationWorker()
 
     isRunning.value = true
+    isAddToTableMode.value = false
     progress.value = 0
 
     try {
@@ -381,41 +387,55 @@ export const useCalculatorStore = defineStore('calculator', () => {
     watch(
       route,
       (route) => {
+        // Always try to load scenario table first
+        const urlScenarioTable = decodeScenarioTableFromUrl(route.query)
+
+        // Always try to load base parameters
         const urlParams = decodeParamsFromUrl(route.query)
-        if (urlParams && Object.keys(urlParams).length > 0) {
+
+        if ((urlScenarioTable || urlParams) && Object.keys(route.query).length > 0) {
           isUpdatingFromUrl = true
 
           try {
-            if (urlParams.initialCapital !== undefined)
-              initialCapital.value = urlParams.initialCapital
-            if (urlParams.startYear !== undefined) startYear.value = urlParams.startYear
-            if (urlParams.yearsLater !== undefined) yearsLater.value = urlParams.yearsLater
-            if (urlParams.simulationCount !== undefined)
-              simulationCount.value = urlParams.simulationCount
-            if (urlParams.assets !== undefined) assets.value = urlParams.assets
-            if (urlParams.assetCorrelationMatrix !== undefined)
-              assetCorrelationMatrix.value = urlParams.assetCorrelationMatrix
-            if (urlParams.assetRebalanceFrequency !== undefined)
-              assetRebalanceFrequency.value = urlParams.assetRebalanceFrequency
-            if (urlParams.balanceWithdrawalRate !== undefined)
-              balanceWithdrawalRate.value = urlParams.balanceWithdrawalRate
-            if (urlParams.profitWithdrawalRate !== undefined)
-              profitWithdrawalRate.value = urlParams.profitWithdrawalRate
-            if (urlParams.profitLookbackYears !== undefined)
-              profitLookbackYears.value = urlParams.profitLookbackYears
-            if (urlParams.inflationBasedWithdrawal !== undefined)
-              inflationBasedWithdrawal.value = urlParams.inflationBasedWithdrawal
-            if (urlParams.inflationRate !== undefined) inflationRate.value = urlParams.inflationRate
-            if (urlParams.inflationStdDev !== undefined)
-              inflationStdDev.value = urlParams.inflationStdDev
-            if (urlParams.vpWealthTaxRate !== undefined)
-              vpFundTaxRate.value = urlParams.vpWealthTaxRate
-            if (urlParams.capitalGainsTaxRate !== undefined)
-              capitalGainsTax.value = urlParams.capitalGainsTaxRate
-            if (urlParams.iskTaxRate !== undefined) iskTaxRate.value = urlParams.iskTaxRate
-            if (urlParams.iskTaxRateStdDev !== undefined)
-              iskTaxRateStdDev.value = urlParams.iskTaxRateStdDev
-            if (urlParams.seed !== undefined) seed.value = urlParams.seed
+            // Load base parameters (non-controlled parameters when table is enabled)
+            if (urlParams && Object.keys(urlParams).length > 0) {
+              if (urlParams.initialCapital !== undefined)
+                initialCapital.value = urlParams.initialCapital
+              if (urlParams.startYear !== undefined) startYear.value = urlParams.startYear
+              if (urlParams.yearsLater !== undefined) yearsLater.value = urlParams.yearsLater
+              if (urlParams.simulationCount !== undefined)
+                simulationCount.value = urlParams.simulationCount
+              if (urlParams.assets !== undefined) assets.value = urlParams.assets
+              if (urlParams.assetCorrelationMatrix !== undefined)
+                assetCorrelationMatrix.value = urlParams.assetCorrelationMatrix
+              if (urlParams.assetRebalanceFrequency !== undefined)
+                assetRebalanceFrequency.value = urlParams.assetRebalanceFrequency
+              if (urlParams.balanceWithdrawalRate !== undefined)
+                balanceWithdrawalRate.value = urlParams.balanceWithdrawalRate
+              if (urlParams.profitWithdrawalRate !== undefined)
+                profitWithdrawalRate.value = urlParams.profitWithdrawalRate
+              if (urlParams.profitLookbackYears !== undefined)
+                profitLookbackYears.value = urlParams.profitLookbackYears
+              if (urlParams.inflationBasedWithdrawal !== undefined)
+                inflationBasedWithdrawal.value = urlParams.inflationBasedWithdrawal
+              if (urlParams.inflationRate !== undefined)
+                inflationRate.value = urlParams.inflationRate
+              if (urlParams.inflationStdDev !== undefined)
+                inflationStdDev.value = urlParams.inflationStdDev
+              if (urlParams.vpWealthTaxRate !== undefined)
+                vpFundTaxRate.value = urlParams.vpWealthTaxRate
+              if (urlParams.capitalGainsTaxRate !== undefined)
+                capitalGainsTax.value = urlParams.capitalGainsTaxRate
+              if (urlParams.iskTaxRate !== undefined) iskTaxRate.value = urlParams.iskTaxRate
+              if (urlParams.iskTaxRateStdDev !== undefined)
+                iskTaxRateStdDev.value = urlParams.iskTaxRateStdDev
+              if (urlParams.seed !== undefined) seed.value = urlParams.seed
+            }
+
+            // Load scenario table from URL
+            if (urlScenarioTable) {
+              scenarioTable.value = urlScenarioTable
+            }
           } finally {
             nextTick(() => (isUpdatingFromUrl = false))
           }
@@ -428,6 +448,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null
     watch(
       [
+        scenarioTable,
         initialCapital,
         assets,
         assetCorrelationMatrix,
@@ -452,13 +473,24 @@ export const useCalculatorStore = defineStore('calculator', () => {
 
         if (timeoutId) clearTimeout(timeoutId)
         timeoutId = setTimeout(() => {
+          let query: Record<string, string | string[]>
+
+          // Build base parameters
           const params: InputParameters = {
             ...createBaseParameters(),
             iskTaxRate: iskTaxRate.value,
             iskTaxRateStdDev: iskTaxRateStdDev.value,
             seed: seed.value ?? '',
           }
-          const query = encodeParamsToUrl(params)
+
+          if (scenarioTable.value) {
+            // Encode scenario table to URL along with base parameters
+            query = encodeScenarioTableToUrl(scenarioTable.value, params)
+          } else {
+            // Encode regular parameters to URL
+            query = encodeParamsToUrl(params)
+          }
+
           router.replace({ query })
         }, 500)
       },

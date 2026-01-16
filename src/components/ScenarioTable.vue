@@ -49,14 +49,16 @@ function formatValue(param: ScenarioParameter, value: any): string {
     return value
   }
 
-  // Format percentages
+  // Format percentages (convert to percentage and format)
   if (
     param === 'balanceWithdrawalRate' ||
     param === 'profitWithdrawalRate' ||
     param === 'vpWealthTaxRate' ||
     param === 'capitalGainsTaxRate' ||
     param === 'iskTaxRate' ||
-    param === 'inflationRate'
+    param === 'inflationRate' ||
+    param === 'iskTaxRateStdDev' ||
+    param === 'inflationStdDev'
   ) {
     return (value * 100).toFixed(2)
   }
@@ -68,7 +70,7 @@ function formatValue(param: ScenarioParameter, value: any): string {
 
   // Format numbers
   if (typeof value === 'number') {
-    return value.toLocaleString('sv-SE')
+    return String(value)
   }
 
   return String(value)

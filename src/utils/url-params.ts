@@ -1,5 +1,27 @@
-import type { InputParameters, SimulationAsset } from '../types'
+import type { InputParameters, SimulationAsset, ScenarioTable, ScenarioParameter } from '../types'
 import type { LocationQuery } from 'vue-router'
+
+// Mapping from ScenarioParameter to URL param names
+const PARAM_KEYS: Record<ScenarioParameter, string> = {
+  accountType: 'at',
+  initialCapital: 'ic',
+  startYear: 'sy',
+  yearsLater: 'yl',
+  simulationCount: 'sc',
+  assets: 'pa',
+  assetCorrelationMatrix: 'cm',
+  assetRebalanceFrequency: 'rb',
+  balanceWithdrawalRate: 'bwr',
+  profitWithdrawalRate: 'pwr',
+  profitLookbackYears: 'ply',
+  inflationBasedWithdrawal: 'ibw',
+  vpWealthTaxRate: 'vft',
+  capitalGainsTaxRate: 'cgt',
+  iskTaxRate: 'itr',
+  iskTaxRateStdDev: 'its',
+  inflationRate: 'ir',
+  inflationStdDev: 'is',
+}
 
 /**
  * Encode a single asset to compact format: m:0.1299,sd:0.202,w:1,n:Global Equity
@@ -105,6 +127,150 @@ function decodeCorrelationMatrix(encoded: string, n: number): number[][] | null 
     console.warn('Failed to decode correlation matrix', e)
     return null
   }
+}
+
+/**
+ * Encode scenario table to URL query params
+ */
+function encodeScenarioTable(
+  scenarioTable: ScenarioTable,
+  baseParams: Omit<InputParameters, 'seed'> & Partial<Pick<InputParameters, 'seed'>>,
+): Record<string, string | string[]> {
+  const query: Record<string, string | string[]> = {}
+
+  // Enable scenario table flag
+  query.st = '1'
+
+  // Scenario names
+  query.sn = scenarioTable.scenarios.map((s) => s.label)
+
+  // Find all controlled parameters across all scenarios
+  const controlledParams = new Set<ScenarioParameter>()
+  for (const scenario of scenarioTable.scenarios) {
+    for (const key of Object.keys(scenario.parameters) as ScenarioParameter[]) {
+      controlledParams.add(key)
+    }
+  }
+
+  // Encode list of controlled parameters
+  query.cp = Array.from(controlledParams)
+    .map((p) => PARAM_KEYS[p])
+    .join(',')
+
+  // For each controlled parameter, encode values for all scenarios
+  for (const param of controlledParams) {
+    const urlKey = PARAM_KEYS[param]
+    const values: string[] = []
+
+    for (const scenario of scenarioTable.scenarios) {
+      const value = scenario.parameters[param]
+
+      if (value === undefined) {
+        values.push('')
+      } else if (param === 'assets' && Array.isArray(value)) {
+        // Special case for assets - encode as before
+        values.push((value as SimulationAsset[]).map(encodeAsset).join('|'))
+      } else if (param === 'assetCorrelationMatrix' && Array.isArray(value)) {
+        // Special case for correlation matrix
+        values.push(encodeCorrelationMatrix(value as number[][]))
+      } else {
+        values.push(String(value))
+      }
+    }
+
+    query[urlKey] = values
+  }
+
+  // Encode all non-controlled base parameters
+  const baseQuery = encodeParamsToUrl(baseParams)
+  for (const [key, value] of Object.entries(baseQuery)) {
+    // Only include if not already controlled by the table
+    const paramKey = (Object.keys(PARAM_KEYS) as ScenarioParameter[]).find(
+      (k) => PARAM_KEYS[k] === key,
+    )
+    if (!paramKey || !controlledParams.has(paramKey)) {
+      query[key] = value
+    }
+  }
+
+  return query
+}
+
+/**
+ * Decode scenario table from URL query params
+ */
+function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
+  // Helper to get array of string values from query param
+  const getStringArray = (key: string): string[] => {
+    const value = query[key]
+    if (!value) return []
+    if (Array.isArray(value)) {
+      return value.filter((v): v is string => typeof v === 'string')
+    }
+    return [value]
+  }
+
+  // Check if scenario table is enabled
+  const enabled = query.st === '1'
+  if (!enabled) return null
+
+  // Get scenario names
+  const names = getStringArray('sn')
+  if (names.length === 0) return null
+
+  // Get controlled parameters
+  const cpStr = query.cp
+  if (!cpStr || Array.isArray(cpStr)) return null
+  const controlledParams = cpStr.split(',').filter((p) => p.length > 0)
+
+  // Build scenarios
+  const scenarios = names.map((label, idx) => {
+    const parameters: any = {}
+
+    for (const urlKey of controlledParams) {
+      // Find the ScenarioParameter key for this URL key
+      const paramKey = (Object.keys(PARAM_KEYS) as ScenarioParameter[]).find(
+        (k) => PARAM_KEYS[k] === urlKey,
+      )
+      if (!paramKey) continue
+
+      // Get values for this parameter
+      const values = getStringArray(urlKey)
+      if (idx >= values.length) continue
+
+      const value = values[idx]
+      if (!value || value === '') continue
+
+      // Parse the value based on parameter type
+      if (paramKey === 'accountType') {
+        parameters[paramKey] = value as 'ISK' | 'VP'
+      } else if (paramKey === 'assets') {
+        // Decode pipe-separated assets
+        const assetStrings = value.split('|')
+        parameters[paramKey] = assetStrings
+          .map(decodeAsset)
+          .filter((a): a is SimulationAsset => a !== null)
+      } else if (paramKey === 'assetCorrelationMatrix') {
+        // Decode correlation matrix (need to know asset count from assets param)
+        const assets = parameters.assets as SimulationAsset[] | undefined
+        if (assets && assets.length > 1) {
+          parameters[paramKey] = decodeCorrelationMatrix(value, assets.length)
+        }
+      } else if (paramKey === 'assetRebalanceFrequency') {
+        parameters[paramKey] = value === 'annually' ? 'annually' : 'never'
+      } else {
+        // Parse as number
+        const num = parseFloat(value)
+        if (isFinite(num)) {
+          parameters[paramKey] = num
+        }
+      }
+    }
+
+    return { label, parameters }
+  })
+
+  return { scenarios }
 }
 
 /**
@@ -276,4 +442,21 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   if (its !== undefined) params.iskTaxRateStdDev = its
 
   return params
+}
+
+/**
+ * Encode scenario table to URL
+ */
+export function encodeScenarioTableToUrl(
+  scenarioTable: ScenarioTable,
+  baseParams: Omit<InputParameters, 'seed'> & Partial<Pick<InputParameters, 'seed'>>,
+): Record<string, string | string[]> {
+  return encodeScenarioTable(scenarioTable, baseParams)
+}
+
+/**
+ * Decode scenario table from URL
+ */
+export function decodeScenarioTableFromUrl(query: LocationQuery): ScenarioTable | null {
+  return decodeScenarioTable(query)
 }
