@@ -147,12 +147,20 @@ const buildSeriesFromStats = (
 
   return simulationResults.value.statistics.map((stats, i) => {
     const dist = createDistributionFromStats(stats, field)
+
+    // For withdrawal chart, include first year median as reference
+    const firstYearMedian =
+      field === 'realWithdrawal'
+        ? (stats.median.periodData.withdrawalReal[0] ?? undefined)
+        : undefined
+
     return {
       label: labels[i] ?? `${i + 1}`,
       values: dist.map((p) => p.value),
       densities: dist.map((p) => p.density),
       median: getFieldValue(stats, field),
       color: COLORS[i % COLORS.length]!,
+      firstYearMedian,
     }
   })
 }
@@ -274,6 +282,35 @@ const drawChart = (
         .style('font-weight', 'bold')
         .style('fill', s.color)
         .text(formatValue(s.median))
+    }
+
+    // Draw first year reference line (dotted)
+    if (
+      s.firstYearMedian !== undefined &&
+      isFinite(s.firstYearMedian) &&
+      (useLinearScale ? s.firstYearMedian >= 0 : s.firstYearMedian > 0)
+    ) {
+      svg
+        .append('line')
+        .attr('x1', xScale(s.firstYearMedian))
+        .attr('x2', xScale(s.firstYearMedian))
+        .attr('y1', yPosition - 20)
+        .attr('y2', yPosition + 20)
+        .attr('stroke', s.color)
+        .attr('stroke-width', 2)
+        .attr('stroke-dasharray', '4,4')
+        .attr('opacity', 0.6)
+
+      // First year label
+      svg
+        .append('text')
+        .attr('x', xScale(s.firstYearMedian))
+        .attr('y', yPosition + 35)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '10px')
+        .style('fill', s.color)
+        .style('opacity', 0.7)
+        .text(formatValue(s.firstYearMedian))
     }
 
     // Series label
