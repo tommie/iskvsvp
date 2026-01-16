@@ -16,6 +16,7 @@ import SimulationWorker from '../simulation.worker?worker'
 
 export const useCalculatorStore = defineStore('calculator', () => {
   // Input parameters
+  const accountType = ref<'ISK' | 'VP'>('ISK') // UI-only state for account type dropdown
   const initialCapital = ref(5000000)
 
   // Default assets: Single asset (Swedbank Robur Globalfond A)
@@ -34,8 +35,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const profitWithdrawalRate = ref(0.15)
   const profitLookbackYears = ref(5)
   const inflationBasedWithdrawal = ref(0)
-  const iskTaxRate = ref(0.0296)
-  const iskTaxRateStdDev = ref(0.005)
+  const iskTaxRate = ref<number | undefined>(0.0296)
+  const iskTaxRateStdDev = ref<number | undefined>(0.005)
   const inflationRate = ref(0.02)
   const inflationStdDev = ref(0.009) // Barely any negative years
   const vpFundTaxRate = ref(0.004) // VP fund tax rate (0.4%)
@@ -81,8 +82,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
     if (!scenarioTable.value) {
       scenarioTable.value = {
         scenarios: [
-          { label: 'Scenario 1', parameters: {} },
-          { label: 'Scenario 2', parameters: {} },
+          { label: 'ISK', parameters: { accountType: 'ISK' } },
+          { label: 'VP', parameters: { accountType: 'VP' } },
         ],
       }
     }
@@ -177,6 +178,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   // Helper to get current parameter value from the store
   function getCurrentParameterValue(paramKey: ScenarioParameter): any {
     const paramMap: Record<ScenarioParameter, any> = {
+      accountType: accountType.value,
       initialCapital: initialCapital.value,
       startYear: startYear.value,
       yearsLater: yearsLater.value,
@@ -244,11 +246,21 @@ export const useCalculatorStore = defineStore('calculator', () => {
         for (const scenario of scenarioTable.value.scenarios) {
           const baseParams = createBaseParameters()
 
-          // Merge scenario-specific parameters
+          // Extract accountType (UI-only parameter)
+          const { accountType: scenarioAccountType, ...actualParams } = scenario.parameters
+
+          // Merge scenario-specific parameters (excluding accountType)
           const scenarioParams: InputParameters = {
             ...baseParams,
-            ...scenario.parameters,
+            ...actualParams,
             seed: baseSeed,
+          }
+
+          // If account type is ISK and iskTaxRate is not set, use default values
+          const effectiveAccountType = scenarioAccountType || accountType.value
+          if (effectiveAccountType === 'ISK' && scenarioParams.iskTaxRate === undefined) {
+            scenarioParams.iskTaxRate = iskTaxRate.value
+            scenarioParams.iskTaxRateStdDev = iskTaxRateStdDev.value
           }
 
           paramSets.push(scenarioParams)
@@ -498,6 +510,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
 
   return {
     // Input parameters
+    accountType,
     initialCapital,
     assets,
     assetCorrelationMatrix,

@@ -7,6 +7,8 @@ export interface SimulationAsset {
 
 export type RebalanceFrequency = 'never' | 'annually'
 
+export type AccountType = 'ISK' | 'VP'
+
 export interface InputParameters {
   seed: string // Random seed for reproducibility
 
@@ -96,7 +98,7 @@ export interface SimulationResults {
 // Scenario table for multi-scenario comparisons
 export interface Scenario {
   label: string
-  parameters: Partial<InputParameters>
+  parameters: Partial<InputParameters> & { accountType?: AccountType }
 }
 
 export interface ScenarioTable {
@@ -104,4 +106,4 @@ export interface ScenarioTable {
 }
 
 // Type-safe parameter keys (excludes seed which is auto-generated)
-export type ScenarioParameter = Exclude<keyof InputParameters, 'seed'>
+export type ScenarioParameter = Exclude<keyof InputParameters, 'seed'> | 'accountType'

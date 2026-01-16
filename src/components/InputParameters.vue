@@ -6,6 +6,7 @@ import type { SimulationAsset } from '../types'
 
 const store = useCalculatorStore()
 const {
+  accountType,
   initialCapital,
   assets,
   assetCorrelationMatrix,
@@ -26,6 +27,7 @@ const {
   isRunning,
   progress,
   isAddToTableMode,
+  scenarioTable,
 } = storeToRefs(store)
 
 // Import ScenarioParameter type for parameter click handling
@@ -54,7 +56,7 @@ function isFieldDisabled(paramKey: ScenarioParameter): boolean {
 
 // Get class for input field (add clickable styling when in add-to-table mode)
 function getInputClass(paramKey: ScenarioParameter): string {
-  const baseClass = 'form-control text-end'
+  const baseClass = paramKey === 'accountType' ? 'form-select' : 'form-control text-end'
   if (isAddToTableMode.value && !store.isParameterControlled(paramKey)) {
     return `${baseClass} clickable-input`
   }
@@ -291,6 +293,27 @@ const expectedTotalWithdrawalRate = computed(() => {
           <div class="param-section">
             <h5 class="section-title">Grundinställningar</h5>
             <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label">Kontotyp</label>
+                <input
+                  v-if="!scenarioTable"
+                  type="text"
+                  class="form-control text-end"
+                  value="Jämför ISK och VP"
+                  disabled
+                  readonly
+                />
+                <select
+                  v-else
+                  :class="getInputClass('accountType')"
+                  v-model="accountType"
+                  :disabled="isFieldDisabled('accountType')"
+                  @click="handleParameterClick('accountType', $event)"
+                >
+                  <option value="ISK">ISK (Investeringssparkonto)</option>
+                  <option value="VP">VP (Värdepappersdepå)</option>
+                </select>
+              </div>
               <div class="col-12">
                 <label class="form-label">Initialt kapital</label>
                 <input
@@ -660,38 +683,40 @@ const expectedTotalWithdrawalRate = computed(() => {
                   >Andel av fondvärdet som beskattas årligen.</small
                 >
               </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label">Schablonskattesats</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="0.01"
-                    :class="getInputClass('iskTaxRate')"
-                    :value="(iskTaxRate * 100).toFixed(2)"
-                    @change="iskTaxRate = getTargetValue($event) / 100"
-                    :disabled="isFieldDisabled('iskTaxRate')"
-                    @click="handleParameterClick('iskTaxRate', $event)"
-                  />
-                  <span class="input-group-text">%</span>
+              <template v-if="accountType === 'ISK'">
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Schablonskattesats</label>
+                  <div class="input-group">
+                    <input
+                      type="number"
+                      step="0.01"
+                      :class="getInputClass('iskTaxRate')"
+                      :value="(iskTaxRate! * 100).toFixed(2)"
+                      @change="iskTaxRate = getTargetValue($event) / 100"
+                      :disabled="isFieldDisabled('iskTaxRate')"
+                      @click="handleParameterClick('iskTaxRate', $event)"
+                    />
+                    <span class="input-group-text">%</span>
+                  </div>
+                  <small class="form-text text-muted">Första året.</small>
                 </div>
-                <small class="form-text text-muted">Första året.</small>
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label">Standardavvikelse (ISK)</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="0.01"
-                    :class="getInputClass('iskTaxRateStdDev')"
-                    :value="(iskTaxRateStdDev * 100).toFixed(2)"
-                    @change="iskTaxRateStdDev = getTargetValue($event) / 100"
-                    :disabled="isFieldDisabled('iskTaxRateStdDev')"
-                    @click="handleParameterClick('iskTaxRateStdDev', $event)"
-                  />
-                  <span class="input-group-text">%</span>
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Standardavvikelse (ISK)</label>
+                  <div class="input-group">
+                    <input
+                      type="number"
+                      step="0.01"
+                      :class="getInputClass('iskTaxRateStdDev')"
+                      :value="(iskTaxRateStdDev! * 100).toFixed(2)"
+                      @change="iskTaxRateStdDev = getTargetValue($event) / 100"
+                      :disabled="isFieldDisabled('iskTaxRateStdDev')"
+                      @click="handleParameterClick('iskTaxRateStdDev', $event)"
+                    />
+                    <span class="input-group-text">%</span>
+                  </div>
+                  <small class="form-text text-muted">För årlig förändring av schablonskatt.</small>
                 </div>
-                <small class="form-text text-muted">För årlig förändring av schablonskatt.</small>
-              </div>
+              </template>
             </div>
           </div>
 

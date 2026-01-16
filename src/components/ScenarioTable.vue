@@ -19,6 +19,7 @@ const getDeleteScenarioPopoverId = (scenarioIdx: number) => `delete-scenario-pop
 
 // Human-readable labels for parameters
 const parameterLabels: Record<string, string> = {
+  accountType: 'Kontotyp',
   initialCapital: 'Startkapital',
   startYear: 'Ålder vid start',
   yearsLater: 'Antal år',
@@ -42,6 +43,11 @@ function getParameterLabel(param: string): string {
 
 function formatValue(param: ScenarioParameter, value: any): string {
   if (value === undefined || value === null) return ''
+
+  // Format account type
+  if (param === 'accountType') {
+    return value
+  }
 
   // Format percentages
   if (
@@ -244,8 +250,17 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
               />
             </td>
             <td v-for="param in controlledParamsArray" :key="param">
+              <select
+                v-if="param === 'accountType'"
+                class="form-select form-select-sm"
+                :value="scenario.parameters[param] || 'ISK'"
+                @change="handleUpdateValue(idx, param, $event)"
+              >
+                <option value="ISK">ISK</option>
+                <option value="VP">VP</option>
+              </select>
               <input
-                v-if="param === 'assetRebalanceFrequency'"
+                v-else-if="param === 'assetRebalanceFrequency'"
                 type="text"
                 class="form-control form-control-sm"
                 :value="formatValue(param, scenario.parameters[param])"
@@ -346,11 +361,12 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
 }
 
 .scenario-label-col {
-  min-width: 150px;
+  width: auto;
 }
 
 .param-col {
-  min-width: 120px;
+  width: 100px;
+  min-width: 100px;
 }
 
 .add-param-col {
