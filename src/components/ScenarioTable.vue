@@ -37,7 +37,7 @@ const parameterLabels: Record<string, string> = {
   inflationStdDev: 'Inflation stddev',
 }
 
-function getParameterLabel(param: string): string {
+function getParameterLabel(param: string, truncate: boolean = false): string {
   // Check if it's an asset property parameter
   if (/^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)) {
     const match = param.match(/^assets\.(expectedReturn|volatility|weight)\.(\d+)$/)
@@ -52,11 +52,21 @@ function getParameterLabel(param: string): string {
         weight: 'Vikt',
       }
 
-      return `${assetName}: ${propertyLabels[property] ?? property}`
+      const propertyLabel = propertyLabels[property] ?? property
+
+      if (truncate && assetName.length > 16) {
+        return `${assetName.slice(0, 16)}…: ${propertyLabel}`
+      }
+
+      return `${assetName}: ${propertyLabel}`
     }
   }
 
   return parameterLabels[param] ?? param
+}
+
+function isAssetParameter(param: string): boolean {
+  return /^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)
 }
 
 function formatValue(param: ScenarioParameter, value: any): string {
@@ -250,7 +260,12 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
             <th class="scenario-label-col">Scenario</th>
             <th v-for="param in controlledParamsArray" :key="param" class="param-col">
               <div class="d-flex align-items-center gap-2">
-                <span>{{ getParameterLabel(param) }}</span>
+                <span
+                  :class="{ 'asset-param-label': isAssetParameter(param) }"
+                  :title="isAssetParameter(param) ? getParameterLabel(param, false) : undefined"
+                >
+                  {{ getParameterLabel(param, true) }}
+                </span>
                 <button
                   :id="`delete-param-btn-${param}`"
                   type="button"
@@ -464,5 +479,9 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
 .new-scenario-row input::placeholder {
   font-style: italic;
   opacity: 0.6;
+}
+
+.asset-param-label {
+  font-size: 0.875rem;
 }
 </style>
