@@ -18,6 +18,8 @@ const PARAM_KEYS: Record<string, string> = {
   assets: 'pa',
   assetCorrelationMatrix: 'cm',
   assetRebalanceFrequency: 'rb',
+  depositAmount: 'da',
+  depositYears: 'dy',
   balanceWithdrawalRate: 'bwr',
   profitWithdrawalRate: 'pwr',
   profitLookbackYears: 'ply',
@@ -503,6 +505,10 @@ export function encodeParamsToUrl(
     }
   }
 
+  // Deposit parameters
+  query.da = params.depositAmount.toString()
+  query.dy = params.depositYears.toString()
+
   // Withdrawal parameters
   query.bwr = params.balanceWithdrawalRate.toString()
   query.pwr = params.profitWithdrawalRate.toString()
@@ -619,6 +625,13 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
       params.assetRebalanceFrequency = rebalanceFrequency === 'annually' ? 'annually' : 'never'
     }
   }
+
+  // Parse deposit parameters
+  const da = parseNum('da')
+  const dy = parseNum('dy')
+
+  if (da !== undefined) params.depositAmount = da
+  if (dy !== undefined) params.depositYears = dy
 
   // Parse withdrawal and tax parameters
   const bwr = parseNum('bwr')

@@ -4,13 +4,27 @@ import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 
 const store = useCalculatorStore()
-const { simulationResults, showDetailedStatistics, yearsLater } = storeToRefs(store)
+const {
+  simulationResults,
+  showDetailedStatistics,
+  yearsLater,
+  depositYears,
+  profitWithdrawalRate,
+} = storeToRefs(store)
 
 const labels = computed(() => simulationResults.value?.labels ?? [])
 const statistics = computed(() => simulationResults.value?.statistics ?? [])
 const finalPeriod = computed(() => {
   if (statistics.value.length === 0) return 0
   return statistics.value[0]!.median.snapshots.liquidValue.length - 1
+})
+
+// Calculate the first withdrawal period (accounts for deposit years and profit lookback)
+const firstWithdrawalPeriod = computed(() => {
+  if (profitWithdrawalRate.value > 0) {
+    return depositYears.value + 1
+  }
+  return depositYears.value
 })
 
 const COLORS = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
@@ -310,25 +324,41 @@ const hasResults = computed(() => statistics.value.length > 0)
               </th>
               <th scope="row">{{ label }}</th>
               <td :style="getCellStyle('percentile5', idx, 'withdrawalReal', true)">
-                {{ formatNumber(getValue(idx, 'percentile5', 'withdrawalReal', 0)) }}
+                {{
+                  formatNumber(
+                    getValue(idx, 'percentile5', 'withdrawalReal', firstWithdrawalPeriod),
+                  )
+                }}
               </td>
               <td :style="getCellStyle('percentile25', idx, 'withdrawalReal', true)">
-                {{ formatNumber(getValue(idx, 'percentile25', 'withdrawalReal', 0)) }}
+                {{
+                  formatNumber(
+                    getValue(idx, 'percentile25', 'withdrawalReal', firstWithdrawalPeriod),
+                  )
+                }}
               </td>
               <td :style="getCellStyle('median', idx, 'withdrawalReal', true)">
-                {{ formatNumber(getValue(idx, 'median', 'withdrawalReal', 0)) }}
+                {{ formatNumber(getValue(idx, 'median', 'withdrawalReal', firstWithdrawalPeriod)) }}
               </td>
               <td :style="getCellStyle('percentile75', idx, 'withdrawalReal', true)">
-                {{ formatNumber(getValue(idx, 'percentile75', 'withdrawalReal', 0)) }}
+                {{
+                  formatNumber(
+                    getValue(idx, 'percentile75', 'withdrawalReal', firstWithdrawalPeriod),
+                  )
+                }}
               </td>
               <td :style="getCellStyle('percentile95', idx, 'withdrawalReal', true)">
-                {{ formatNumber(getValue(idx, 'percentile95', 'withdrawalReal', 0)) }}
+                {{
+                  formatNumber(
+                    getValue(idx, 'percentile95', 'withdrawalReal', firstWithdrawalPeriod),
+                  )
+                }}
               </td>
               <td v-if="showDetailedStatistics">
-                {{ formatNumber(getValue(idx, 'mean', 'withdrawalReal', 0)) }}
+                {{ formatNumber(getValue(idx, 'mean', 'withdrawalReal', firstWithdrawalPeriod)) }}
               </td>
               <td v-if="showDetailedStatistics">
-                {{ formatNumber(getValue(idx, 'stdDev', 'withdrawalReal', 0)) }}
+                {{ formatNumber(getValue(idx, 'stdDev', 'withdrawalReal', firstWithdrawalPeriod)) }}
               </td>
             </tr>
           </template>

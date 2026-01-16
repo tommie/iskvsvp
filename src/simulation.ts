@@ -165,26 +165,46 @@ export function runSingleSimulation(params: InputParameters): SimulationResult<n
 
     amount = assetPositions.reduce((sum, pos) => sum + pos.value, 0)
 
-    // Step 2: Calculate withdrawals
-    const balanceWithdrawal = amount * params.balanceWithdrawalRate
+    // Step 2: Handle deposits or withdrawals
+    let withdrawn = 0
+    let withdrawalRate = 0
+    let withdrawalTax = 0
 
-    let profitWithdrawal = 0
-    if (i > 0 && params.profitWithdrawalRate > 0) {
-      const lookbackYears = Math.min(params.profitLookbackYears, yearlyAmounts.length - 1)
-      if (lookbackYears > 0) {
-        const oldAmount = yearlyAmounts[yearlyAmounts.length - 1 - lookbackYears]!
-        const totalProfit = amount - oldAmount
-        const averageAnnualProfit = totalProfit / lookbackYears
-        profitWithdrawal = Math.max(0, averageAnnualProfit * params.profitWithdrawalRate)
+    if (i < params.depositYears) {
+      // Deposit years: add inflation-adjusted deposit to portfolio
+      const deposit = params.depositAmount * cumulativeInflation
+
+      // Distribute deposit across assets according to their weights
+      for (let assetIdx = 0; assetIdx < assetPositions.length; assetIdx++) {
+        const position = assetPositions[assetIdx]!
+        const asset = params.assets[assetIdx]!
+        const assetDeposit = deposit * asset.weight
+        position.value += assetDeposit
+        position.costBasis += assetDeposit
       }
+
+      amount = assetPositions.reduce((sum, pos) => sum + pos.value, 0)
+    } else {
+      // Withdrawal years: calculate and execute withdrawals
+      const balanceWithdrawal = amount * params.balanceWithdrawalRate
+
+      let profitWithdrawal = 0
+      if (i > 0 && params.profitWithdrawalRate > 0) {
+        const lookbackYears = Math.min(params.profitLookbackYears, yearlyAmounts.length - 1)
+        if (lookbackYears > 0) {
+          const oldAmount = yearlyAmounts[yearlyAmounts.length - 1 - lookbackYears]!
+          const totalProfit = amount - oldAmount
+          const averageAnnualProfit = totalProfit / lookbackYears
+          profitWithdrawal = Math.max(0, averageAnnualProfit * params.profitWithdrawalRate)
+        }
+      }
+
+      const inflationWithdrawal = params.inflationBasedWithdrawal * cumulativeInflation
+      withdrawn = balanceWithdrawal + profitWithdrawal + inflationWithdrawal
+      withdrawalRate = amount > 0 ? withdrawn / amount : 0
     }
 
-    const inflationWithdrawal = params.inflationBasedWithdrawal * cumulativeInflation
-    const withdrawn = balanceWithdrawal + profitWithdrawal + inflationWithdrawal
-    const withdrawalRate = amount > 0 ? withdrawn / amount : 0
-
-    // Step 3: Execute withdrawals
-    let withdrawalTax = 0
+    // Step 3: Execute withdrawals (if not in deposit years)
     if (withdrawn > 0 && params.assetRebalanceFrequency === 'annually' && amount > 0) {
       let remainingToWithdraw = withdrawn
       const targetValues = params.assets.map((asset) => amount * asset.weight)
@@ -332,8 +352,11 @@ export function runSingleSimulation(params: InputParameters): SimulationResult<n
     accumulatedRealWithdrawal += withdrawnReal
     accumulatedNominalWithdrawal += withdrawn
 
-    // Store first year withdrawal
-    if (i === 0 || (params.profitWithdrawalRate > 0 && i === 1)) {
+    // Store first year withdrawal (first year after deposits end)
+    // If profit withdrawal is enabled, wait one more year for profit calculation to be meaningful
+    const firstWithdrawalYear =
+      params.profitWithdrawalRate > 0 ? params.depositYears + 1 : params.depositYears
+    if (i === firstWithdrawalYear) {
       firstYearWithdrawalReal = withdrawnReal
     }
 

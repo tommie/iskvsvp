@@ -21,6 +21,9 @@ export interface InputParameters {
   assetCorrelationMatrix: number[][] // Correlation matrix between assets (symmetric, diagonal = 1)
   assetRebalanceFrequency: RebalanceFrequency // How often to rebalance portfolio
 
+  depositAmount: number // Annual deposit amount (inflation-adjusted)
+  depositYears: number // Number of years to make deposits (before withdrawals start)
+
   balanceWithdrawalRate: number
   profitWithdrawalRate: number
   profitLookbackYears: number

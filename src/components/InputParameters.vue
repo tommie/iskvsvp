@@ -11,6 +11,8 @@ const {
   assets,
   assetCorrelationMatrix,
   assetRebalanceFrequency,
+  depositAmount,
+  depositYears,
   balanceWithdrawalRate,
   profitWithdrawalRate,
   profitLookbackYears,
@@ -323,6 +325,47 @@ const expectedTotalWithdrawalRate = computed(() => {
                   :disabled="isFieldDisabled('initialCapital')"
                   @click="handleParameterClick('initialCapital', $event)"
                 />
+              </div>
+            </div>
+          </div>
+
+          <!-- Deposit Parameters -->
+          <div class="param-section">
+            <h5 class="section-title">Insättningar</h5>
+            <div class="row g-3">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Årlig insättning</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="1000"
+                    :class="getInputClass('depositAmount')"
+                    v-model.number="depositAmount"
+                    :disabled="isFieldDisabled('depositAmount')"
+                    @click="handleParameterClick('depositAmount', $event)"
+                  />
+                  <span class="input-group-text">kr</span>
+                </div>
+                <small class="form-text text-muted">
+                  Belopp som ökas med inflation varje år.
+                </small>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Antal år med insättningar</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    :max="yearsLater"
+                    :class="getInputClass('depositYears')"
+                    v-model.number="depositYears"
+                    :disabled="isFieldDisabled('depositYears')"
+                    @click="handleParameterClick('depositYears', $event)"
+                  />
+                  <span class="input-group-text">år</span>
+                </div>
+                <small class="form-text text-muted"> Efter denna period börjar uttag. </small>
               </div>
             </div>
           </div>

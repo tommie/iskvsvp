@@ -8,7 +8,7 @@ import type { SimulationResult, SimulationStatistics } from '../types'
 import D3Chart from './D3Chart.vue'
 
 const store = useCalculatorStore()
-const { simulationResults, startYear } = storeToRefs(store)
+const { simulationResults, startYear, depositYears } = storeToRefs(store)
 
 // Data structure for percentile-based distributions over time
 interface TimeSeriesDistribution {
@@ -188,6 +188,7 @@ const drawGenericChart = (
   data: TimeSeriesDistribution[],
   title: string,
   yAxisLabel: string,
+  transitionYear?: number,
 ) => {
   // Clear previous chart
   d3.select(svgElement).selectAll('*').remove()
@@ -273,6 +274,30 @@ const drawGenericChart = (
       .attr('stroke-width', 1)
       .attr('stroke-dasharray', '5,5')
       .attr('opacity', 0.7)
+  }
+
+  // Add vertical line at deposit/withdrawal transition year
+  if (transitionYear && transitionYear >= xExtent[0] && transitionYear <= xExtent[1]) {
+    svg
+      .append('line')
+      .attr('x1', xScale(transitionYear))
+      .attr('x2', xScale(transitionYear))
+      .attr('y1', 0)
+      .attr('y2', height)
+      .attr('stroke', '#d63384')
+      .attr('stroke-width', 2)
+      .attr('stroke-dasharray', '8,4')
+      .attr('opacity', 0.6)
+
+    // Add label for the transition line
+    svg
+      .append('text')
+      .attr('x', xScale(transitionYear) + 5)
+      .attr('y', 15)
+      .attr('fill', '#d63384')
+      .style('font-size', '12px')
+      .style('font-weight', 'bold')
+      .text('Uttag börjar')
   }
 
   // Draw distributions
@@ -385,23 +410,27 @@ const drawGenericChart = (
 // Render functions for D3Chart component
 const renderValueChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
   if (!timeSeriesDistributions.value.length) return
+  const transitionYear = depositYears.value > 0 ? startYear.value + depositYears.value : undefined
   drawGenericChart(
     svg,
     container,
     timeSeriesDistributions.value,
     'Värde över tid (logaritmisk skala)',
     'Värde (SEK)',
+    transitionYear,
   )
 }
 
 const renderWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
   if (!withdrawalDistributions.value.length) return
+  const transitionYear = depositYears.value > 0 ? startYear.value + depositYears.value : undefined
   drawGenericChart(
     svg,
     container,
     withdrawalDistributions.value,
     'Uttag per år (reellt, logaritmisk skala)',
     'Uttag reellt (SEK)',
+    transitionYear,
   )
 }
 </script>

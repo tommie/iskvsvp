@@ -37,6 +37,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const assetCorrelationMatrix = ref<number[][]>([[1.0]])
   const assetRebalanceFrequency = ref<RebalanceFrequency>('never')
 
+  const depositAmount = ref(0)
+  const depositYears = ref(0)
   const balanceWithdrawalRate = ref(0.015)
   const profitWithdrawalRate = ref(0.15)
   const profitLookbackYears = ref(5)
@@ -201,6 +203,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
       assets: assets.value,
       assetCorrelationMatrix: assetCorrelationMatrix.value,
       assetRebalanceFrequency: assetRebalanceFrequency.value,
+      depositAmount: depositAmount.value,
+      depositYears: depositYears.value,
       balanceWithdrawalRate: balanceWithdrawalRate.value,
       profitWithdrawalRate: profitWithdrawalRate.value,
       profitLookbackYears: profitLookbackYears.value,
@@ -227,6 +231,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
     assets: assets.value,
     assetCorrelationMatrix: assetCorrelationMatrix.value,
     assetRebalanceFrequency: assetRebalanceFrequency.value,
+    depositAmount: depositAmount.value,
+    depositYears: Math.min(depositYears.value, yearsLater.value),
     balanceWithdrawalRate: balanceWithdrawalRate.value,
     profitWithdrawalRate: profitWithdrawalRate.value,
     profitLookbackYears: profitLookbackYears.value,
@@ -393,6 +399,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
     assets.value = params.assets
     assetCorrelationMatrix.value = params.assetCorrelationMatrix
     assetRebalanceFrequency.value = params.assetRebalanceFrequency
+    depositAmount.value = params.depositAmount
+    depositYears.value = params.depositYears
     balanceWithdrawalRate.value = params.balanceWithdrawalRate
     profitWithdrawalRate.value = params.profitWithdrawalRate
     profitLookbackYears.value = params.profitLookbackYears
@@ -448,6 +456,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
                 assetCorrelationMatrix.value = urlParams.assetCorrelationMatrix
               if (urlParams.assetRebalanceFrequency !== undefined)
                 assetRebalanceFrequency.value = urlParams.assetRebalanceFrequency
+              if (urlParams.depositAmount !== undefined)
+                depositAmount.value = urlParams.depositAmount
+              if (urlParams.depositYears !== undefined) depositYears.value = urlParams.depositYears
               if (urlParams.balanceWithdrawalRate !== undefined)
                 balanceWithdrawalRate.value = urlParams.balanceWithdrawalRate
               if (urlParams.profitWithdrawalRate !== undefined)
@@ -491,6 +502,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
         assets,
         assetCorrelationMatrix,
         assetRebalanceFrequency,
+        depositAmount,
+        depositYears,
         balanceWithdrawalRate,
         profitWithdrawalRate,
         profitLookbackYears,
@@ -585,6 +598,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
     assets,
     assetCorrelationMatrix,
     assetRebalanceFrequency,
+    depositAmount,
+    depositYears,
     balanceWithdrawalRate,
     profitWithdrawalRate,
     profitLookbackYears,

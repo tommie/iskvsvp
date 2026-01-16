@@ -8,13 +8,28 @@ import type { SimulationResult, SimulationStatistics } from '../types'
 import D3Chart from './D3Chart.vue'
 
 const store = useCalculatorStore()
-const { simulationResults, yearsLater, showDetailedStatistics } = storeToRefs(store)
+const {
+  simulationResults,
+  yearsLater,
+  showDetailedStatistics,
+  depositYears,
+  profitWithdrawalRate,
+} = storeToRefs(store)
+
+// Calculate the first withdrawal period (accounts for deposit years and profit lookback)
+const firstWithdrawalPeriod = computed(() => {
+  if (profitWithdrawalRate.value > 0) {
+    return depositYears.value + 1
+  }
+  return depositYears.value
+})
 
 // Combine data for reactivity tracking
 const chartData = computed(() => ({
   simulationResults: simulationResults.value,
   yearsLater: yearsLater.value,
   showDetailedStatistics: showDetailedStatistics.value,
+  firstWithdrawalPeriod: firstWithdrawalPeriod.value,
 }))
 
 interface DataSeries {
@@ -151,7 +166,7 @@ const buildSeriesFromStats = (
     // For withdrawal chart, include first year median as reference
     const firstYearMedian =
       field === 'realWithdrawal'
-        ? (stats.median.periodData.withdrawalReal[0] ?? undefined)
+        ? (stats.median.periodData.withdrawalReal[firstWithdrawalPeriod.value] ?? undefined)
         : undefined
 
     return {
