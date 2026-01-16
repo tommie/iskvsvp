@@ -424,11 +424,10 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
 }
 
 .scenario-label-col {
-  width: auto;
+  width: 100%;
 }
 
 .param-col {
-  width: 100px;
   min-width: 100px;
 }
 
