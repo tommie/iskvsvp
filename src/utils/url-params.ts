@@ -1,8 +1,15 @@
-import type { InputParameters, SimulationAsset, ScenarioTable, ScenarioParameter } from '../types'
+import type {
+  AssetPropertyParameter,
+  InputParameters,
+  ScenarioParameter,
+  ScenarioTable,
+  SimulationAsset,
+} from '../types'
+import { isAssetPropertyParameter, parseAssetPropertyParameter } from '../types'
 import type { LocationQuery } from 'vue-router'
 
-// Mapping from ScenarioParameter to URL param names
-const PARAM_KEYS: Record<ScenarioParameter, string> = {
+// Mapping from base ScenarioParameter to URL param names
+const PARAM_KEYS: Record<string, string> = {
   accountType: 'at',
   initialCapital: 'ic',
   startYear: 'sy',
@@ -23,6 +30,14 @@ const PARAM_KEYS: Record<ScenarioParameter, string> = {
   inflationStdDev: 'is',
 }
 
+// Get URL key for a parameter (asset properties are not directly encoded in URL)
+function getParamKey(param: ScenarioParameter): string | null {
+  if (isAssetPropertyParameter(param)) {
+    return null // Asset properties are encoded within 'pa' params
+  }
+  return PARAM_KEYS[param] ?? null
+}
+
 /**
  * Encode a single asset to compact format: m:0.1299,sd:0.202,w:1,n:Global Equity
  */
@@ -32,6 +47,7 @@ function encodeAsset(asset: SimulationAsset): string {
 
 /**
  * Decode a single asset from compact format
+ * Takes only the first value if there are repeated keys
  */
 function decodeAsset(encoded: string): SimulationAsset | null {
   try {
@@ -45,11 +61,11 @@ function decodeAsset(encoded: string): SimulationAsset | null {
       const key = part.substring(0, colonIndex)
       const value = part.substring(colonIndex + 1)
 
-      if (key === 'm') {
+      if (key === 'm' && asset.expectedReturn === undefined) {
         asset.expectedReturn = parseFloat(value)
-      } else if (key === 'sd') {
+      } else if (key === 'sd' && asset.volatility === undefined) {
         asset.volatility = parseFloat(value)
-      } else if (key === 'w') {
+      } else if (key === 'w' && asset.weight === undefined) {
         asset.weight = parseFloat(value)
       } else if (key === 'n') {
         // Name is everything after 'n:' and might contain commas
@@ -74,6 +90,82 @@ function decodeAsset(encoded: string): SimulationAsset | null {
   } catch (e) {
     console.warn('Failed to decode asset', e)
     return null
+  }
+}
+
+/**
+ * Decode asset with scenario-specific property overrides
+ * Handles repeated keys for multi-valued properties: m:0.13,m:0.14,sd:0.20,w:1,n:Name
+ * Returns base asset and property overrides for each scenario
+ */
+function decodeAssetWithOverrides(
+  encoded: string,
+  scenarioCount: number,
+): {
+  asset: SimulationAsset | null
+  overrides: Map<string, number[]>
+} {
+  const overrides = new Map<string, number[]>()
+
+  try {
+    const parts = encoded.split(',')
+    const asset: Partial<SimulationAsset> = {}
+    const mValues: number[] = []
+    const sdValues: number[] = []
+    const wValues: number[] = []
+
+    for (const part of parts) {
+      const colonIndex = part.indexOf(':')
+      if (colonIndex === -1) continue
+
+      const key = part.substring(0, colonIndex)
+      const value = part.substring(colonIndex + 1)
+
+      if (key === 'm') {
+        mValues.push(parseFloat(value))
+      } else if (key === 'sd') {
+        sdValues.push(parseFloat(value))
+      } else if (key === 'w') {
+        wValues.push(parseFloat(value))
+      } else if (key === 'n') {
+        // Name is everything after 'n:' and might contain commas
+        const nameStart = encoded.indexOf(',n:')
+        if (nameStart !== -1) {
+          asset.name = encoded.substring(nameStart + 3)
+          break
+        }
+      }
+    }
+
+    // Set base values (first value of each)
+    if (mValues.length > 0) asset.expectedReturn = mValues[0]!
+    if (sdValues.length > 0) asset.volatility = sdValues[0]!
+    if (wValues.length > 0) asset.weight = wValues[0]!
+
+    // If we have multiple values matching scenario count, they're overrides
+    if (mValues.length === scenarioCount && scenarioCount > 1) {
+      overrides.set('expectedReturn', mValues)
+    }
+    if (sdValues.length === scenarioCount && scenarioCount > 1) {
+      overrides.set('volatility', sdValues)
+    }
+    if (wValues.length === scenarioCount && scenarioCount > 1) {
+      overrides.set('weight', wValues)
+    }
+
+    if (
+      asset.expectedReturn !== undefined &&
+      asset.volatility !== undefined &&
+      asset.weight !== undefined &&
+      asset.name !== undefined
+    ) {
+      return { asset: asset as SimulationAsset, overrides }
+    }
+
+    return { asset: null, overrides }
+  } catch (e) {
+    console.warn('Failed to decode asset with overrides', e)
+    return { asset: null, overrides }
   }
 }
 
@@ -130,6 +222,48 @@ function decodeCorrelationMatrix(encoded: string, n: number): number[][] | null 
 }
 
 /**
+ * Encode a single asset with potentially multi-valued properties
+ * Uses repeated keys for multi-valued properties: m:0.13,m:0.14,sd:0.20,w:1,n:Name
+ */
+function encodeAssetWithOverrides(
+  asset: SimulationAsset,
+  assetIndex: number,
+  propertyOverrides: Map<number, Map<string, (number | undefined)[]>>,
+): string {
+  const m = propertyOverrides.get(assetIndex)?.get('expectedReturn')
+  const sd = propertyOverrides.get(assetIndex)?.get('volatility')
+  const w = propertyOverrides.get(assetIndex)?.get('weight')
+
+  const parts: string[] = []
+
+  // Expected return (mean)
+  if (m) {
+    m.forEach((v) => parts.push(`m:${v ?? asset.expectedReturn}`))
+  } else {
+    parts.push(`m:${asset.expectedReturn}`)
+  }
+
+  // Volatility (stddev)
+  if (sd) {
+    sd.forEach((v) => parts.push(`sd:${v ?? asset.volatility}`))
+  } else {
+    parts.push(`sd:${asset.volatility}`)
+  }
+
+  // Weight
+  if (w) {
+    w.forEach((v) => parts.push(`w:${v ?? asset.weight}`))
+  } else {
+    parts.push(`w:${asset.weight}`)
+  }
+
+  // Name (always single value)
+  parts.push(`n:${asset.name}`)
+
+  return parts.join(',')
+}
+
+/**
  * Encode scenario table to URL query params
  */
 function encodeScenarioTable(
@@ -146,20 +280,50 @@ function encodeScenarioTable(
 
   // Find all controlled parameters across all scenarios
   const controlledParams = new Set<ScenarioParameter>()
+  const assetPropertyParams = new Set<AssetPropertyParameter>()
+
   for (const scenario of scenarioTable.scenarios) {
     for (const key of Object.keys(scenario.parameters) as ScenarioParameter[]) {
-      controlledParams.add(key)
+      if (isAssetPropertyParameter(key)) {
+        assetPropertyParams.add(key)
+      } else {
+        controlledParams.add(key)
+      }
     }
   }
 
-  // Encode list of controlled parameters
-  query.cp = Array.from(controlledParams)
-    .map((p) => PARAM_KEYS[p])
-    .join(',')
+  // Collect asset property overrides: Map<assetIndex, Map<property, values[]>>
+  const assetPropertyOverrides = new Map<number, Map<string, (number | undefined)[]>>()
+  for (const paramKey of assetPropertyParams) {
+    const parsed = parseAssetPropertyParameter(paramKey)
+    if (!parsed) continue
 
-  // For each controlled parameter, encode values for all scenarios
+    if (!assetPropertyOverrides.has(parsed.index)) {
+      assetPropertyOverrides.set(parsed.index, new Map())
+    }
+
+    const values: (number | undefined)[] = []
+    for (const scenario of scenarioTable.scenarios) {
+      values.push(scenario.parameters[paramKey] as number | undefined)
+    }
+
+    assetPropertyOverrides.get(parsed.index)!.set(parsed.property, values)
+  }
+
+  // Build controlled parameters list (excluding asset properties)
+  const cpList: string[] = []
   for (const param of controlledParams) {
-    const urlKey = PARAM_KEYS[param]
+    const key = getParamKey(param)
+    if (key) cpList.push(key)
+  }
+
+  query.cp = cpList.join(',')
+
+  // Encode controlled parameters (non-asset-property)
+  for (const param of controlledParams) {
+    const urlKey = getParamKey(param)
+    if (!urlKey) continue
+
     const values: string[] = []
 
     for (const scenario of scenarioTable.scenarios) {
@@ -193,6 +357,15 @@ function encodeScenarioTable(
     }
   }
 
+  // If we have asset property overrides but assets is not fully controlled,
+  // override the base assets with multi-valued properties
+  if (assetPropertyOverrides.size > 0 && !controlledParams.has('assets')) {
+    const encodedAssets = baseParams.assets.map((asset, index) =>
+      encodeAssetWithOverrides(asset, index, assetPropertyOverrides),
+    )
+    query.pa = encodedAssets
+  }
+
   return query
 }
 
@@ -223,15 +396,27 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
   if (!cpStr || Array.isArray(cpStr)) return null
   const controlledParams = cpStr.split(',').filter((p) => p.length > 0)
 
+  // Check if assets have property overrides (multi-valued properties)
+  // Always check 'pa' params for overrides, not just when 'pa' is controlled
+  const assetPropertyOverrides = new Map<number, Map<string, number[]>>()
+  const assetStrings = getStringArray('pa')
+  if (assetStrings.length > 0) {
+    // Decode each asset and check for multi-valued properties
+    assetStrings.forEach((encoded, assetIndex) => {
+      const { overrides } = decodeAssetWithOverrides(encoded, names.length)
+      if (overrides.size > 0) {
+        assetPropertyOverrides.set(assetIndex, overrides)
+      }
+    })
+  }
+
   // Build scenarios
   const scenarios = names.map((label, idx) => {
     const parameters: any = {}
 
     for (const urlKey of controlledParams) {
       // Find the ScenarioParameter key for this URL key
-      const paramKey = (Object.keys(PARAM_KEYS) as ScenarioParameter[]).find(
-        (k) => PARAM_KEYS[k] === urlKey,
-      )
+      const paramKey = (Object.keys(PARAM_KEYS) as string[]).find((k) => PARAM_KEYS[k] === urlKey)
       if (!paramKey) continue
 
       // Get values for this parameter
@@ -245,11 +430,14 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
       if (paramKey === 'accountType') {
         parameters[paramKey] = value as 'ISK' | 'VP'
       } else if (paramKey === 'assets') {
-        // Decode pipe-separated assets
-        const assetStrings = value.split('|')
-        parameters[paramKey] = assetStrings
-          .map(decodeAsset)
-          .filter((a): a is SimulationAsset => a !== null)
+        // If we have asset property overrides, don't set full assets array
+        if (assetPropertyOverrides.size === 0) {
+          // Decode pipe-separated assets (legacy mode)
+          const assetStrings = value.split('|')
+          parameters[paramKey] = assetStrings
+            .map(decodeAsset)
+            .filter((a): a is SimulationAsset => a !== null)
+        }
       } else if (paramKey === 'assetCorrelationMatrix') {
         // Decode correlation matrix (need to know asset count from assets param)
         const assets = parameters.assets as SimulationAsset[] | undefined
@@ -264,6 +452,14 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
         if (isFinite(num)) {
           parameters[paramKey] = num
         }
+      }
+    }
+
+    // Add asset property overrides to this scenario
+    for (const [assetIndex, overrides] of assetPropertyOverrides.entries()) {
+      for (const [property, values] of overrides.entries()) {
+        const paramKey = `assets.${property}.${assetIndex}` as ScenarioParameter
+        parameters[paramKey] = values[idx]
       }
     }
 

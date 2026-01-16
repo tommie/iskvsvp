@@ -477,30 +477,40 @@ const expectedTotalWithdrawalRate = computed(() => {
                       <input
                         type="number"
                         step="0.1"
-                        class="form-control form-control-sm text-end"
+                        :class="
+                          'form-control-sm text-end ' +
+                          getInputClass(`assets.expectedReturn.${index}`)
+                        "
                         :value="(asset.expectedReturn * 100).toFixed(1)"
                         @change="asset.expectedReturn = getTargetValue($event) / 100"
-                        :disabled="isRunning"
+                        @click="handleParameterClick(`assets.expectedReturn.${index}`, $event)"
+                        :disabled="isFieldDisabled(`assets.expectedReturn.${index}`)"
                       />
                     </td>
                     <td>
                       <input
                         type="number"
                         step="0.1"
-                        class="form-control form-control-sm text-end"
+                        :class="
+                          'form-control-sm text-end ' + getInputClass(`assets.volatility.${index}`)
+                        "
                         :value="(asset.volatility * 100).toFixed(1)"
                         @change="asset.volatility = getTargetValue($event) / 100"
-                        :disabled="isRunning"
+                        @click="handleParameterClick(`assets.volatility.${index}`, $event)"
+                        :disabled="isFieldDisabled(`assets.volatility.${index}`)"
                       />
                     </td>
                     <td>
                       <input
                         type="number"
                         step="0.1"
-                        class="form-control form-control-sm text-end"
+                        :class="
+                          'form-control-sm text-end ' + getInputClass(`assets.weight.${index}`)
+                        "
                         :value="(asset.weight * 100).toFixed(1)"
                         @change="asset.weight = getTargetValue($event) / 100"
-                        :disabled="isRunning"
+                        @click="handleParameterClick(`assets.weight.${index}`, $event)"
+                        :disabled="isFieldDisabled(`assets.weight.${index}`)"
                       />
                     </td>
                     <td>

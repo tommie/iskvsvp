@@ -38,6 +38,24 @@ const parameterLabels: Record<string, string> = {
 }
 
 function getParameterLabel(param: string): string {
+  // Check if it's an asset property parameter
+  if (/^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)) {
+    const match = param.match(/^assets\.(expectedReturn|volatility|weight)\.(\d+)$/)
+    if (match) {
+      const property = match[1]!
+      const index = parseInt(match[2]!, 10)
+      const assetName = store.assets[index]?.name ?? `Tillgång ${index + 1}`
+
+      const propertyLabels: Record<string, string> = {
+        expectedReturn: 'Avkastning (%)',
+        volatility: 'Volatilitet (%)',
+        weight: 'Vikt',
+      }
+
+      return `${assetName}: ${propertyLabels[property] ?? property}`
+    }
+  }
+
   return parameterLabels[param] ?? param
 }
 
@@ -47,6 +65,24 @@ function formatValue(param: ScenarioParameter, value: any): string {
   // Format account type
   if (param === 'accountType') {
     return value
+  }
+
+  // Check if it's an asset property parameter
+  if (
+    typeof param === 'string' &&
+    /^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)
+  ) {
+    const match = param.match(/^assets\.(expectedReturn|volatility|weight)\.(\d+)$/)
+    if (match) {
+      const property = match[1]!
+      if (property === 'expectedReturn' || property === 'volatility') {
+        // Percentages
+        return (value * 100).toFixed(2)
+      } else {
+        // Weight (plain number)
+        return String(value)
+      }
+    }
   }
 
   // Format percentages (convert to percentage and format)
@@ -77,6 +113,24 @@ function formatValue(param: ScenarioParameter, value: any): string {
 }
 
 function parseValue(param: ScenarioParameter, inputValue: string): any {
+  // Check if it's an asset property parameter
+  if (
+    typeof param === 'string' &&
+    /^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)
+  ) {
+    const match = param.match(/^assets\.(expectedReturn|volatility|weight)\.(\d+)$/)
+    if (match) {
+      const property = match[1]!
+      if (property === 'expectedReturn' || property === 'volatility') {
+        // Percentages
+        return parseFloat(inputValue) / 100
+      } else {
+        // Weight (plain number)
+        return parseFloat(inputValue)
+      }
+    }
+  }
+
   // Parse percentages
   if (
     param === 'balanceWithdrawalRate' ||

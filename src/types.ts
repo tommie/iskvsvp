@@ -95,10 +95,19 @@ export interface SimulationResults {
   medianSamples: SimulationResult<number>[]
 }
 
+// Asset property parameter format: "assets.expectedReturn.0", "assets.volatility.1", etc.
+export type AssetPropertyParameter =
+  `assets.${'expectedReturn' | 'volatility' | 'weight'}.${number}`
+
+// Mapped type for asset properties
+type AssetProperties = {
+  [K in AssetPropertyParameter]?: number
+}
+
 // Scenario table for multi-scenario comparisons
 export interface Scenario {
   label: string
-  parameters: Partial<InputParameters> & { accountType?: AccountType }
+  parameters: Partial<InputParameters> & { accountType?: AccountType } & AssetProperties
 }
 
 export interface ScenarioTable {
@@ -106,4 +115,25 @@ export interface ScenarioTable {
 }
 
 // Type-safe parameter keys (excludes seed which is auto-generated)
-export type ScenarioParameter = Exclude<keyof InputParameters, 'seed'> | 'accountType'
+export type ScenarioParameter =
+  | Exclude<keyof InputParameters, 'seed'>
+  | 'accountType'
+  | AssetPropertyParameter
+
+// Helper to check if a parameter is an asset property
+export function isAssetPropertyParameter(param: string): param is AssetPropertyParameter {
+  return /^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)
+}
+
+// Helper to parse asset property parameter
+export function parseAssetPropertyParameter(param: AssetPropertyParameter): {
+  index: number
+  property: 'expectedReturn' | 'volatility' | 'weight'
+} | null {
+  const match = param.match(/^assets\.(expectedReturn|volatility|weight)\.(\d+)$/)
+  if (!match) return null
+  return {
+    property: match[1]! as 'expectedReturn' | 'volatility' | 'weight',
+    index: parseInt(match[2]!, 10),
+  }
+}

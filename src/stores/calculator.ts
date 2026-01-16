@@ -10,6 +10,7 @@ import type {
   ScenarioTable,
   ScenarioParameter,
 } from '../types'
+import { isAssetPropertyParameter, parseAssetPropertyParameter } from '../types'
 import { useHistoryStore } from './history'
 import {
   encodeParamsToUrl,
@@ -182,7 +183,16 @@ export const useCalculatorStore = defineStore('calculator', () => {
 
   // Helper to get current parameter value from the store
   function getCurrentParameterValue(paramKey: ScenarioParameter): any {
-    const paramMap: Record<ScenarioParameter, any> = {
+    // Check if it's an asset property parameter
+    if (isAssetPropertyParameter(paramKey)) {
+      const parsed = parseAssetPropertyParameter(paramKey)
+      if (parsed && parsed.index < assets.value.length) {
+        return assets.value[parsed.index]![parsed.property]
+      }
+      return undefined
+    }
+
+    const paramMap: Record<string, any> = {
       accountType: accountType.value,
       initialCapital: initialCapital.value,
       startYear: startYear.value,
@@ -252,14 +262,42 @@ export const useCalculatorStore = defineStore('calculator', () => {
         for (const scenario of scenarioTable.value.scenarios) {
           const baseParams = createBaseParameters()
 
-          // Extract accountType (UI-only parameter)
-          const { accountType: scenarioAccountType, ...actualParams } = scenario.parameters
+          // Extract UI-only and asset property parameters
+          const { accountType: scenarioAccountType, ...restParams } = scenario.parameters
+          const actualParams: any = {}
+          const assetPropertyOverrides: Record<number, Partial<SimulationAsset>> = {}
 
-          // Merge scenario-specific parameters (excluding accountType)
+          // Separate asset property overrides from regular parameters
+          for (const [key, value] of Object.entries(restParams)) {
+            if (isAssetPropertyParameter(key)) {
+              const parsed = parseAssetPropertyParameter(key as any)
+              if (parsed) {
+                if (!assetPropertyOverrides[parsed.index]) {
+                  assetPropertyOverrides[parsed.index] = {}
+                }
+                assetPropertyOverrides[parsed.index]![parsed.property] = value as number
+              }
+            } else {
+              actualParams[key] = value
+            }
+          }
+
+          // Merge scenario-specific parameters (excluding accountType and asset properties)
           const scenarioParams: InputParameters = {
             ...baseParams,
             ...actualParams,
             seed: baseSeed,
+          }
+
+          // Apply asset property overrides
+          if (Object.keys(assetPropertyOverrides).length > 0) {
+            scenarioParams.assets = scenarioParams.assets.map((asset, index) => {
+              const overrides = assetPropertyOverrides[index]
+              if (overrides) {
+                return { ...asset, ...overrides }
+              }
+              return asset
+            })
           }
 
           // If account type is ISK and iskTaxRate is not set, use default values
