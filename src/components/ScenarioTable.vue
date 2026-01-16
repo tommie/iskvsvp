@@ -179,8 +179,14 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
       </div>
     </div>
 
-    <div v-if="store.isAddToTableMode" class="alert alert-info mb-3">
-      Klicka på inmatningsfält i parametersektionen för att lägga till dem i tabellen.
+    <div
+      v-if="store.isAddToTableMode"
+      class="alert alert-info mb-3 d-flex justify-content-between align-items-center"
+    >
+      <span>Klicka på inmatningsfält i parametersektionen för att lägga till dem i tabellen.</span>
+      <button type="button" class="btn btn-sm btn-primary" @click="store.toggleAddToTableMode()">
+        Klar
+      </button>
     </div>
 
     <div class="table-responsive">
@@ -230,12 +236,13 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
             </th>
             <th class="add-param-col">
               <button
+                v-if="!store.isAddToTableMode"
                 type="button"
                 class="btn btn-primary btn-icon"
                 @click="store.toggleAddToTableMode()"
-                :title="store.isAddToTableMode ? 'Klar' : 'Lägg till parameter'"
+                title="Lägg till parameter"
               >
-                {{ store.isAddToTableMode ? '✓' : '+' }}
+                +
               </button>
             </th>
             <th class="actions-col"></th>
