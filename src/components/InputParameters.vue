@@ -3,6 +3,7 @@ import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
 import { ref, computed } from 'vue'
 import type { SimulationAsset } from '../types'
+import FundPresetSelector from './FundPresetSelector.vue'
 
 const store = useCalculatorStore()
 const {
@@ -68,28 +69,8 @@ function getInputClass(paramKey: ScenarioParameter): string {
   return baseClass
 }
 
-const rorPreset = ref('')
 const selectedAssetIndex = ref(0)
-
-interface RORPreset {
-  label: string
-  mean: number
-  stdDev: number
-}
-
-const rorPresets: RORPreset[] = [
-  { label: 'AMF Aktiefond Europa', mean: 0.077744, stdDev: 0.192562 },
-  { label: 'AMF Räntefond Lång', mean: 0.038397, stdDev: 0.043541 },
-  { label: 'Carnegie Småbolagsfond A', mean: 0.177747, stdDev: 0.195878 },
-  { label: 'Carnegie Sverigefond A', mean: 0.1446, stdDev: 0.2283 },
-  { label: 'Handelsbanken Nordiska Småb (A1 SEK)', mean: 0.154126, stdDev: 0.30111 },
-  { label: 'Länsförsäkringar Fastighetsfond A', mean: 0.184636, stdDev: 0.282252 },
-  { label: 'Länsförsäkringar Lång Räntefond A', mean: 0.044307, stdDev: 0.05498 },
-  { label: 'Storebrand USA A SEK', mean: 0.090752, stdDev: 0.168028 },
-  { label: 'Swedbank Robur Access Europa A', mean: 0.06943, stdDev: 0.146178 },
-  { label: 'Swedbank Robur Europafond A', mean: 0.085581, stdDev: 0.17472 },
-  { label: 'Swedbank Robur Globalfond A', mean: 0.1299, stdDev: 0.202 },
-]
+const fundPresetSelector = ref<InstanceType<typeof FundPresetSelector> | null>(null)
 
 /**
  * Get the next available fund name (Fond 1, Fond 2, etc.)
@@ -180,13 +161,103 @@ const removeAsset = (index: number) => {
 /**
  * Apply preset to selected asset
  */
-const applyRORPreset = () => {
-  const preset = rorPresets.find((p) => p.label === rorPreset.value)
-  if (preset && assets.value[selectedAssetIndex.value]) {
-    assets.value[selectedAssetIndex.value]!.name = preset.label
-    assets.value[selectedAssetIndex.value]!.expectedReturn = preset.mean
-    assets.value[selectedAssetIndex.value]!.volatility = preset.stdDev
+const applyFundPreset = (payload: {
+  fund: { name: string; mu: number; sigma: number }
+  index: number
+  correlations: number[]
+}) => {
+  const asset = assets.value[selectedAssetIndex.value]
+  if (!asset) return
+
+  // Update asset properties
+  asset.name = payload.fund.name
+  asset.expectedReturn = payload.fund.mu / 100 // Convert from percentage to decimal
+  asset.volatility = payload.fund.sigma / 100 // Convert from percentage to decimal
+
+  // Update correlation matrix for this asset
+  updateCorrelationsForAsset(selectedAssetIndex.value)
+}
+
+/**
+ * Update correlation matrix for a specific asset by looking up fund names in database
+ */
+const updateCorrelationsForAsset = (assetIndex: number) => {
+  if (!fundPresetSelector.value) return
+
+  const asset = assets.value[assetIndex]
+  if (!asset) return
+
+  const fundIndex = fundPresetSelector.value.getFundIndexByName(asset.name)
+  if (fundIndex === undefined) return // Asset not in database
+
+  const n = assets.value.length
+
+  // Create a new matrix to ensure reactivity
+  const newMatrix: number[][] = []
+
+  for (let i = 0; i < n; i++) {
+    newMatrix[i] = []
+    for (let j = 0; j < n; j++) {
+      if (i === j) {
+        // Diagonal is always 1
+        newMatrix[i]![j] = 1.0
+      } else if (i === assetIndex || j === assetIndex) {
+        // Row or column of the updated asset - look up correlation by name
+        const otherIdx = i === assetIndex ? j : i
+        const otherAsset = assets.value[otherIdx]!
+        const otherFundIndex = fundPresetSelector.value!.getFundIndexByName(otherAsset.name)
+
+        if (otherFundIndex !== undefined) {
+          // Both assets are in database - use database correlation
+          newMatrix[i]![j] = fundPresetSelector.value!.getCorrelation(fundIndex, otherFundIndex)
+        } else {
+          // Other asset not in database - use moderate default
+          newMatrix[i]![j] = 0.5
+        }
+      } else {
+        // Copy existing correlation
+        newMatrix[i]![j] = assetCorrelationMatrix.value[i]?.[j] ?? 0.5
+      }
+    }
   }
+
+  assetCorrelationMatrix.value = newMatrix
+}
+
+/**
+ * Called when fund database is loaded - update correlations for all assets that match fund names
+ */
+const onFundDatabaseLoaded = () => {
+  if (!fundPresetSelector.value) return
+
+  // Check if any assets match database funds and update all correlations
+  const n = assets.value.length
+  const newMatrix: number[][] = []
+
+  for (let i = 0; i < n; i++) {
+    newMatrix[i] = []
+    const fundIndexI = fundPresetSelector.value.getFundIndexByName(assets.value[i]!.name)
+
+    for (let j = 0; j < n; j++) {
+      if (i === j) {
+        newMatrix[i]![j] = 1.0
+      } else if (fundIndexI !== undefined) {
+        const fundIndexJ = fundPresetSelector.value.getFundIndexByName(assets.value[j]!.name)
+        if (fundIndexJ !== undefined) {
+          // Both assets in database
+          newMatrix[i]![j] = fundPresetSelector.value.getCorrelation(fundIndexI, fundIndexJ)
+        } else {
+          // Keep existing or use default
+          newMatrix[i]![j] = assetCorrelationMatrix.value[i]?.[j] ?? 0.5
+        }
+      } else {
+        // Keep existing or use default
+        newMatrix[i]![j] = assetCorrelationMatrix.value[i]?.[j] ?? 0.5
+      }
+    }
+  }
+
+  assetCorrelationMatrix.value = newMatrix
 }
 
 /**
@@ -465,20 +536,12 @@ const expectedTotalWithdrawalRate = computed(() => {
             <h5 class="section-title">Portfölj</h5>
 
             <div class="mb-3">
-              <label class="form-label">Förinställning för vald fond</label>
-              <div class="input-group">
-                <select
-                  class="form-select"
-                  v-model="rorPreset"
-                  @change="applyRORPreset"
-                  :disabled="isRunning"
-                >
-                  <option value="">-- Välj fond --</option>
-                  <option v-for="preset in rorPresets" :key="preset.label" :value="preset.label">
-                    {{ preset.label }}
-                  </option>
-                </select>
-              </div>
+              <FundPresetSelector
+                ref="fundPresetSelector"
+                :disabled="isRunning"
+                @select="applyFundPreset"
+                @loaded="onFundDatabaseLoaded"
+              />
             </div>
 
             <div class="table-responsive">
