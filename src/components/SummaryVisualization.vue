@@ -187,6 +187,7 @@ const drawChart = (
   title: string,
   formatValue: (d: number) => string,
   useLinearScale: boolean = false,
+  referenceValue?: number,
 ) => {
   const tickCount = useLinearScale ? 4 : 2
   const rowHeight = 90
@@ -208,10 +209,21 @@ const drawChart = (
 
   const width = containerWidth - margin.left - margin.right
 
-  // Get x extent across all series
+  // Get x extent across all series, including reference value and firstYearMedian if provided
   const allValues = series
-    .flatMap((s) => s.values)
-    .filter((v) => isFinite(v) && (useLinearScale ? v >= 0 : v > 0))
+    .flatMap((s) => {
+      const values = s.values.filter((v) => isFinite(v) && (useLinearScale ? v >= 0 : v > 0))
+      // Include firstYearMedian in extent calculation
+      if (s.firstYearMedian !== undefined && isFinite(s.firstYearMedian) && s.firstYearMedian > 0) {
+        values.push(s.firstYearMedian)
+      }
+      return values
+    })
+
+  // Include reference value in extent calculation
+  if (referenceValue !== undefined && isFinite(referenceValue) && referenceValue > 0) {
+    allValues.push(referenceValue)
+  }
 
   if (allValues.length === 0) return
 
