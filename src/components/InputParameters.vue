@@ -368,16 +368,7 @@ const expectedTotalWithdrawalRate = computed(() => {
             <div class="row g-3">
               <div class="col-12">
                 <label class="form-label">Kontotyp</label>
-                <input
-                  v-if="!scenarioTable"
-                  type="text"
-                  class="form-control text-end"
-                  value="Jämför ISK och VP"
-                  disabled
-                  readonly
-                />
                 <select
-                  v-else
                   :class="getInputClass('accountType')"
                   v-model="accountType"
                   :disabled="isFieldDisabled('accountType')"

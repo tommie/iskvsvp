@@ -30,6 +30,6 @@ describe('App', () => {
 
     await flushPromises()
 
-    expect(wrapper.text()).toContain('ISK vs VP Monte Carlo-simulator')
+    expect(wrapper.text()).toContain('Fondsimulator')
   })
 })

@@ -219,7 +219,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     return paramMap[paramKey]
   }
 
-  // Helper to create base parameters (common to both ISK and VP)
+  // Helper to create base parameters
   const createBaseParameters = (): Omit<
     InputParameters,
     'iskTaxRate' | 'iskTaxRateStdDev' | 'seed'
@@ -246,7 +246,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   /**
    * Run the Monte Carlo simulation.
    * If scenario table is enabled, runs scenarios from the table.
-   * Otherwise, runs default ISK vs VP comparison.
+   * Otherwise, runs default ISK scenario.
    */
   async function runSimulation() {
     const worker = new SimulationWorker()
@@ -317,25 +317,22 @@ export const useCalculatorStore = defineStore('calculator', () => {
           labels.push(scenario.label)
         }
       } else {
-        // Default ISK vs VP comparison
+        // Default: single scenario based on selected account type
         const baseParams = createBaseParameters()
 
-        // Create ISK parameters
-        const iskParams: InputParameters = {
-          ...baseParams,
-          iskTaxRate: iskTaxRate.value,
-          iskTaxRateStdDev: iskTaxRateStdDev.value,
-          seed: baseSeed,
-        }
-
-        // Create VP parameters
-        const vpParams: InputParameters = {
+        const params: InputParameters = {
           ...baseParams,
           seed: baseSeed,
         }
 
-        paramSets = [iskParams, vpParams]
-        labels = ['ISK', 'VP']
+        // Add ISK-specific parameters if ISK is selected
+        if (accountType.value === 'ISK') {
+          params.iskTaxRate = iskTaxRate.value
+          params.iskTaxRateStdDev = iskTaxRateStdDev.value
+        }
+
+        paramSets = [params]
+        labels = [accountType.value]
       }
 
       // Create plain object copy for worker
@@ -549,48 +546,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     )
   }
 
-  // Computed helper to extract final period statistics in a component-friendly format
-  const summaryData = computed(() => {
-    if (!simulationResults.value) return null
-
-    const { statistics, medianSamples } = simulationResults.value
-    if (statistics.length < 2) return null
-
-    const iskStats = statistics[0]!
-    const vpStats = statistics[1]!
-    const iskSample = medianSamples[0]!
-
-    // Get final period index
-    const finalPeriod = iskSample.snapshots.liquidValue.length - 1
-
-    return {
-      isk: {
-        median: {
-          liquidValue: iskStats.median.snapshots.liquidValue[finalPeriod] ?? 0,
-          paidTax: iskStats.median.snapshots.tax[finalPeriod] ?? 0,
-          taxationDegree: iskStats.median.snapshots.taxationDegree[finalPeriod] ?? 0,
-          realWithdrawal: iskStats.median.periodData.withdrawalReal[finalPeriod] ?? 0,
-          accumulatedRealWithdrawal: iskStats.median.snapshots.withdrawalReal[finalPeriod] ?? 0,
-        },
-        mean: {
-          liquidValue: iskStats.mean.snapshots.liquidValue[finalPeriod] ?? 0,
-        },
-      },
-      vp: {
-        median: {
-          liquidValue: vpStats.median.snapshots.liquidValue[finalPeriod] ?? 0,
-          paidTax: vpStats.median.snapshots.tax[finalPeriod] ?? 0,
-          taxationDegree: vpStats.median.snapshots.taxationDegree[finalPeriod] ?? 0,
-          realWithdrawal: vpStats.median.periodData.withdrawalReal[finalPeriod] ?? 0,
-          accumulatedRealWithdrawal: vpStats.median.snapshots.withdrawalReal[finalPeriod] ?? 0,
-        },
-        mean: {
-          liquidValue: vpStats.mean.snapshots.liquidValue[finalPeriod] ?? 0,
-        },
-      },
-    }
-  })
-
   return {
     // Input parameters
     accountType,
@@ -619,7 +574,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     isRunning,
     progress,
     simulationResults,
-    summaryData,
     showDetailedStatistics,
 
     // Scenario table state

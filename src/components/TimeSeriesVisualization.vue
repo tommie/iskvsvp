@@ -25,7 +25,7 @@ const COLORS = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754'
 
 // Generate distribution points from percentile statistics for each time period
 const timeSeriesDistributions = computed<TimeSeriesDistribution[]>(() => {
-  if (!simulationResults.value || simulationResults.value.statistics.length < 2) return []
+  if (!simulationResults.value || simulationResults.value.statistics.length < 1) return []
 
   const labels = simulationResults.value.labels
   const numPeriods = simulationResults.value.statistics[0]!.median.snapshots.liquidValue.length
@@ -108,7 +108,7 @@ const timeSeriesDistributions = computed<TimeSeriesDistribution[]>(() => {
 
 // Withdrawal distributions
 const withdrawalDistributions = computed<TimeSeriesDistribution[]>(() => {
-  if (!simulationResults.value || simulationResults.value.statistics.length < 2) return []
+  if (!simulationResults.value || simulationResults.value.statistics.length < 1) return []
 
   const labels = simulationResults.value.labels
   const numPeriods = simulationResults.value.statistics[0]!.median.snapshots.liquidValue.length

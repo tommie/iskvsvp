@@ -55,7 +55,7 @@ const buildSeriesFromStats = (
     | 'maxDrawdown'
     | 'maxDrawdownPeriod',
 ): DataSeries[] => {
-  if (!simulationResults.value || simulationResults.value.statistics.length < 2) return []
+  if (!simulationResults.value || simulationResults.value.statistics.length < 1) return []
 
   const labels = simulationResults.value.labels
   const finalPeriod = simulationResults.value.statistics[0]!.median.snapshots.liquidValue.length - 1

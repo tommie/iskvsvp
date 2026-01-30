@@ -218,6 +218,9 @@ const getCellStyle = (
     | 'maxDrawdownPeriod',
   higherIsBetter: boolean,
 ) => {
+  // Don't highlight if only one scenario
+  if (statistics.value.length < 2) return {}
+
   const best = getBestScenario(statKey, field, higherIsBetter)
   if (best === null || best !== scenarioIdx) return {}
 
@@ -227,13 +230,15 @@ const getCellStyle = (
 }
 
 const hasResults = computed(() => statistics.value.length > 0)
+const hasMultipleScenarios = computed(() => statistics.value.length > 1)
 </script>
 
 <template>
   <div v-if="hasResults">
     <p class="text-muted mb-3">
-      Statistik över alla simuleringar. Celler med bästa värdet för varje mått och percentil är
-      markerade med färg.
+      Statistik över alla simuleringar.<span v-if="hasMultipleScenarios">
+        Celler med bästa värdet för varje mått och percentil är markerade med färg.</span
+      >
     </p>
     <div class="table-responsive">
       <table class="table table-bordered table-hover">

@@ -33,10 +33,10 @@ watch(simulationResults, (newResults) => {
 <template>
   <div class="container my-4">
     <header class="mb-4">
-      <h1 class="display-4">ISK vs VP Monte Carlo-simulator</h1>
+      <h1 class="display-4">Fondsimulator</h1>
       <p class="lead text-muted">
-        Stokastisk simulering som jämför ISK (Investeringssparkonto) och VP (Värdepappersdepå) över
-        tid
+        Monte Carlo-simulering för svenska investeringskonton. Jämför scenarion med olika
+        portföljer, kontotyper och uttagsstrategier.
       </p>
     </header>
 
