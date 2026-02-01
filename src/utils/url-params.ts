@@ -1,6 +1,7 @@
 import type {
   AssetPropertyParameter,
   InputParameters,
+  Scenario,
   ScenarioParameter,
   ScenarioTable,
   SimulationAsset,
@@ -414,7 +415,7 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
 
   // Build scenarios
   const scenarios = names.map((label, idx) => {
-    const parameters: any = {}
+    const parameters: Record<string, unknown> = {}
 
     for (const urlKey of controlledParams) {
       // Find the ScenarioParameter key for this URL key
@@ -466,7 +467,7 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
     }
 
     return { label, parameters }
-  })
+  }) as Scenario[]
 
   return { scenarios }
 }

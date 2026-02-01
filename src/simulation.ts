@@ -5,8 +5,6 @@ import type {
   SimulationResults,
   SimulationStatistics,
   SimulationPeriodData,
-  SimulationSummary,
-  Histogram,
   FinalAssetWeights,
 } from './types'
 
@@ -117,7 +115,6 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
   let maxDrawdownPeriod = 0
 
   let cumulativeInflation = 1
-  let firstYearWithdrawalReal = 0
 
   // Arrays to store period data (per-period values)
   const periodWithdrawals: number[] = []
@@ -358,14 +355,6 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
     accumulatedRealWithdrawal += withdrawnReal
     accumulatedNominalWithdrawal += withdrawn
 
-    // Store first year withdrawal (first year after deposits end)
-    // If profit withdrawal is enabled, wait one more year for profit calculation to be meaningful
-    const firstWithdrawalYear =
-      params.profitWithdrawalRate > 0 ? params.depositYears + 1 : params.depositYears
-    if (i === firstWithdrawalYear) {
-      firstYearWithdrawalReal = withdrawnReal
-    }
-
     // Store period data (this period's values)
     periodWithdrawals.push(withdrawn)
     periodWithdrawalsReal.push(withdrawnReal)
@@ -480,58 +469,8 @@ function calculateStats(values: number[]): {
 }
 
 /**
- * Create a histogram from an array of values.
- */
-function createHistogram(values: number[], bucketCount: number = 50): Histogram {
-  if (values.length === 0) {
-    return { lowest: 0, uppers: [], buckets: [] }
-  }
-
-  const sorted = values.slice().sort((a, b) => a - b)
-  const min = sorted[0]!
-  const max = sorted[sorted.length - 1]!
-  const range = max - min
-
-  if (range === 0) {
-    return { lowest: min, uppers: [max], buckets: [values.length] }
-  }
-
-  const bucketSize = range / bucketCount
-  const buckets = Array(bucketCount).fill(0)
-  const uppers: number[] = []
-
-  for (let i = 0; i < bucketCount; i++) {
-    uppers.push(min + (i + 1) * bucketSize)
-  }
-
-  for (const value of values) {
-    const bucketIndex = Math.min(Math.floor((value - min) / bucketSize), bucketCount - 1)
-    buckets[bucketIndex]!++
-  }
-
-  return { lowest: min, uppers, buckets }
-}
-
-/**
- * Calculate statistics for a SimulationResult field across all simulations.
- */
-function calculateResultStatistics<K extends keyof SimulationPeriodData>(
-  results: SimulationResult<number>[],
-  field: K,
-  periodIndex: number,
-): SimulationStatistics<number> {
-  const values = results
-    .map((r) => {
-      const value = r.periodData[field][periodIndex]
-      return Array.isArray(value) ? value[0] : value
-    })
-    .filter((v): v is number => v !== undefined)
-  return calculateStats(values)
-}
-
-/**
  * Run Monte Carlo simulations for multiple parameter sets.
- * Returns aggregated histograms, statistics, and median samples.
+ * Returns aggregated statistics and median samples.
  */
 export function simulateAll(
   paramSets: InputParameters[],
@@ -564,8 +503,7 @@ export function simulateAll(
     onProgress(100)
   }
 
-  // Calculate histograms, statistics, median samples, and final asset weights for each parameter set
-  const histograms: SimulationResult<number[]>[] = []
+  // Calculate statistics, median samples, and final asset weights for each parameter set
   const statistics: SimulationStatistics<SimulationResult<number>>[] = []
   const medianSamples: SimulationResult<number>[] = []
   const finalAssetWeightsStats: FinalAssetWeights[] = []
@@ -613,99 +551,32 @@ export function simulateAll(
       }
     }
 
-    // Create histograms for each period
-    const histogramResult: SimulationResult<number[]> = {
-      periodData: {
-        withdrawal: [],
-        withdrawalReal: [],
-        withdrawalRate: [],
-        tax: [],
-        taxationDegree: [],
-        iskTaxRate: [],
-        assetReturnRates: [],
-        inflationRate: [],
-      },
-      snapshots: {
-        capital: [],
-        liquidValue: [],
-        totalValue: [],
-        maxDrawdown: [],
-        maxDrawdownPeriod: [],
-        withdrawal: [],
-        withdrawalReal: [],
-        withdrawalRate: [],
-        tax: [],
-        taxationDegree: [],
-        iskTaxRate: [],
-        assetReturnRates: [],
-        inflationRate: [],
-      },
-    }
-
-    // Generate histograms for each period (currently just bucket counts)
-    // For simplicity, we'll store histograms for the final period only
-    const finalPeriod = numPeriods - 1
-    const periodFields: (keyof SimulationPeriodData)[] = [
-      'withdrawal',
-      'withdrawalReal',
-      'withdrawalRate',
-      'tax',
-      'taxationDegree',
-      'iskTaxRate',
-      'inflationRate',
-    ]
-
-    for (const field of periodFields) {
-      const values = results
-        .map((r) => {
-          const val = r.periodData[field][finalPeriod]
-          return Array.isArray(val) ? val[0] : val
-        })
-        .filter((v): v is number => v !== undefined && isFinite(v))
-
-      const histogram = createHistogram(values, 50)
-      histogramResult.periodData[field] = histogram.buckets as any
-    }
-
-    const snapshotHistFields: (keyof SimulationPeriodData)[] = ['tax', 'taxationDegree']
-
-    for (const field of snapshotHistFields) {
-      const values = results
-        .map((r) => {
-          const val = r.snapshots[field][finalPeriod]
-          return Array.isArray(val) ? val[0] : val
-        })
-        .filter((v): v is number => v !== undefined && isFinite(v))
-
-      const histogram = createHistogram(values, 50)
-      histogramResult.snapshots[field] = histogram.buckets as any
-    }
-
-    // Snapshot-specific fields
-    const capitalValues = results.map((r) => r.snapshots.capital[finalPeriod]!).filter(isFinite)
-    histogramResult.snapshots.capital = createHistogram(capitalValues, 50).buckets as any
-
-    const liquidValues = results.map((r) => r.snapshots.liquidValue[finalPeriod]!).filter(isFinite)
-    histogramResult.snapshots.liquidValue = createHistogram(liquidValues, 50).buckets as any
-
-    const totalValues = results.map((r) => r.snapshots.totalValue[finalPeriod]!).filter(isFinite)
-    histogramResult.snapshots.totalValue = createHistogram(totalValues, 50).buckets as any
-
-    histograms.push(histogramResult)
-
     // Calculate statistics for each field and period
+    // Type assertion needed: building objects incrementally
+    const emptyPeriodData = () =>
+      ({} as SimulationPeriodData<number[]> & { assetReturnRates: number[][] })
+    const emptySnapshots = () =>
+      ({} as SimulationPeriodData<number[]> & {
+        capital: number[]
+        liquidValue: number[]
+        totalValue: number[]
+        maxDrawdown: number[]
+        maxDrawdownPeriod: number[]
+        assetReturnRates: number[][]
+      })
     const statsResult: SimulationStatistics<SimulationResult<number>> = {
-      mean: { periodData: {} as any, snapshots: {} as any },
-      stdDev: { periodData: {} as any, snapshots: {} as any },
-      percentile5: { periodData: {} as any, snapshots: {} as any },
-      percentile25: { periodData: {} as any, snapshots: {} as any },
-      median: { periodData: {} as any, snapshots: {} as any },
-      percentile75: { periodData: {} as any, snapshots: {} as any },
-      percentile95: { periodData: {} as any, snapshots: {} as any },
+      mean: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
+      stdDev: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
+      percentile5: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
+      percentile25: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
+      median: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
+      percentile75: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
+      percentile95: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
     }
 
-    // Calculate statistics for periodData fields
-    const periodDataFields: (keyof SimulationPeriodData)[] = [
+    // Calculate statistics for periodData fields (excluding assetReturnRates which is handled separately)
+    type ScalarPeriodField = Exclude<keyof SimulationPeriodData, 'assetReturnRates'>
+    const periodDataFields: ScalarPeriodField[] = [
       'withdrawal',
       'withdrawalReal',
       'withdrawalRate',
@@ -735,13 +606,13 @@ export function simulateAll(
         p95Arr.push(stats.p95)
       }
 
-      statsResult.mean.periodData[field] = meanArr as any
-      statsResult.stdDev.periodData[field] = stdDevArr as any
-      statsResult.percentile5.periodData[field] = p5Arr as any
-      statsResult.percentile25.periodData[field] = p25Arr as any
-      statsResult.median.periodData[field] = medianArr as any
-      statsResult.percentile75.periodData[field] = p75Arr as any
-      statsResult.percentile95.periodData[field] = p95Arr as any
+      statsResult.mean.periodData[field] = meanArr
+      statsResult.stdDev.periodData[field] = stdDevArr
+      statsResult.percentile5.periodData[field] = p5Arr
+      statsResult.percentile25.periodData[field] = p25Arr
+      statsResult.median.periodData[field] = medianArr
+      statsResult.percentile75.periodData[field] = p75Arr
+      statsResult.percentile95.periodData[field] = p95Arr
     }
 
     // Handle assetReturnRates separately (it's an array of arrays)
@@ -800,11 +671,9 @@ export function simulateAll(
       statsResult.percentile95.periodData.assetReturnRates.push(p95AssetReturns)
     }
 
-    // Calculate statistics for snapshot fields
-    const snapshotFields: Array<keyof Pick<SimulationPeriodData, 'tax' | 'taxationDegree'>> = [
-      'tax',
-      'taxationDegree',
-    ]
+    // Calculate statistics for snapshot fields (tax and taxationDegree from SimulationPeriodData)
+    type SnapshotScalarField = 'tax' | 'taxationDegree'
+    const snapshotFields: SnapshotScalarField[] = ['tax', 'taxationDegree']
 
     for (const field of snapshotFields) {
       const meanArr: number[] = []
@@ -826,13 +695,13 @@ export function simulateAll(
         p95Arr.push(stats.p95)
       }
 
-      statsResult.mean.snapshots[field] = meanArr as any
-      statsResult.stdDev.snapshots[field] = stdDevArr as any
-      statsResult.percentile5.snapshots[field] = p5Arr as any
-      statsResult.percentile25.snapshots[field] = p25Arr as any
-      statsResult.median.snapshots[field] = medianArr as any
-      statsResult.percentile75.snapshots[field] = p75Arr as any
-      statsResult.percentile95.snapshots[field] = p95Arr as any
+      statsResult.mean.snapshots[field] = meanArr
+      statsResult.stdDev.snapshots[field] = stdDevArr
+      statsResult.percentile5.snapshots[field] = p5Arr
+      statsResult.percentile25.snapshots[field] = p25Arr
+      statsResult.median.snapshots[field] = medianArr
+      statsResult.percentile75.snapshots[field] = p75Arr
+      statsResult.percentile95.snapshots[field] = p95Arr
     }
 
     // Snapshot-only fields (capital, liquidValue, totalValue, maxDrawdown, maxDrawdownPeriod)
@@ -880,12 +749,19 @@ export function simulateAll(
     }
 
     // Handle remaining snapshot fields that mirror periodData
-    const mirroredFields: Array<
-      keyof Pick<
-        SimulationPeriodData,
-        'withdrawal' | 'withdrawalReal' | 'withdrawalRate' | 'iskTaxRate' | 'inflationRate'
-      >
-    > = ['withdrawal', 'withdrawalReal', 'withdrawalRate', 'iskTaxRate', 'inflationRate']
+    type MirroredField =
+      | 'withdrawal'
+      | 'withdrawalReal'
+      | 'withdrawalRate'
+      | 'iskTaxRate'
+      | 'inflationRate'
+    const mirroredFields: MirroredField[] = [
+      'withdrawal',
+      'withdrawalReal',
+      'withdrawalRate',
+      'iskTaxRate',
+      'inflationRate',
+    ]
 
     for (const field of mirroredFields) {
       const meanArr: number[] = []
@@ -907,13 +783,13 @@ export function simulateAll(
         p95Arr.push(stats.p95)
       }
 
-      statsResult.mean.snapshots[field] = meanArr as any
-      statsResult.stdDev.snapshots[field] = stdDevArr as any
-      statsResult.percentile5.snapshots[field] = p5Arr as any
-      statsResult.percentile25.snapshots[field] = p25Arr as any
-      statsResult.median.snapshots[field] = medianArr as any
-      statsResult.percentile75.snapshots[field] = p75Arr as any
-      statsResult.percentile95.snapshots[field] = p95Arr as any
+      statsResult.mean.snapshots[field] = meanArr
+      statsResult.stdDev.snapshots[field] = stdDevArr
+      statsResult.percentile5.snapshots[field] = p5Arr
+      statsResult.percentile25.snapshots[field] = p25Arr
+      statsResult.median.snapshots[field] = medianArr
+      statsResult.percentile75.snapshots[field] = p75Arr
+      statsResult.percentile95.snapshots[field] = p95Arr
     }
 
     // Handle assetReturnRates for snapshots (same as periodData since they're identical)
@@ -992,5 +868,5 @@ export function simulateAll(
     })
   }
 
-  return { labels, histograms, statistics, medianSamples, finalAssetWeights: finalAssetWeightsStats }
+  return { labels, statistics, medianSamples, finalAssetWeights: finalAssetWeightsStats }
 }

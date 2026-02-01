@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useHistoryStore } from '../stores/history'
 import { storeToRefs } from 'pinia'
-import { ref, useId, computed } from 'vue'
+import { ref, useId } from 'vue'
 import { encodeParamsToUrl } from '../utils/url-params'
 import type { HistoryRecord } from '../stores/history'
 

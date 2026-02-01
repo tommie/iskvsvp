@@ -78,12 +78,6 @@ export interface SimulationStatistics<T> {
   percentile95: T
 }
 
-export interface Histogram {
-  lowest: number
-  uppers: number[]
-  buckets: number[]
-}
-
 // Final portfolio composition (weights) at end of simulation
 export interface FinalAssetWeights {
   // Asset names for labeling
@@ -95,9 +89,6 @@ export interface FinalAssetWeights {
 export interface SimulationResults {
   // Labels for each scenario (e.g., ["ISK", "VP"])
   labels: string[]
-
-  // Histograms for each scenario and period
-  histograms: SimulationResult<number[]>[] // number[bucket]
 
   // Statistics for each scenario and period
   statistics: SimulationStatistics<SimulationResult<number>>[]

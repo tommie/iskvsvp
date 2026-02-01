@@ -30,7 +30,6 @@ const {
   isRunning,
   progress,
   isAddToTableMode,
-  scenarioTable,
 } = storeToRefs(store)
 
 // Import ScenarioParameter type for parameter click handling

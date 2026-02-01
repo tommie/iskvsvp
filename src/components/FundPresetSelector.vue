@@ -23,7 +23,7 @@ interface GroupedFund {
   index: number
 }
 
-const props = defineProps<{
+defineProps<{
   disabled?: boolean
 }>()
 

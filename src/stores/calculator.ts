@@ -9,7 +9,20 @@ import type {
   RebalanceFrequency,
   ScenarioTable,
   ScenarioParameter,
+  AccountType,
+  AssetPropertyParameter,
 } from '../types'
+
+// Union type for scenario parameter values
+type ScenarioValue =
+  | string
+  | number
+  | boolean
+  | AccountType
+  | RebalanceFrequency
+  | SimulationAsset[]
+  | number[][]
+  | undefined
 import { isAssetPropertyParameter, parseAssetPropertyParameter } from '../types'
 import { useHistoryStore } from './history'
 import {
@@ -120,7 +133,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
     // Add the parameter with current value to all scenarios
     for (const scenario of scenarioTable.value!.scenarios) {
       if (!(paramKey in scenario.parameters)) {
-        scenario.parameters[paramKey] = currentValue
+        // Type assertion needed: dynamic property assignment
+        ;(scenario.parameters as Record<string, ScenarioValue>)[paramKey] = currentValue
       }
     }
   }
@@ -151,7 +165,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
       for (const key of Object.keys(firstScenario.parameters) as ScenarioParameter[]) {
         const value = firstScenario.parameters[key]
         if (value !== undefined) {
-          ;(newScenario.parameters as any)[key] = value
+          ;(newScenario.parameters as Record<string, ScenarioValue>)[key] = value
         }
       }
     }
@@ -176,15 +190,18 @@ export const useCalculatorStore = defineStore('calculator', () => {
     scenarioTable.value.scenarios[index]!.label = label
   }
 
-  function updateScenarioValue(scenarioIndex: number, paramKey: ScenarioParameter, value: any) {
+  function updateScenarioValue(scenarioIndex: number, paramKey: ScenarioParameter, value: ScenarioValue) {
     if (!scenarioTable.value) return
     if (scenarioIndex < 0 || scenarioIndex >= scenarioTable.value.scenarios.length) return
 
-    scenarioTable.value.scenarios[scenarioIndex]!.parameters[paramKey] = value
+    // Type assertion needed: dynamic property assignment
+    ;(scenarioTable.value.scenarios[scenarioIndex]!.parameters as Record<string, ScenarioValue>)[
+      paramKey
+    ] = value
   }
 
   // Helper to get current parameter value from the store
-  function getCurrentParameterValue(paramKey: ScenarioParameter): any {
+  function getCurrentParameterValue(paramKey: ScenarioParameter): ScenarioValue {
     // Check if it's an asset property parameter
     if (isAssetPropertyParameter(paramKey)) {
       const parsed = parseAssetPropertyParameter(paramKey)
@@ -194,7 +211,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
       return undefined
     }
 
-    const paramMap: Record<string, any> = {
+    const paramMap: Record<string, ScenarioValue> = {
       accountType: accountType.value,
       initialCapital: initialCapital.value,
       startYear: startYear.value,
@@ -270,13 +287,13 @@ export const useCalculatorStore = defineStore('calculator', () => {
 
           // Extract UI-only and asset property parameters
           const { accountType: scenarioAccountType, ...restParams } = scenario.parameters
-          const actualParams: any = {}
+          const actualParams: Record<string, unknown> = {}
           const assetPropertyOverrides: Record<number, Partial<SimulationAsset>> = {}
 
           // Separate asset property overrides from regular parameters
           for (const [key, value] of Object.entries(restParams)) {
             if (isAssetPropertyParameter(key)) {
-              const parsed = parseAssetPropertyParameter(key as any)
+              const parsed = parseAssetPropertyParameter(key as AssetPropertyParameter)
               if (parsed) {
                 if (!assetPropertyOverrides[parsed.index]) {
                   assetPropertyOverrides[parsed.index] = {}

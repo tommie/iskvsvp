@@ -3,7 +3,18 @@ import { storeToRefs } from 'pinia'
 import { computed } from 'vue'
 
 import { useCalculatorStore } from '../stores/calculator'
-import type { ScenarioParameter } from '../types'
+import type { ScenarioParameter, AccountType, RebalanceFrequency, SimulationAsset } from '../types'
+
+// Union type for scenario parameter values
+type ScenarioValue =
+  | string
+  | number
+  | boolean
+  | AccountType
+  | RebalanceFrequency
+  | SimulationAsset[]
+  | number[][]
+  | undefined
 
 const store = useCalculatorStore()
 const { scenarioTable, controlledParameters } = storeToRefs(store)
@@ -69,12 +80,12 @@ function isAssetParameter(param: string): boolean {
   return /^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)
 }
 
-function formatValue(param: ScenarioParameter, value: any): string {
+function formatValue(param: ScenarioParameter, value: ScenarioValue): string {
   if (value === undefined || value === null) return ''
 
   // Format account type
   if (param === 'accountType') {
-    return value
+    return String(value)
   }
 
   // Check if it's an asset property parameter
@@ -83,7 +94,7 @@ function formatValue(param: ScenarioParameter, value: any): string {
     /^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)
   ) {
     const match = param.match(/^assets\.(expectedReturn|volatility|weight)\.(\d+)$/)
-    if (match) {
+    if (match && typeof value === 'number') {
       const property = match[1]!
       if (property === 'expectedReturn' || property === 'volatility') {
         // Percentages
@@ -97,14 +108,15 @@ function formatValue(param: ScenarioParameter, value: any): string {
 
   // Format percentages (convert to percentage and format)
   if (
-    param === 'balanceWithdrawalRate' ||
-    param === 'profitWithdrawalRate' ||
-    param === 'vpWealthTaxRate' ||
-    param === 'capitalGainsTaxRate' ||
-    param === 'iskTaxRate' ||
-    param === 'inflationRate' ||
-    param === 'iskTaxRateStdDev' ||
-    param === 'inflationStdDev'
+    typeof value === 'number' &&
+    (param === 'balanceWithdrawalRate' ||
+      param === 'profitWithdrawalRate' ||
+      param === 'vpWealthTaxRate' ||
+      param === 'capitalGainsTaxRate' ||
+      param === 'iskTaxRate' ||
+      param === 'inflationRate' ||
+      param === 'iskTaxRateStdDev' ||
+      param === 'inflationStdDev')
   ) {
     return (value * 100).toFixed(2)
   }
@@ -122,7 +134,7 @@ function formatValue(param: ScenarioParameter, value: any): string {
   return String(value)
 }
 
-function parseValue(param: ScenarioParameter, inputValue: string): any {
+function parseValue(param: ScenarioParameter, inputValue: string): ScenarioValue {
   // Check if it's an asset property parameter
   if (
     typeof param === 'string' &&
