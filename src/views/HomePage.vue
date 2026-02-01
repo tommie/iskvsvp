@@ -8,6 +8,7 @@ import SummaryStatistics from '../components/SummaryStatistics.vue'
 import SummaryVisualization from '../components/SummaryVisualization.vue'
 import TimeSeriesVisualization from '../components/TimeSeriesVisualization.vue'
 import ParameterVisualization from '../components/ParameterVisualization.vue'
+import PortfolioComposition from '../components/PortfolioComposition.vue'
 import SimulationHistory from '../components/SimulationHistory.vue'
 
 const store = useCalculatorStore()
@@ -105,6 +106,17 @@ watch(simulationResults, (newResults) => {
           <li class="nav-item" role="presentation">
             <button
               class="nav-link"
+              :class="{ active: activeTab === 'composition' }"
+              @click="activeTab = 'composition'"
+              type="button"
+              role="tab"
+            >
+              Portfölj
+            </button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button
+              class="nav-link"
               :class="{ active: activeTab === 'history' }"
               @click="activeTab = 'history'"
               type="button"
@@ -140,6 +152,9 @@ watch(simulationResults, (newResults) => {
         </div>
         <div v-show="activeTab === 'parameters'">
           <ParameterVisualization />
+        </div>
+        <div v-show="activeTab === 'composition'">
+          <PortfolioComposition />
         </div>
         <div v-show="activeTab === 'history'">
           <SimulationHistory />

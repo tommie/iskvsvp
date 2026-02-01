@@ -84,6 +84,14 @@ export interface Histogram {
   buckets: number[]
 }
 
+// Final portfolio composition (weights) at end of simulation
+export interface FinalAssetWeights {
+  // Asset names for labeling
+  assetNames: string[]
+  // Statistics for each asset's final weight (0-1)
+  weights: SimulationStatistics<number>[]
+}
+
 export interface SimulationResults {
   // Labels for each scenario (e.g., ["ISK", "VP"])
   labels: string[]
@@ -96,6 +104,9 @@ export interface SimulationResults {
 
   // A representative sample of the median for each scenario
   medianSamples: SimulationResult<number>[]
+
+  // Final portfolio composition for each scenario (only meaningful when rebalancing is 'never')
+  finalAssetWeights: FinalAssetWeights[]
 }
 
 // Asset property parameter format: "assets.expectedReturn.0", "assets.volatility.1", etc.

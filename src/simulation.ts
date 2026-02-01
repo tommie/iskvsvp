@@ -7,7 +7,13 @@ import type {
   SimulationPeriodData,
   SimulationSummary,
   Histogram,
+  FinalAssetWeights,
 } from './types'
+
+// Extended result that includes final asset weights
+export interface SingleSimulationResult extends SimulationResult<number> {
+  finalAssetWeights: number[]
+}
 
 const ISK_TAX_RATE_MIN = 0.0125
 
@@ -87,9 +93,9 @@ interface AssetPosition {
 
 /**
  * Run a single simulation for a single scenario (ISK or VP).
- * Returns period-by-period data and cumulative snapshots.
+ * Returns period-by-period data, cumulative snapshots, and final asset weights.
  */
-export function runSingleSimulation(params: InputParameters): SimulationResult<number> {
+export function runSingleSimulation(params: InputParameters): SingleSimulationResult {
   const rng = alea(params.seed)
   const isISK = params.iskTaxRate !== undefined
 
@@ -409,6 +415,13 @@ export function runSingleSimulation(params: InputParameters): SimulationResult<n
     maxDrawdownPeriod = Math.max(maxDrawdownPeriod, currentDrawdownPeriod)
   }
 
+  // Calculate final asset weights
+  const totalValue = assetPositions.reduce((sum, pos) => sum + pos.value, 0)
+  const finalWeights =
+    totalValue > 0
+      ? assetPositions.map((pos) => pos.value / totalValue)
+      : assetPositions.map(() => 1 / assetPositions.length)
+
   return {
     periodData: {
       withdrawal: periodWithdrawals,
@@ -435,6 +448,7 @@ export function runSingleSimulation(params: InputParameters): SimulationResult<n
       assetReturnRates: assetReturnRatesHistory, // Same as period data
       inflationRate: periodInflationRates, // Same as period data
     },
+    finalAssetWeights: finalWeights,
   }
 }
 
@@ -524,12 +538,12 @@ export function simulateAll(
   labels: string[],
   onProgress?: (progress: number) => void,
 ): SimulationResults {
-  const allResults: SimulationResult<number>[][] = []
+  const allResults: SingleSimulationResult[][] = []
 
   // Run simulations for each parameter set
   for (let setIdx = 0; setIdx < paramSets.length; setIdx++) {
     const params = paramSets[setIdx]!
-    const results: SimulationResult<number>[] = []
+    const results: SingleSimulationResult[] = []
 
     for (let i = 0; i < params.simulationCount; i++) {
       const params2 = { ...params, seed: params.seed + i.toString() }
@@ -550,12 +564,15 @@ export function simulateAll(
     onProgress(100)
   }
 
-  // Calculate histograms, statistics, and median samples for each parameter set
+  // Calculate histograms, statistics, median samples, and final asset weights for each parameter set
   const histograms: SimulationResult<number[]>[] = []
   const statistics: SimulationStatistics<SimulationResult<number>>[] = []
   const medianSamples: SimulationResult<number>[] = []
+  const finalAssetWeightsStats: FinalAssetWeights[] = []
 
-  for (const results of allResults) {
+  for (let setIdx = 0; setIdx < allResults.length; setIdx++) {
+    const results = allResults[setIdx]!
+    const params = paramSets[setIdx]!
     const firstResult = results[0]!
     const numPeriods = firstResult.periodData.withdrawal.length
 
@@ -935,7 +952,45 @@ export function simulateAll(
     }
 
     medianSamples.push(results[closestIdx]!)
+
+    // Calculate final asset weights statistics
+    const assetNames = params.assets.map((a) => a.name)
+    const weightStats: SimulationStatistics<number>[] = []
+
+    for (let assetIdx = 0; assetIdx < params.assets.length; assetIdx++) {
+      const assetWeights = results
+        .map((r) => r.finalAssetWeights[assetIdx])
+        .filter((v): v is number => v !== undefined && isFinite(v))
+
+      if (assetWeights.length > 0) {
+        const stats = calculateStats(assetWeights)
+        weightStats.push({
+          mean: stats.mean,
+          stdDev: stats.stdDev,
+          percentile5: stats.percentile5,
+          percentile25: stats.percentile25,
+          median: stats.median,
+          percentile75: stats.percentile75,
+          percentile95: stats.percentile95,
+        })
+      } else {
+        weightStats.push({
+          mean: 0,
+          stdDev: 0,
+          percentile5: 0,
+          percentile25: 0,
+          median: 0,
+          percentile75: 0,
+          percentile95: 0,
+        })
+      }
+    }
+
+    finalAssetWeightsStats.push({
+      assetNames,
+      weights: weightStats,
+    })
   }
 
-  return { labels, histograms, statistics, medianSamples }
+  return { labels, histograms, statistics, medianSamples, finalAssetWeights: finalAssetWeightsStats }
 }
