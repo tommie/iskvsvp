@@ -71,11 +71,9 @@ export interface SimulationResult<T> {
 export interface SimulationStatistics<T> {
   mean: T
   stdDev: T
-  percentile5: T
-  percentile25: T
+  percentile10: T
   median: T
-  percentile75: T
-  percentile95: T
+  percentile90: T
 }
 
 // Final portfolio composition (weights) at end of simulation

@@ -35,11 +35,9 @@ const getValue = (
   statKey:
     | 'mean'
     | 'stdDev'
-    | 'percentile5'
-    | 'percentile25'
+    | 'percentile10'
     | 'median'
-    | 'percentile75'
-    | 'percentile95',
+    | 'percentile90',
   field:
     | 'liquidValue'
     | 'totalValue'
@@ -89,11 +87,9 @@ const getAverageInflation = (
   statKey:
     | 'mean'
     | 'stdDev'
-    | 'percentile5'
-    | 'percentile25'
+    | 'percentile10'
     | 'median'
-    | 'percentile75'
-    | 'percentile95',
+    | 'percentile90',
 ): number => {
   if (!statistics.value[scenarioIdx]) return 0
   const rates = statistics.value[scenarioIdx]![statKey].periodData.inflationRate
@@ -105,11 +101,9 @@ const getAverageDevelopment = (
   statKey:
     | 'mean'
     | 'stdDev'
-    | 'percentile5'
-    | 'percentile25'
+    | 'percentile10'
     | 'median'
-    | 'percentile75'
-    | 'percentile95',
+    | 'percentile90',
 ): number => {
   if (!statistics.value[scenarioIdx]) return 0
   const assetReturns = statistics.value[scenarioIdx]![statKey].periodData.assetReturnRates
@@ -127,11 +121,9 @@ const getAverageIskTaxRate = (
   statKey:
     | 'mean'
     | 'stdDev'
-    | 'percentile5'
-    | 'percentile25'
+    | 'percentile10'
     | 'median'
-    | 'percentile75'
-    | 'percentile95',
+    | 'percentile90',
 ): number => {
   if (!statistics.value[scenarioIdx]) return 0
   const rates = statistics.value[scenarioIdx]![statKey].periodData.iskTaxRate
@@ -140,7 +132,7 @@ const getAverageIskTaxRate = (
 
 // Helper to determine best scenario for highlighting
 const getBestScenario = (
-  statKey: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+  statKey: 'percentile10' | 'median' | 'percentile90',
   field:
     | 'liquidValue'
     | 'totalValue'
@@ -205,7 +197,7 @@ const formatPercent = (value: number | undefined): string => {
 
 // Helper to get cell style based on whether this scenario is the best
 const getCellStyle = (
-  statKey: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+  statKey: 'percentile10' | 'median' | 'percentile90',
   scenarioIdx: number,
   field:
     | 'liquidValue'
@@ -246,16 +238,14 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
           <tr>
             <th rowspan="2" class="align-middle">Mått</th>
             <th rowspan="2" class="align-middle">Scenario</th>
-            <th colspan="5">Percentiler</th>
+            <th colspan="3">Percentiler</th>
             <th v-if="showDetailedStatistics" rowspan="2" class="align-middle">Medel</th>
             <th v-if="showDetailedStatistics" rowspan="2" class="align-middle">SD</th>
           </tr>
           <tr>
-            <th>5%</th>
-            <th>25%</th>
+            <th>10%</th>
             <th>50%</th>
-            <th>75%</th>
-            <th>95%</th>
+            <th>90%</th>
           </tr>
         </thead>
         <tbody>
@@ -266,20 +256,14 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                 Totalt värde
               </th>
               <th scope="row">{{ label }}</th>
-              <td :style="getCellStyle('percentile5', idx, 'totalValue', true)">
-                {{ formatNumber(getValue(idx, 'percentile5', 'totalValue')) }}
-              </td>
-              <td :style="getCellStyle('percentile25', idx, 'totalValue', true)">
-                {{ formatNumber(getValue(idx, 'percentile25', 'totalValue')) }}
+              <td :style="getCellStyle('percentile10', idx, 'totalValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile10', 'totalValue')) }}
               </td>
               <td :style="getCellStyle('median', idx, 'totalValue', true)">
                 {{ formatNumber(getValue(idx, 'median', 'totalValue')) }}
               </td>
-              <td :style="getCellStyle('percentile75', idx, 'totalValue', true)">
-                {{ formatNumber(getValue(idx, 'percentile75', 'totalValue')) }}
-              </td>
-              <td :style="getCellStyle('percentile95', idx, 'totalValue', true)">
-                {{ formatNumber(getValue(idx, 'percentile95', 'totalValue')) }}
+              <td :style="getCellStyle('percentile90', idx, 'totalValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile90', 'totalValue')) }}
               </td>
               <td v-if="showDetailedStatistics">
                 {{ formatNumber(getValue(idx, 'mean', 'totalValue')) }}
@@ -297,20 +281,14 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                 Likvidvärde
               </th>
               <th scope="row">{{ label }}</th>
-              <td :style="getCellStyle('percentile5', idx, 'liquidValue', true)">
-                {{ formatNumber(getValue(idx, 'percentile5', 'liquidValue')) }}
-              </td>
-              <td :style="getCellStyle('percentile25', idx, 'liquidValue', true)">
-                {{ formatNumber(getValue(idx, 'percentile25', 'liquidValue')) }}
+              <td :style="getCellStyle('percentile10', idx, 'liquidValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile10', 'liquidValue')) }}
               </td>
               <td :style="getCellStyle('median', idx, 'liquidValue', true)">
                 {{ formatNumber(getValue(idx, 'median', 'liquidValue')) }}
               </td>
-              <td :style="getCellStyle('percentile75', idx, 'liquidValue', true)">
-                {{ formatNumber(getValue(idx, 'percentile75', 'liquidValue')) }}
-              </td>
-              <td :style="getCellStyle('percentile95', idx, 'liquidValue', true)">
-                {{ formatNumber(getValue(idx, 'percentile95', 'liquidValue')) }}
+              <td :style="getCellStyle('percentile90', idx, 'liquidValue', true)">
+                {{ formatNumber(getValue(idx, 'percentile90', 'liquidValue')) }}
               </td>
               <td v-if="showDetailedStatistics">
                 {{ formatNumber(getValue(idx, 'mean', 'liquidValue')) }}
@@ -328,34 +306,20 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                 Uttag reellt (första året)
               </th>
               <th scope="row">{{ label }}</th>
-              <td :style="getCellStyle('percentile5', idx, 'withdrawalReal', true)">
+              <td :style="getCellStyle('percentile10', idx, 'withdrawalReal', true)">
                 {{
                   formatNumber(
-                    getValue(idx, 'percentile5', 'withdrawalReal', firstWithdrawalPeriod),
-                  )
-                }}
-              </td>
-              <td :style="getCellStyle('percentile25', idx, 'withdrawalReal', true)">
-                {{
-                  formatNumber(
-                    getValue(idx, 'percentile25', 'withdrawalReal', firstWithdrawalPeriod),
+                    getValue(idx, 'percentile10', 'withdrawalReal', firstWithdrawalPeriod),
                   )
                 }}
               </td>
               <td :style="getCellStyle('median', idx, 'withdrawalReal', true)">
                 {{ formatNumber(getValue(idx, 'median', 'withdrawalReal', firstWithdrawalPeriod)) }}
               </td>
-              <td :style="getCellStyle('percentile75', idx, 'withdrawalReal', true)">
+              <td :style="getCellStyle('percentile90', idx, 'withdrawalReal', true)">
                 {{
                   formatNumber(
-                    getValue(idx, 'percentile75', 'withdrawalReal', firstWithdrawalPeriod),
-                  )
-                }}
-              </td>
-              <td :style="getCellStyle('percentile95', idx, 'withdrawalReal', true)">
-                {{
-                  formatNumber(
-                    getValue(idx, 'percentile95', 'withdrawalReal', firstWithdrawalPeriod),
+                    getValue(idx, 'percentile90', 'withdrawalReal', firstWithdrawalPeriod),
                   )
                 }}
               </td>
@@ -375,20 +339,14 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                 Uttag reellt (sista året)
               </th>
               <th scope="row">{{ label }}</th>
-              <td :style="getCellStyle('percentile5', idx, 'withdrawalReal', true)">
-                {{ formatNumber(getValue(idx, 'percentile5', 'withdrawalReal')) }}
-              </td>
-              <td :style="getCellStyle('percentile25', idx, 'withdrawalReal', true)">
-                {{ formatNumber(getValue(idx, 'percentile25', 'withdrawalReal')) }}
+              <td :style="getCellStyle('percentile10', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'percentile10', 'withdrawalReal')) }}
               </td>
               <td :style="getCellStyle('median', idx, 'withdrawalReal', true)">
                 {{ formatNumber(getValue(idx, 'median', 'withdrawalReal')) }}
               </td>
-              <td :style="getCellStyle('percentile75', idx, 'withdrawalReal', true)">
-                {{ formatNumber(getValue(idx, 'percentile75', 'withdrawalReal')) }}
-              </td>
-              <td :style="getCellStyle('percentile95', idx, 'withdrawalReal', true)">
-                {{ formatNumber(getValue(idx, 'percentile95', 'withdrawalReal')) }}
+              <td :style="getCellStyle('percentile90', idx, 'withdrawalReal', true)">
+                {{ formatNumber(getValue(idx, 'percentile90', 'withdrawalReal')) }}
               </td>
               <td v-if="showDetailedStatistics">
                 {{ formatNumber(getValue(idx, 'mean', 'withdrawalReal')) }}
@@ -406,27 +364,17 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                 Genomsnittligt uttag reellt per år
               </th>
               <th scope="row">{{ label }}</th>
-              <td :style="getCellStyle('percentile5', idx, 'withdrawalRealSnapshot', true)">
+              <td :style="getCellStyle('percentile10', idx, 'withdrawalRealSnapshot', true)">
                 {{
-                  formatNumber(getValue(idx, 'percentile5', 'withdrawalRealSnapshot') / yearsLater)
-                }}
-              </td>
-              <td :style="getCellStyle('percentile25', idx, 'withdrawalRealSnapshot', true)">
-                {{
-                  formatNumber(getValue(idx, 'percentile25', 'withdrawalRealSnapshot') / yearsLater)
+                  formatNumber(getValue(idx, 'percentile10', 'withdrawalRealSnapshot') / yearsLater)
                 }}
               </td>
               <td :style="getCellStyle('median', idx, 'withdrawalRealSnapshot', true)">
                 {{ formatNumber(getValue(idx, 'median', 'withdrawalRealSnapshot') / yearsLater) }}
               </td>
-              <td :style="getCellStyle('percentile75', idx, 'withdrawalRealSnapshot', true)">
+              <td :style="getCellStyle('percentile90', idx, 'withdrawalRealSnapshot', true)">
                 {{
-                  formatNumber(getValue(idx, 'percentile75', 'withdrawalRealSnapshot') / yearsLater)
-                }}
-              </td>
-              <td :style="getCellStyle('percentile95', idx, 'withdrawalRealSnapshot', true)">
-                {{
-                  formatNumber(getValue(idx, 'percentile95', 'withdrawalRealSnapshot') / yearsLater)
+                  formatNumber(getValue(idx, 'percentile90', 'withdrawalRealSnapshot') / yearsLater)
                 }}
               </td>
               <td v-if="showDetailedStatistics">
@@ -445,20 +393,14 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                 Maximalt drawdown
               </th>
               <th scope="row">{{ label }}</th>
-              <td :style="getCellStyle('percentile5', idx, 'maxDrawdown', false)">
-                {{ formatPercent(getValue(idx, 'percentile5', 'maxDrawdown')) }}
-              </td>
-              <td :style="getCellStyle('percentile25', idx, 'maxDrawdown', false)">
-                {{ formatPercent(getValue(idx, 'percentile25', 'maxDrawdown')) }}
+              <td :style="getCellStyle('percentile10', idx, 'maxDrawdown', false)">
+                {{ formatPercent(getValue(idx, 'percentile10', 'maxDrawdown')) }}
               </td>
               <td :style="getCellStyle('median', idx, 'maxDrawdown', false)">
                 {{ formatPercent(getValue(idx, 'median', 'maxDrawdown')) }}
               </td>
-              <td :style="getCellStyle('percentile75', idx, 'maxDrawdown', false)">
-                {{ formatPercent(getValue(idx, 'percentile75', 'maxDrawdown')) }}
-              </td>
-              <td :style="getCellStyle('percentile95', idx, 'maxDrawdown', false)">
-                {{ formatPercent(getValue(idx, 'percentile95', 'maxDrawdown')) }}
+              <td :style="getCellStyle('percentile90', idx, 'maxDrawdown', false)">
+                {{ formatPercent(getValue(idx, 'percentile90', 'maxDrawdown')) }}
               </td>
               <td v-if="showDetailedStatistics">
                 {{ formatPercent(getValue(idx, 'mean', 'maxDrawdown')) }}
@@ -477,20 +419,14 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                   Längsta drawdown-period
                 </th>
                 <th scope="row">{{ label }}</th>
-                <td :style="getCellStyle('percentile5', idx, 'maxDrawdownPeriod', false)">
-                  {{ formatNumber(getValue(idx, 'percentile5', 'maxDrawdownPeriod')) }} år
-                </td>
-                <td :style="getCellStyle('percentile25', idx, 'maxDrawdownPeriod', false)">
-                  {{ formatNumber(getValue(idx, 'percentile25', 'maxDrawdownPeriod')) }} år
+                <td :style="getCellStyle('percentile10', idx, 'maxDrawdownPeriod', false)">
+                  {{ formatNumber(getValue(idx, 'percentile10', 'maxDrawdownPeriod')) }} år
                 </td>
                 <td :style="getCellStyle('median', idx, 'maxDrawdownPeriod', false)">
                   {{ formatNumber(getValue(idx, 'median', 'maxDrawdownPeriod')) }} år
                 </td>
-                <td :style="getCellStyle('percentile75', idx, 'maxDrawdownPeriod', false)">
-                  {{ formatNumber(getValue(idx, 'percentile75', 'maxDrawdownPeriod')) }} år
-                </td>
-                <td :style="getCellStyle('percentile95', idx, 'maxDrawdownPeriod', false)">
-                  {{ formatNumber(getValue(idx, 'percentile95', 'maxDrawdownPeriod')) }} år
+                <td :style="getCellStyle('percentile90', idx, 'maxDrawdownPeriod', false)">
+                  {{ formatNumber(getValue(idx, 'percentile90', 'maxDrawdownPeriod')) }} år
                 </td>
                 <td v-if="showDetailedStatistics">
                   {{ formatNumber(getValue(idx, 'mean', 'maxDrawdownPeriod')) }} år
@@ -508,20 +444,14 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                   Betald skatt
                 </th>
                 <th scope="row">{{ label }}</th>
-                <td :style="getCellStyle('percentile5', idx, 'tax', false)">
-                  {{ formatNumber(getValue(idx, 'percentile5', 'tax')) }}
-                </td>
-                <td :style="getCellStyle('percentile25', idx, 'tax', false)">
-                  {{ formatNumber(getValue(idx, 'percentile25', 'tax')) }}
+                <td :style="getCellStyle('percentile10', idx, 'tax', false)">
+                  {{ formatNumber(getValue(idx, 'percentile10', 'tax')) }}
                 </td>
                 <td :style="getCellStyle('median', idx, 'tax', false)">
                   {{ formatNumber(getValue(idx, 'median', 'tax')) }}
                 </td>
-                <td :style="getCellStyle('percentile75', idx, 'tax', false)">
-                  {{ formatNumber(getValue(idx, 'percentile75', 'tax')) }}
-                </td>
-                <td :style="getCellStyle('percentile95', idx, 'tax', false)">
-                  {{ formatNumber(getValue(idx, 'percentile95', 'tax')) }}
+                <td :style="getCellStyle('percentile90', idx, 'tax', false)">
+                  {{ formatNumber(getValue(idx, 'percentile90', 'tax')) }}
                 </td>
                 <td v-if="showDetailedStatistics">
                   {{ formatNumber(getValue(idx, 'mean', 'tax')) }}
@@ -539,20 +469,14 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                   Beskattningsgrad
                 </th>
                 <th scope="row">{{ label }}</th>
-                <td :style="getCellStyle('percentile5', idx, 'taxationDegree', false)">
-                  {{ formatPercent(getValue(idx, 'percentile5', 'taxationDegree')) }}
-                </td>
-                <td :style="getCellStyle('percentile25', idx, 'taxationDegree', false)">
-                  {{ formatPercent(getValue(idx, 'percentile25', 'taxationDegree')) }}
+                <td :style="getCellStyle('percentile10', idx, 'taxationDegree', false)">
+                  {{ formatPercent(getValue(idx, 'percentile10', 'taxationDegree')) }}
                 </td>
                 <td :style="getCellStyle('median', idx, 'taxationDegree', false)">
                   {{ formatPercent(getValue(idx, 'median', 'taxationDegree')) }}
                 </td>
-                <td :style="getCellStyle('percentile75', idx, 'taxationDegree', false)">
-                  {{ formatPercent(getValue(idx, 'percentile75', 'taxationDegree')) }}
-                </td>
-                <td :style="getCellStyle('percentile95', idx, 'taxationDegree', false)">
-                  {{ formatPercent(getValue(idx, 'percentile95', 'taxationDegree')) }}
+                <td :style="getCellStyle('percentile90', idx, 'taxationDegree', false)">
+                  {{ formatPercent(getValue(idx, 'percentile90', 'taxationDegree')) }}
                 </td>
                 <td v-if="showDetailedStatistics">
                   {{ formatPercent(getValue(idx, 'mean', 'taxationDegree')) }}
@@ -570,11 +494,9 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                   Avkastning
                 </th>
                 <th scope="row">{{ label }}</th>
-                <td>{{ formatPercent(getAverageDevelopment(idx, 'percentile5')) }}</td>
-                <td>{{ formatPercent(getAverageDevelopment(idx, 'percentile25')) }}</td>
+                <td>{{ formatPercent(getAverageDevelopment(idx, 'percentile10')) }}</td>
                 <td>{{ formatPercent(getAverageDevelopment(idx, 'median')) }}</td>
-                <td>{{ formatPercent(getAverageDevelopment(idx, 'percentile75')) }}</td>
-                <td>{{ formatPercent(getAverageDevelopment(idx, 'percentile95')) }}</td>
+                <td>{{ formatPercent(getAverageDevelopment(idx, 'percentile90')) }}</td>
                 <td v-if="showDetailedStatistics">
                   {{ formatPercent(getAverageDevelopment(idx, 'mean')) }}
                 </td>
@@ -591,11 +513,9 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
                   Inflationstakt
                 </th>
                 <th scope="row">{{ label }}</th>
-                <td>{{ formatPercent(getAverageInflation(idx, 'percentile5')) }}</td>
-                <td>{{ formatPercent(getAverageInflation(idx, 'percentile25')) }}</td>
+                <td>{{ formatPercent(getAverageInflation(idx, 'percentile10')) }}</td>
                 <td>{{ formatPercent(getAverageInflation(idx, 'median')) }}</td>
-                <td>{{ formatPercent(getAverageInflation(idx, 'percentile75')) }}</td>
-                <td>{{ formatPercent(getAverageInflation(idx, 'percentile95')) }}</td>
+                <td>{{ formatPercent(getAverageInflation(idx, 'percentile90')) }}</td>
                 <td v-if="showDetailedStatistics">
                   {{ formatPercent(getAverageInflation(idx, 'mean')) }}
                 </td>
@@ -607,14 +527,12 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
 
             <!-- ISK Tax Rate (only for scenarios that have it) -->
             <template v-for="(label, idx) in labels" :key="`iskTax-${idx}`">
-              <tr v-if="getAverageIskTaxRate(idx, 'percentile95') > 0" class="table-light">
+              <tr v-if="getAverageIskTaxRate(idx, 'percentile90') > 0" class="table-light">
                 <th scope="row">ISK-skattesats</th>
                 <th scope="row">{{ label }}</th>
-                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile5')) }}</td>
-                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile25')) }}</td>
+                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile10')) }}</td>
                 <td>{{ formatPercent(getAverageIskTaxRate(idx, 'median')) }}</td>
-                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile75')) }}</td>
-                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile95')) }}</td>
+                <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile90')) }}</td>
                 <td v-if="showDetailedStatistics">
                   {{ formatPercent(getAverageIskTaxRate(idx, 'mean')) }}
                 </td>

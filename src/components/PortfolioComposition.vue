@@ -118,42 +118,42 @@ const drawBoxPlotChart = (svgElement: SVGSVGElement, containerElement: HTMLDivEl
         .style('fill', '#666')
         .text(displayName)
 
-      // Whiskers (p5 to p95)
+      // Whiskers (p10 to p90)
       svg
         .append('line')
-        .attr('x1', xScale(stats.percentile5))
-        .attr('x2', xScale(stats.percentile95))
+        .attr('x1', xScale(stats.percentile10))
+        .attr('x2', xScale(stats.percentile90))
         .attr('y1', assetY + boxHeight / 2)
         .attr('y2', assetY + boxHeight / 2)
         .attr('stroke', scenarioColor)
         .attr('stroke-width', 1)
 
-      // Left whisker cap
+      // Left whisker cap (p10)
       svg
         .append('line')
-        .attr('x1', xScale(stats.percentile5))
-        .attr('x2', xScale(stats.percentile5))
+        .attr('x1', xScale(stats.percentile10))
+        .attr('x2', xScale(stats.percentile10))
         .attr('y1', assetY + boxHeight * 0.3)
         .attr('y2', assetY + boxHeight * 0.7)
         .attr('stroke', scenarioColor)
         .attr('stroke-width', 1)
 
-      // Right whisker cap
+      // Right whisker cap (p90)
       svg
         .append('line')
-        .attr('x1', xScale(stats.percentile95))
-        .attr('x2', xScale(stats.percentile95))
+        .attr('x1', xScale(stats.percentile90))
+        .attr('x2', xScale(stats.percentile90))
         .attr('y1', assetY + boxHeight * 0.3)
         .attr('y2', assetY + boxHeight * 0.7)
         .attr('stroke', scenarioColor)
         .attr('stroke-width', 1)
 
-      // Box (p25 to p75)
+      // Box around median (visual representation)
       svg
         .append('rect')
-        .attr('x', xScale(stats.percentile25))
+        .attr('x', xScale(stats.median) - 3)
         .attr('y', assetY + boxHeight * 0.15)
-        .attr('width', xScale(stats.percentile75) - xScale(stats.percentile25))
+        .attr('width', 6)
         .attr('height', boxHeight * 0.7)
         .attr('fill', scenarioColor)
         .attr('fill-opacity', 0.3)
@@ -211,8 +211,8 @@ const drawBoxPlotChart = (svgElement: SVGSVGElement, containerElement: HTMLDivEl
 
     <div v-else>
       <p class="text-muted mb-3">
-        Fördelningen av slutliga tillgångsvikter. Box visar 25:e-75:e percentilen, linjen visar
-        medianen, morrhår visar 5:e-95:e percentilen.
+        Fördelningen av slutliga tillgångsvikter. Linjen visar medianen, morrhår visar 10:e-90:e
+        percentilen.
       </p>
 
       <div class="mb-4">

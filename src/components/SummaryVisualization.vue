@@ -90,7 +90,7 @@ const buildSeriesFromStats = (
   ) => {
     // Get percentile values for the field
     const getPercentileValue = (
-      percentile: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+      percentile: 'percentile10' | 'median' | 'percentile90',
       field: string,
     ) => {
       switch (field) {
@@ -115,11 +115,9 @@ const buildSeriesFromStats = (
       }
     }
 
-    const p5 = getPercentileValue('percentile5', field)
-    const p25 = getPercentileValue('percentile25', field)
+    const p10 = getPercentileValue('percentile10', field)
     const median = getPercentileValue('median', field)
-    const p75 = getPercentileValue('percentile75', field)
-    const p95 = getPercentileValue('percentile95', field)
+    const p90 = getPercentileValue('percentile90', field)
 
     // Create density distribution (more points near median, fewer at tails)
     const points: Array<{ value: number; density: number }> = []
@@ -132,26 +130,16 @@ const buildSeriesFromStats = (
       let value: number
       let density: number
 
-      if (t < 0.25) {
-        // 0-25%: p5 to p25
-        const localT = t / 0.25
-        value = p5 + (p25 - p5) * localT
-        density = 0.5 + localT * 0.5 // Low to medium density
-      } else if (t < 0.5) {
-        // 25-50%: p25 to median
-        const localT = (t - 0.25) / 0.25
-        value = p25 + (median - p25) * localT
-        density = 1.0 + localT * 0.5 // Medium to high density
-      } else if (t < 0.75) {
-        // 50-75%: median to p75
-        const localT = (t - 0.5) / 0.25
-        value = median + (p75 - median) * localT
-        density = 1.5 - localT * 0.5 // High to medium density
+      if (t < 0.5) {
+        // 0-50%: p10 to median
+        const localT = t / 0.5
+        value = p10 + (median - p10) * localT
+        density = 0.5 + localT * 1.0 // Low to high density
       } else {
-        // 75-100%: p75 to p95
-        const localT = (t - 0.75) / 0.25
-        value = p75 + (p95 - p75) * localT
-        density = 1.0 - localT * 0.5 // Medium to low density
+        // 50-100%: median to p90
+        const localT = (t - 0.5) / 0.5
+        value = median + (p90 - median) * localT
+        density = 1.5 - localT * 1.0 // High to low density
       }
 
       points.push({ value, density })

@@ -36,7 +36,7 @@ const timeSeriesDistributions = computed<TimeSeriesDistribution[]>(() => {
     // Helper to get percentile value for a given field and period
     const getPercentileValue = (
       stats: SimulationStatistics<SimulationResult<number>>,
-      percentile: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+      percentile: 'percentile10' | 'median' | 'percentile90',
       field: 'liquidValue' | 'withdrawalReal',
       periodIndex: number,
     ) => {
@@ -52,11 +52,9 @@ const timeSeriesDistributions = computed<TimeSeriesDistribution[]>(() => {
       stats: SimulationStatistics<SimulationResult<number>>,
       field: 'liquidValue' | 'withdrawalReal',
     ) => {
-      const p5 = getPercentileValue(stats, 'percentile5', field, periodIndex)
-      const p25 = getPercentileValue(stats, 'percentile25', field, periodIndex)
+      const p10 = getPercentileValue(stats, 'percentile10', field, periodIndex)
       const median = getPercentileValue(stats, 'median', field, periodIndex)
-      const p75 = getPercentileValue(stats, 'percentile75', field, periodIndex)
-      const p95 = getPercentileValue(stats, 'percentile95', field, periodIndex)
+      const p90 = getPercentileValue(stats, 'percentile90', field, periodIndex)
 
       // Create density distribution (more points near median, fewer at tails)
       const points: Array<{ value: number; density: number }> = []
@@ -68,22 +66,14 @@ const timeSeriesDistributions = computed<TimeSeriesDistribution[]>(() => {
         let value: number
         let density: number
 
-        if (t < 0.25) {
-          const localT = t / 0.25
-          value = p5 + (p25 - p5) * localT
-          density = 0.5 + localT * 0.5
-        } else if (t < 0.5) {
-          const localT = (t - 0.25) / 0.25
-          value = p25 + (median - p25) * localT
-          density = 1.0 + localT * 0.5
-        } else if (t < 0.75) {
-          const localT = (t - 0.5) / 0.25
-          value = median + (p75 - median) * localT
-          density = 1.5 - localT * 0.5
+        if (t < 0.5) {
+          const localT = t / 0.5
+          value = p10 + (median - p10) * localT
+          density = 0.5 + localT * 1.0
         } else {
-          const localT = (t - 0.75) / 0.25
-          value = p75 + (p95 - p75) * localT
-          density = 1.0 - localT * 0.5
+          const localT = (t - 0.5) / 0.5
+          value = median + (p90 - median) * localT
+          density = 1.5 - localT * 1.0
         }
 
         points.push({ value, density })
@@ -118,17 +108,15 @@ const withdrawalDistributions = computed<TimeSeriesDistribution[]>(() => {
 
     const getPercentileValue = (
       stats: SimulationStatistics<SimulationResult<number>>,
-      percentile: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+      percentile: 'percentile10' | 'median' | 'percentile90',
     ) => {
       return stats[percentile].periodData.withdrawalReal[periodIndex] ?? 0
     }
 
     const createDistribution = (stats: SimulationStatistics<SimulationResult<number>>) => {
-      const p5 = getPercentileValue(stats, 'percentile5')
-      const p25 = getPercentileValue(stats, 'percentile25')
+      const p10 = getPercentileValue(stats, 'percentile10')
       const median = getPercentileValue(stats, 'median')
-      const p75 = getPercentileValue(stats, 'percentile75')
-      const p95 = getPercentileValue(stats, 'percentile95')
+      const p90 = getPercentileValue(stats, 'percentile90')
 
       const points: Array<{ value: number; density: number }> = []
       const numPoints = 30
@@ -138,22 +126,14 @@ const withdrawalDistributions = computed<TimeSeriesDistribution[]>(() => {
         let value: number
         let density: number
 
-        if (t < 0.25) {
-          const localT = t / 0.25
-          value = p5 + (p25 - p5) * localT
-          density = 0.5 + localT * 0.5
-        } else if (t < 0.5) {
-          const localT = (t - 0.25) / 0.25
-          value = p25 + (median - p25) * localT
-          density = 1.0 + localT * 0.5
-        } else if (t < 0.75) {
-          const localT = (t - 0.5) / 0.25
-          value = median + (p75 - median) * localT
-          density = 1.5 - localT * 0.5
+        if (t < 0.5) {
+          const localT = t / 0.5
+          value = p10 + (median - p10) * localT
+          density = 0.5 + localT * 1.0
         } else {
-          const localT = (t - 0.75) / 0.25
-          value = p75 + (p95 - p75) * localT
-          density = 1.0 - localT * 0.5
+          const localT = (t - 0.5) / 0.5
+          value = median + (p90 - median) * localT
+          density = 1.5 - localT * 1.0
         }
 
         points.push({ value, density })

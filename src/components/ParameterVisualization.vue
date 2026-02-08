@@ -19,7 +19,7 @@ interface DistributionPoint {
 // Create distribution data by generating density points from percentile statistics
 const generateDistribution = (
   getPercentileValue: (
-    percentile: 'percentile5' | 'percentile25' | 'median' | 'percentile75' | 'percentile95',
+    percentile: 'percentile10' | 'median' | 'percentile90',
     periodIndex: number,
   ) => number,
 ): DistributionPoint[] => {
@@ -32,11 +32,9 @@ const generateDistribution = (
   // For each period, generate distribution from percentiles
   for (let periodIndex = 0; periodIndex < numPeriods; periodIndex++) {
     const year = startYear.value + periodIndex
-    const p5 = getPercentileValue('percentile5', periodIndex)
-    const p25 = getPercentileValue('percentile25', periodIndex)
+    const p10 = getPercentileValue('percentile10', periodIndex)
     const median = getPercentileValue('median', periodIndex)
-    const p75 = getPercentileValue('percentile75', periodIndex)
-    const p95 = getPercentileValue('percentile95', periodIndex)
+    const p90 = getPercentileValue('percentile90', periodIndex)
 
     // Create density distribution (more points near median, fewer at tails)
     const points: Array<{ value: number; density: number }> = []
@@ -47,22 +45,14 @@ const generateDistribution = (
       let value: number
       let density: number
 
-      if (t < 0.25) {
-        const localT = t / 0.25
-        value = p5 + (p25 - p5) * localT
-        density = 0.5 + localT * 0.5
-      } else if (t < 0.5) {
-        const localT = (t - 0.25) / 0.25
-        value = p25 + (median - p25) * localT
-        density = 1.0 + localT * 0.5
-      } else if (t < 0.75) {
-        const localT = (t - 0.5) / 0.25
-        value = median + (p75 - median) * localT
-        density = 1.5 - localT * 0.5
+      if (t < 0.5) {
+        const localT = t / 0.5
+        value = p10 + (median - p10) * localT
+        density = 0.5 + localT * 1.0
       } else {
-        const localT = (t - 0.75) / 0.25
-        value = p75 + (p95 - p75) * localT
-        density = 1.0 - localT * 0.5
+        const localT = (t - 0.5) / 0.5
+        value = median + (p90 - median) * localT
+        density = 1.5 - localT * 1.0
       }
 
       points.push({ value, density })

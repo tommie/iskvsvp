@@ -447,11 +447,9 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
 function calculateStats(values: number[]): {
   mean: number
   stdDev: number
-  percentile5: number
-  percentile25: number
+  percentile10: number
   median: number
-  percentile75: number
-  percentile95: number
+  percentile90: number
 } {
   const sorted = values.slice().sort((a, b) => a - b)
   const n = sorted.length
@@ -460,11 +458,9 @@ function calculateStats(values: number[]): {
   return {
     mean,
     stdDev: Math.sqrt(sorted.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / n),
-    percentile5: sorted[Math.floor(n * 0.05)] ?? 0,
-    percentile25: sorted[Math.floor(n * 0.25)] ?? 0,
+    percentile10: sorted[Math.floor(n * 0.1)] ?? 0,
     median: sorted[Math.floor(n * 0.5)] ?? 0,
-    percentile75: sorted[Math.floor(n * 0.75)] ?? 0,
-    percentile95: sorted[Math.floor(n * 0.95)] ?? 0,
+    percentile90: sorted[Math.floor(n * 0.9)] ?? 0,
   }
 }
 
@@ -522,11 +518,9 @@ export function simulateAll(
     ): {
       mean: number
       stdDev: number
-      p5: number
-      p25: number
+      p10: number
       median: number
-      p75: number
-      p95: number
+      p90: number
     } => {
       const values = results
         .map((r) => {
@@ -536,18 +530,16 @@ export function simulateAll(
         .filter((v): v is number => v !== undefined && isFinite(v))
 
       if (values.length === 0) {
-        return { mean: 0, stdDev: 0, p5: 0, p25: 0, median: 0, p75: 0, p95: 0 }
+        return { mean: 0, stdDev: 0, p10: 0, median: 0, p90: 0 }
       }
 
       const stats = calculateStats(values)
       return {
         mean: stats.mean,
         stdDev: stats.stdDev,
-        p5: stats.percentile5,
-        p25: stats.percentile25,
+        p10: stats.percentile10,
         median: stats.median,
-        p75: stats.percentile75,
-        p95: stats.percentile95,
+        p90: stats.percentile90,
       }
     }
 
@@ -567,11 +559,9 @@ export function simulateAll(
     const statsResult: SimulationStatistics<SimulationResult<number>> = {
       mean: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
       stdDev: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
-      percentile5: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
-      percentile25: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
+      percentile10: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
       median: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
-      percentile75: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
-      percentile95: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
+      percentile90: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
     }
 
     // Calculate statistics for periodData fields (excluding assetReturnRates which is handled separately)
@@ -589,30 +579,24 @@ export function simulateAll(
     for (const field of periodDataFields) {
       const meanArr: number[] = []
       const stdDevArr: number[] = []
-      const p5Arr: number[] = []
-      const p25Arr: number[] = []
+      const p10Arr: number[] = []
       const medianArr: number[] = []
-      const p75Arr: number[] = []
-      const p95Arr: number[] = []
+      const p90Arr: number[] = []
 
       for (let period = 0; period < numPeriods; period++) {
         const stats = calcStatsForField('periodData', field, period)
         meanArr.push(stats.mean)
         stdDevArr.push(stats.stdDev)
-        p5Arr.push(stats.p5)
-        p25Arr.push(stats.p25)
+        p10Arr.push(stats.p10)
         medianArr.push(stats.median)
-        p75Arr.push(stats.p75)
-        p95Arr.push(stats.p95)
+        p90Arr.push(stats.p90)
       }
 
       statsResult.mean.periodData[field] = meanArr
       statsResult.stdDev.periodData[field] = stdDevArr
-      statsResult.percentile5.periodData[field] = p5Arr
-      statsResult.percentile25.periodData[field] = p25Arr
+      statsResult.percentile10.periodData[field] = p10Arr
       statsResult.median.periodData[field] = medianArr
-      statsResult.percentile75.periodData[field] = p75Arr
-      statsResult.percentile95.periodData[field] = p95Arr
+      statsResult.percentile90.periodData[field] = p90Arr
     }
 
     // Handle assetReturnRates separately (it's an array of arrays)
@@ -622,20 +606,16 @@ export function simulateAll(
     // Initialize assetReturnRates arrays
     statsResult.mean.periodData.assetReturnRates = []
     statsResult.stdDev.periodData.assetReturnRates = []
-    statsResult.percentile5.periodData.assetReturnRates = []
-    statsResult.percentile25.periodData.assetReturnRates = []
+    statsResult.percentile10.periodData.assetReturnRates = []
     statsResult.median.periodData.assetReturnRates = []
-    statsResult.percentile75.periodData.assetReturnRates = []
-    statsResult.percentile95.periodData.assetReturnRates = []
+    statsResult.percentile90.periodData.assetReturnRates = []
 
     for (let period = 0; period < numPeriods; period++) {
       const meanAssetReturns: number[] = []
       const stdDevAssetReturns: number[] = []
-      const p5AssetReturns: number[] = []
-      const p25AssetReturns: number[] = []
+      const p10AssetReturns: number[] = []
       const medianAssetReturns: number[] = []
-      const p75AssetReturns: number[] = []
-      const p95AssetReturns: number[] = []
+      const p90AssetReturns: number[] = []
 
       for (let assetIdx = 0; assetIdx < numAssets; assetIdx++) {
         const assetValues = results
@@ -646,29 +626,23 @@ export function simulateAll(
           const stats = calculateStats(assetValues)
           meanAssetReturns.push(stats.mean)
           stdDevAssetReturns.push(stats.stdDev)
-          p5AssetReturns.push(stats.percentile5)
-          p25AssetReturns.push(stats.percentile25)
+          p10AssetReturns.push(stats.percentile10)
           medianAssetReturns.push(stats.median)
-          p75AssetReturns.push(stats.percentile75)
-          p95AssetReturns.push(stats.percentile95)
+          p90AssetReturns.push(stats.percentile90)
         } else {
           meanAssetReturns.push(0)
           stdDevAssetReturns.push(0)
-          p5AssetReturns.push(0)
-          p25AssetReturns.push(0)
+          p10AssetReturns.push(0)
           medianAssetReturns.push(0)
-          p75AssetReturns.push(0)
-          p95AssetReturns.push(0)
+          p90AssetReturns.push(0)
         }
       }
 
       statsResult.mean.periodData.assetReturnRates.push(meanAssetReturns)
       statsResult.stdDev.periodData.assetReturnRates.push(stdDevAssetReturns)
-      statsResult.percentile5.periodData.assetReturnRates.push(p5AssetReturns)
-      statsResult.percentile25.periodData.assetReturnRates.push(p25AssetReturns)
+      statsResult.percentile10.periodData.assetReturnRates.push(p10AssetReturns)
       statsResult.median.periodData.assetReturnRates.push(medianAssetReturns)
-      statsResult.percentile75.periodData.assetReturnRates.push(p75AssetReturns)
-      statsResult.percentile95.periodData.assetReturnRates.push(p95AssetReturns)
+      statsResult.percentile90.periodData.assetReturnRates.push(p90AssetReturns)
     }
 
     // Calculate statistics for snapshot fields (tax and taxationDegree from SimulationPeriodData)
@@ -678,30 +652,24 @@ export function simulateAll(
     for (const field of snapshotFields) {
       const meanArr: number[] = []
       const stdDevArr: number[] = []
-      const p5Arr: number[] = []
-      const p25Arr: number[] = []
+      const p10Arr: number[] = []
       const medianArr: number[] = []
-      const p75Arr: number[] = []
-      const p95Arr: number[] = []
+      const p90Arr: number[] = []
 
       for (let period = 0; period < numPeriods; period++) {
         const stats = calcStatsForField('snapshots', field, period)
         meanArr.push(stats.mean)
         stdDevArr.push(stats.stdDev)
-        p5Arr.push(stats.p5)
-        p25Arr.push(stats.p25)
+        p10Arr.push(stats.p10)
         medianArr.push(stats.median)
-        p75Arr.push(stats.p75)
-        p95Arr.push(stats.p95)
+        p90Arr.push(stats.p90)
       }
 
       statsResult.mean.snapshots[field] = meanArr
       statsResult.stdDev.snapshots[field] = stdDevArr
-      statsResult.percentile5.snapshots[field] = p5Arr
-      statsResult.percentile25.snapshots[field] = p25Arr
+      statsResult.percentile10.snapshots[field] = p10Arr
       statsResult.median.snapshots[field] = medianArr
-      statsResult.percentile75.snapshots[field] = p75Arr
-      statsResult.percentile95.snapshots[field] = p95Arr
+      statsResult.percentile90.snapshots[field] = p90Arr
     }
 
     // Snapshot-only fields (capital, liquidValue, totalValue, maxDrawdown, maxDrawdownPeriod)
@@ -716,11 +684,9 @@ export function simulateAll(
     for (const field of snapshotOnlyFields) {
       statsResult.mean.snapshots[field] = []
       statsResult.stdDev.snapshots[field] = []
-      statsResult.percentile5.snapshots[field] = []
-      statsResult.percentile25.snapshots[field] = []
+      statsResult.percentile10.snapshots[field] = []
       statsResult.median.snapshots[field] = []
-      statsResult.percentile75.snapshots[field] = []
-      statsResult.percentile95.snapshots[field] = []
+      statsResult.percentile90.snapshots[field] = []
 
       for (let period = 0; period < numPeriods; period++) {
         const values = results
@@ -731,19 +697,15 @@ export function simulateAll(
           const stats = calculateStats(values)
           statsResult.mean.snapshots[field].push(stats.mean)
           statsResult.stdDev.snapshots[field].push(stats.stdDev)
-          statsResult.percentile5.snapshots[field].push(stats.percentile5)
-          statsResult.percentile25.snapshots[field].push(stats.percentile25)
+          statsResult.percentile10.snapshots[field].push(stats.percentile10)
           statsResult.median.snapshots[field].push(stats.median)
-          statsResult.percentile75.snapshots[field].push(stats.percentile75)
-          statsResult.percentile95.snapshots[field].push(stats.percentile95)
+          statsResult.percentile90.snapshots[field].push(stats.percentile90)
         } else {
           statsResult.mean.snapshots[field].push(0)
           statsResult.stdDev.snapshots[field].push(0)
-          statsResult.percentile5.snapshots[field].push(0)
-          statsResult.percentile25.snapshots[field].push(0)
+          statsResult.percentile10.snapshots[field].push(0)
           statsResult.median.snapshots[field].push(0)
-          statsResult.percentile75.snapshots[field].push(0)
-          statsResult.percentile95.snapshots[field].push(0)
+          statsResult.percentile90.snapshots[field].push(0)
         }
       }
     }
@@ -766,44 +728,34 @@ export function simulateAll(
     for (const field of mirroredFields) {
       const meanArr: number[] = []
       const stdDevArr: number[] = []
-      const p5Arr: number[] = []
-      const p25Arr: number[] = []
+      const p10Arr: number[] = []
       const medianArr: number[] = []
-      const p75Arr: number[] = []
-      const p95Arr: number[] = []
+      const p90Arr: number[] = []
 
       for (let period = 0; period < numPeriods; period++) {
         const stats = calcStatsForField('snapshots', field, period)
         meanArr.push(stats.mean)
         stdDevArr.push(stats.stdDev)
-        p5Arr.push(stats.p5)
-        p25Arr.push(stats.p25)
+        p10Arr.push(stats.p10)
         medianArr.push(stats.median)
-        p75Arr.push(stats.p75)
-        p95Arr.push(stats.p95)
+        p90Arr.push(stats.p90)
       }
 
       statsResult.mean.snapshots[field] = meanArr
       statsResult.stdDev.snapshots[field] = stdDevArr
-      statsResult.percentile5.snapshots[field] = p5Arr
-      statsResult.percentile25.snapshots[field] = p25Arr
+      statsResult.percentile10.snapshots[field] = p10Arr
       statsResult.median.snapshots[field] = medianArr
-      statsResult.percentile75.snapshots[field] = p75Arr
-      statsResult.percentile95.snapshots[field] = p95Arr
+      statsResult.percentile90.snapshots[field] = p90Arr
     }
 
     // Handle assetReturnRates for snapshots (same as periodData since they're identical)
     statsResult.mean.snapshots.assetReturnRates = statsResult.mean.periodData.assetReturnRates
     statsResult.stdDev.snapshots.assetReturnRates = statsResult.stdDev.periodData.assetReturnRates
-    statsResult.percentile5.snapshots.assetReturnRates =
-      statsResult.percentile5.periodData.assetReturnRates
-    statsResult.percentile25.snapshots.assetReturnRates =
-      statsResult.percentile25.periodData.assetReturnRates
+    statsResult.percentile10.snapshots.assetReturnRates =
+      statsResult.percentile10.periodData.assetReturnRates
     statsResult.median.snapshots.assetReturnRates = statsResult.median.periodData.assetReturnRates
-    statsResult.percentile75.snapshots.assetReturnRates =
-      statsResult.percentile75.periodData.assetReturnRates
-    statsResult.percentile95.snapshots.assetReturnRates =
-      statsResult.percentile95.periodData.assetReturnRates
+    statsResult.percentile90.snapshots.assetReturnRates =
+      statsResult.percentile90.periodData.assetReturnRates
 
     statistics.push(statsResult)
 
@@ -843,21 +795,17 @@ export function simulateAll(
         weightStats.push({
           mean: stats.mean,
           stdDev: stats.stdDev,
-          percentile5: stats.percentile5,
-          percentile25: stats.percentile25,
+          percentile10: stats.percentile10,
           median: stats.median,
-          percentile75: stats.percentile75,
-          percentile95: stats.percentile95,
+          percentile90: stats.percentile90,
         })
       } else {
         weightStats.push({
           mean: 0,
           stdDev: 0,
-          percentile5: 0,
-          percentile25: 0,
+          percentile10: 0,
           median: 0,
-          percentile75: 0,
-          percentile95: 0,
+          percentile90: 0,
         })
       }
     }
