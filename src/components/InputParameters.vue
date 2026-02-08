@@ -300,6 +300,35 @@ const expectedPortfolioReturn = computed(() => {
 })
 
 /**
+ * Calculate portfolio volatility accounting for correlations.
+ * σ_p = sqrt(Σᵢ Σⱼ wᵢ wⱼ σᵢ σⱼ ρᵢⱼ)
+ */
+const portfolioVolatility = computed(() => {
+  const n = assets.value.length
+  let variance = 0
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      const wi = assets.value[i]!.weight
+      const wj = assets.value[j]!.weight
+      const si = assets.value[i]!.volatility
+      const sj = assets.value[j]!.volatility
+      const rho = assetCorrelationMatrix.value[i]?.[j] ?? (i === j ? 1 : 0.5)
+      variance += wi * wj * si * sj * rho
+    }
+  }
+  return Math.sqrt(Math.max(0, variance))
+})
+
+/**
+ * Calculate portfolio Sharpe ratio using inflation as the risk-free rate.
+ */
+const portfolioSharpe = computed(() => {
+  const vol = portfolioVolatility.value
+  if (vol === 0) return 0
+  return (expectedPortfolioReturn.value - inflationRate.value) / vol
+})
+
+/**
  * Update a correlation matrix cell
  */
 const updateCorrelation = (i: number, j: number, value: string) => {
@@ -674,6 +703,7 @@ const expectedTotalWithdrawalRate = computed(() => {
 
             <div v-if="assets.length > 1" class="mt-3">
               <label class="form-label">Korrelationsmatris</label>
+              <small class="form-text text-muted d-block mb-1"> Korrelationer mellan -1 och 1. </small>
               <div class="table-responsive">
                 <table class="table table-sm table-striped correlation-matrix-table">
                   <tbody>
@@ -709,7 +739,18 @@ const expectedTotalWithdrawalRate = computed(() => {
                   </tbody>
                 </table>
               </div>
-              <small class="form-text text-muted"> Korrelationer mellan -1 och 1. </small>
+              <div class="portfolio-stats mt-2">
+                <label class="form-label d-block">Portföljstatistik</label>
+                <span>
+                  <strong>E[R]:</strong> {{ (expectedPortfolioReturn * 100).toFixed(1) }}%
+                </span>
+                <span class="ms-3">
+                  <strong>σ:</strong> {{ (portfolioVolatility * 100).toFixed(1) }}%
+                </span>
+                <span class="ms-3">
+                  <strong>Sharpe:</strong> {{ portfolioSharpe.toFixed(2) }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -1019,6 +1060,11 @@ const expectedTotalWithdrawalRate = computed(() => {
 .correlation-matrix-table .diagonal-cell {
   font-weight: 500;
   padding: 0.5rem 0.25rem;
+}
+
+.portfolio-stats {
+  font-size: 0.875rem;
+  color: #495057;
 }
 
 /* Scenario table styling */
