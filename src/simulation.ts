@@ -8,9 +8,10 @@ import type {
   FinalAssetWeights,
 } from './types'
 
-// Extended result that includes final asset weights
+// Extended result that includes final asset weights and cumulative inflation
 export interface SingleSimulationResult extends SimulationResult<number> {
   finalAssetWeights: number[]
+  finalCumulativeInflation: number
 }
 
 const ISK_TAX_RATE_MIN = 0.0125
@@ -438,6 +439,7 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
       inflationRate: periodInflationRates, // Same as period data
     },
     finalAssetWeights: finalWeights,
+    finalCumulativeInflation: cumulativeInflation,
   }
 }
 
@@ -499,10 +501,11 @@ export function simulateAll(
     onProgress(100)
   }
 
-  // Calculate statistics, median samples, and final asset weights for each parameter set
+  // Calculate statistics, median samples, final asset weights, and outcome probabilities for each parameter set
   const statistics: SimulationStatistics<SimulationResult<number>>[] = []
   const medianSamples: SimulationResult<number>[] = []
   const finalAssetWeightsStats: FinalAssetWeights[] = []
+  const outcomeProbabilities: { successRate: number; breakEvenRate: number }[] = []
 
   for (let setIdx = 0; setIdx < allResults.length; setIdx++) {
     const results = allResults[setIdx]!
@@ -814,7 +817,39 @@ export function simulateAll(
       assetNames,
       weights: weightStats,
     })
+
+    // Calculate outcome probabilities
+    const initialCapital = params.initialCapital
+    let successCount = 0
+    let breakEvenCount = 0
+
+    for (const result of results) {
+      const finalLiquidValue =
+        result.snapshots.liquidValue[result.snapshots.liquidValue.length - 1] ?? 0
+      const inflationAdjustedCapital = initialCapital * result.finalCumulativeInflation
+
+      // Success: ended with positive balance
+      if (finalLiquidValue > 0) {
+        successCount++
+      }
+
+      // Break-even: preserved at least initial capital in real terms
+      if (finalLiquidValue >= inflationAdjustedCapital) {
+        breakEvenCount++
+      }
+    }
+
+    outcomeProbabilities.push({
+      successRate: successCount / results.length,
+      breakEvenRate: breakEvenCount / results.length,
+    })
   }
 
-  return { labels, statistics, medianSamples, finalAssetWeights: finalAssetWeightsStats }
+  return {
+    labels,
+    statistics,
+    medianSamples,
+    finalAssetWeights: finalAssetWeightsStats,
+    outcomeProbabilities,
+  }
 }

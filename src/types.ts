@@ -84,6 +84,14 @@ export interface FinalAssetWeights {
   weights: SimulationStatistics<number>[]
 }
 
+// Outcome probabilities for a scenario
+export interface OutcomeProbabilities {
+  // Probability of ending with positive balance (not running out of money)
+  successRate: number
+  // Probability of ending with at least initial capital (inflation-adjusted)
+  breakEvenRate: number
+}
+
 export interface SimulationResults {
   // Labels for each scenario (e.g., ["ISK", "VP"])
   labels: string[]
@@ -96,6 +104,9 @@ export interface SimulationResults {
 
   // Final portfolio composition for each scenario (only meaningful when rebalancing is 'never')
   finalAssetWeights: FinalAssetWeights[]
+
+  // Outcome probabilities for each scenario
+  outcomeProbabilities: OutcomeProbabilities[]
 }
 
 // Asset property parameter format: "assets.expectedReturn.0", "assets.volatility.1", etc.

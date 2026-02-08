@@ -14,6 +14,7 @@ const {
 
 const labels = computed(() => simulationResults.value?.labels ?? [])
 const statistics = computed(() => simulationResults.value?.statistics ?? [])
+const outcomeProbabilities = computed(() => simulationResults.value?.outcomeProbabilities ?? [])
 const finalPeriod = computed(() => {
   if (statistics.value.length === 0) return 0
   return statistics.value[0]!.median.snapshots.liquidValue.length - 1
@@ -232,6 +233,32 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
         Celler med bästa värdet för varje mått och percentil är markerade med färg.</span
       >
     </p>
+
+    <!-- Outcome Probabilities Table -->
+    <div class="table-responsive mb-4">
+      <table class="table table-bordered table-hover">
+        <thead class="table-light">
+          <tr>
+            <th>Sannolikhet</th>
+            <th v-for="label in labels" :key="label">{{ label }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Mer än noll</th>
+            <td v-for="(_, idx) in labels" :key="idx">
+              {{ formatPercent(outcomeProbabilities[idx]?.successRate ?? 0) }}
+            </td>
+          </tr>
+          <tr>
+            <th scope="row">Går bättre än jämnt upp (reellt)</th>
+            <td v-for="(_, idx) in labels" :key="idx">
+              {{ formatPercent(outcomeProbabilities[idx]?.breakEvenRate ?? 0) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
     <div class="table-responsive">
       <table class="table table-bordered table-hover">
         <thead class="table-light">
