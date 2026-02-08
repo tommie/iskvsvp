@@ -27,6 +27,7 @@ const {
   startYear,
   yearsLater,
   simulationCount,
+  returnAdjustment,
   isRunning,
   progress,
   isAddToTableMode,
@@ -703,7 +704,9 @@ const expectedTotalWithdrawalRate = computed(() => {
 
             <div v-if="assets.length > 1" class="mt-3">
               <label class="form-label">Korrelationsmatris</label>
-              <small class="form-text text-muted d-block mb-1"> Korrelationer mellan -1 och 1. </small>
+              <small class="form-text text-muted d-block mb-1">
+                Korrelationer mellan -1 och 1.
+              </small>
               <div class="table-responsive">
                 <table class="table table-sm table-striped correlation-matrix-table">
                   <tbody>
@@ -751,6 +754,24 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <strong>Sharpe:</strong> {{ portfolioSharpe.toFixed(2) }}
                 </span>
               </div>
+            </div>
+
+            <div class="mt-3">
+              <label class="form-label">Avkastningsjustering</label>
+              <div class="input-group">
+                <input
+                  type="number"
+                  step="0.1"
+                  :class="getInputClass('returnAdjustment')"
+                  v-model.number="returnAdjustment"
+                  :disabled="isFieldDisabled('returnAdjustment')"
+                  @click="handleParameterClick('returnAdjustment', $event)"
+                />
+                <span class="input-group-text">σ</span>
+              </div>
+              <small class="form-text text-muted">
+                Justerar varje fonds avkastning med detta antal standardavvikelser.
+              </small>
             </div>
           </div>
         </div>

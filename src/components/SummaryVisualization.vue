@@ -198,15 +198,14 @@ const drawChart = (
   const width = containerWidth - margin.left - margin.right
 
   // Get x extent across all series, including reference value and firstYearMedian if provided
-  const allValues = series
-    .flatMap((s) => {
-      const values = s.values.filter((v) => isFinite(v) && (useLinearScale ? v >= 0 : v > 0))
-      // Include firstYearMedian in extent calculation
-      if (s.firstYearMedian !== undefined && isFinite(s.firstYearMedian) && s.firstYearMedian > 0) {
-        values.push(s.firstYearMedian)
-      }
-      return values
-    })
+  const allValues = series.flatMap((s) => {
+    const values = s.values.filter((v) => isFinite(v) && (useLinearScale ? v >= 0 : v > 0))
+    // Include firstYearMedian in extent calculation
+    if (s.firstYearMedian !== undefined && isFinite(s.firstYearMedian) && s.firstYearMedian > 0) {
+      values.push(s.firstYearMedian)
+    }
+    return values
+  })
 
   // Include reference value in extent calculation
   if (referenceValue !== undefined && isFinite(referenceValue) && referenceValue > 0) {

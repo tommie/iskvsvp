@@ -65,6 +65,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const startYear = ref(45)
   const yearsLater = ref(36)
   const simulationCount = ref(1000)
+  const returnAdjustment = ref(0)
   const seed = ref<string | undefined>(undefined)
 
   // Scenario table state
@@ -113,6 +114,105 @@ export const useCalculatorStore = defineStore('calculator', () => {
   function disableScenarioTable() {
     scenarioTable.value = null
     isAddToTableMode.value = false
+  }
+
+  function generateSensitivityScenarios() {
+    type ParamVariation = {
+      key: ScenarioParameter
+      upLabel: string
+      downLabel: string
+      upValue: number
+      downValue: number
+    }
+
+    const variations: ParamVariation[] = []
+
+    // Return adjustment: ±1 sigma
+    variations.push({
+      key: 'returnAdjustment',
+      upLabel: 'Avkastning +1σ',
+      downLabel: 'Avkastning -1σ',
+      upValue: 1,
+      downValue: -1,
+    })
+
+    // Inflation: ±1 stddev (only if stddev > 0)
+    if (inflationStdDev.value > 0) {
+      variations.push({
+        key: 'inflationRate',
+        upLabel: 'Inflation +1σ',
+        downLabel: 'Inflation -1σ',
+        upValue: inflationRate.value + inflationStdDev.value,
+        downValue: inflationRate.value - inflationStdDev.value,
+      })
+    }
+
+    // Balance withdrawal rate: ×0.5/×2 (only if > 0)
+    if (balanceWithdrawalRate.value > 0) {
+      variations.push({
+        key: 'balanceWithdrawalRate',
+        upLabel: 'Värdeuttag ×2',
+        downLabel: 'Värdeuttag ×½',
+        upValue: balanceWithdrawalRate.value * 2,
+        downValue: balanceWithdrawalRate.value * 0.5,
+      })
+    }
+
+    // Profit withdrawal rate: ×0.5/×2 (only if > 0)
+    if (profitWithdrawalRate.value > 0) {
+      variations.push({
+        key: 'profitWithdrawalRate',
+        upLabel: 'Vinstuttag ×2',
+        downLabel: 'Vinstuttag ×½',
+        upValue: profitWithdrawalRate.value * 2,
+        downValue: profitWithdrawalRate.value * 0.5,
+      })
+    }
+
+    // Capital gains tax: ×0.5/×2
+    variations.push({
+      key: 'capitalGainsTaxRate',
+      upLabel: 'Vinstskatt ×2',
+      downLabel: 'Vinstskatt ×½',
+      upValue: capitalGainsTax.value * 2,
+      downValue: capitalGainsTax.value * 0.5,
+    })
+
+    // NOTE: yearsLater is excluded because the display layer assumes all
+    // scenarios have the same number of periods.
+
+    // Build scenarios: base + up/down for each variation
+    const baseScenario = {
+      label: 'Bas',
+      parameters: {} as Record<string, ScenarioValue>,
+    }
+
+    // Add all varied parameter keys to base with their base values
+    for (const v of variations) {
+      baseScenario.parameters[v.key] = getCurrentParameterValue(v.key)
+    }
+
+    const scenarios = [baseScenario]
+
+    for (const v of variations) {
+      // Down scenario
+      const downParams: Record<string, ScenarioValue> = {}
+      for (const v2 of variations) {
+        downParams[v2.key] = getCurrentParameterValue(v2.key)
+      }
+      downParams[v.key] = v.downValue
+      scenarios.push({ label: v.downLabel, parameters: downParams })
+
+      // Up scenario
+      const upParams: Record<string, ScenarioValue> = {}
+      for (const v2 of variations) {
+        upParams[v2.key] = getCurrentParameterValue(v2.key)
+      }
+      upParams[v.key] = v.upValue
+      scenarios.push({ label: v.upLabel, parameters: upParams })
+    }
+
+    scenarioTable.value = { scenarios } as ScenarioTable
   }
 
   function toggleAddToTableMode() {
@@ -190,11 +290,14 @@ export const useCalculatorStore = defineStore('calculator', () => {
     scenarioTable.value.scenarios[index]!.label = label
   }
 
-  function updateScenarioValue(scenarioIndex: number, paramKey: ScenarioParameter, value: ScenarioValue) {
+  function updateScenarioValue(
+    scenarioIndex: number,
+    paramKey: ScenarioParameter,
+    value: ScenarioValue,
+  ) {
     if (!scenarioTable.value) return
-    if (scenarioIndex < 0 || scenarioIndex >= scenarioTable.value.scenarios.length) return
-
-    // Type assertion needed: dynamic property assignment
+    if (scenarioIndex < 0 || scenarioIndex >= scenarioTable.value.scenarios.length)
+      return // Type assertion needed: dynamic property assignment
     ;(scenarioTable.value.scenarios[scenarioIndex]!.parameters as Record<string, ScenarioValue>)[
       paramKey
     ] = value
@@ -232,6 +335,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
       iskTaxRateStdDev: iskTaxRateStdDev.value,
       inflationRate: inflationRate.value,
       inflationStdDev: inflationStdDev.value,
+      returnAdjustment: returnAdjustment.value,
     }
     return paramMap[paramKey]
   }
@@ -258,6 +362,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     capitalGainsTaxRate: capitalGainsTax.value,
     inflationRate: inflationRate.value,
     inflationStdDev: inflationStdDev.value,
+    returnAdjustment: returnAdjustment.value,
   })
 
   /**
@@ -423,6 +528,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     inflationStdDev.value = params.inflationStdDev
     vpFundTaxRate.value = params.vpWealthTaxRate
     capitalGainsTax.value = params.capitalGainsTaxRate
+    returnAdjustment.value = params.returnAdjustment
     seed.value = params.seed
 
     // ISK-specific parameters (may be undefined for VP)
@@ -492,6 +598,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
               if (urlParams.iskTaxRate !== undefined) iskTaxRate.value = urlParams.iskTaxRate
               if (urlParams.iskTaxRateStdDev !== undefined)
                 iskTaxRateStdDev.value = urlParams.iskTaxRateStdDev
+              if (urlParams.returnAdjustment !== undefined)
+                returnAdjustment.value = urlParams.returnAdjustment
               if (urlParams.seed !== undefined) seed.value = urlParams.seed
             }
 
@@ -531,6 +639,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         startYear,
         yearsLater,
         simulationCount,
+        returnAdjustment,
         seed,
       ],
       () => {
@@ -585,6 +694,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     startYear,
     yearsLater,
     simulationCount,
+    returnAdjustment,
     seed,
 
     // State
@@ -615,5 +725,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     removeScenario,
     updateScenarioLabel,
     updateScenarioValue,
+    generateSensitivityScenarios,
   }
 })

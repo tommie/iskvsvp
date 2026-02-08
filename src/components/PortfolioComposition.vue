@@ -205,8 +205,8 @@ const drawBoxPlotChart = (svgElement: SVGSVGElement, containerElement: HTMLDivEl
     </div>
 
     <div v-else-if="!hasMultipleAssets" class="alert alert-info">
-      <strong>Notera:</strong> Portföljsammansättningen visas endast när det finns flera tillgångar i
-      portföljen.
+      <strong>Notera:</strong> Portföljsammansättningen visas endast när det finns flera tillgångar
+      i portföljen.
     </div>
 
     <div v-else>

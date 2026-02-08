@@ -46,6 +46,7 @@ const parameterLabels: Record<string, string> = {
   iskTaxRateStdDev: 'ISK skattesats stddev',
   inflationRate: 'Inflation (%)',
   inflationStdDev: 'Inflation stddev',
+  returnAdjustment: 'Avkastningsjust. (σ)',
 }
 
 function getParameterLabel(param: string, truncate: boolean = false): string {

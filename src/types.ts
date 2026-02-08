@@ -36,6 +36,8 @@ export interface InputParameters {
 
   inflationRate: number
   inflationStdDev: number
+
+  returnAdjustment: number // Shift each asset's return by this many sigmas (default 0)
 }
 
 export interface SimulationPeriodData<T = number> {

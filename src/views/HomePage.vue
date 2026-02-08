@@ -51,6 +51,14 @@ watch(simulationResults, (newResults) => {
         >
           Aktivera scenariotabell
         </button>
+        <button
+          v-if="!store.scenarioTable"
+          type="button"
+          class="btn btn-outline-secondary ms-2"
+          @click="store.generateSensitivityScenarios()"
+        >
+          Känslighetsanalys
+        </button>
       </template>
     </InputParameters>
 

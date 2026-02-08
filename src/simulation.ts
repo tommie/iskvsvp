@@ -143,7 +143,7 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
     // Generate stochastic parameters
     const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev, rng)
     const assetReturns = sampleCorrelatedNormals(
-      params.assets.map((a) => a.expectedReturn),
+      params.assets.map((a) => a.expectedReturn + params.returnAdjustment * a.volatility),
       params.assets.map((a) => a.volatility),
       params.assetCorrelationMatrix,
       rng,
@@ -549,16 +549,16 @@ export function simulateAll(
     // Calculate statistics for each field and period
     // Type assertion needed: building objects incrementally
     const emptyPeriodData = () =>
-      ({} as SimulationPeriodData<number[]> & { assetReturnRates: number[][] })
+      ({}) as SimulationPeriodData<number[]> & { assetReturnRates: number[][] }
     const emptySnapshots = () =>
-      ({} as SimulationPeriodData<number[]> & {
+      ({}) as SimulationPeriodData<number[]> & {
         capital: number[]
         liquidValue: number[]
         totalValue: number[]
         maxDrawdown: number[]
         maxDrawdownPeriod: number[]
         assetReturnRates: number[][]
-      })
+      }
     const statsResult: SimulationStatistics<SimulationResult<number>> = {
       mean: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },
       stdDev: { periodData: emptyPeriodData(), snapshots: emptySnapshots() },

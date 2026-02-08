@@ -31,6 +31,7 @@ const PARAM_KEYS: Record<string, string> = {
   iskTaxRateStdDev: 'its',
   inflationRate: 'ir',
   inflationStdDev: 'is',
+  returnAdjustment: 'ra',
 }
 
 // Get URL key for a parameter (asset properties are not directly encoded in URL)
@@ -517,6 +518,8 @@ export function encodeParamsToUrl(
   query.ibw = params.inflationBasedWithdrawal.toString()
   query.cgt = params.capitalGainsTaxRate.toString()
 
+  query.ra = params.returnAdjustment.toString()
+
   // ISK-specific params (optional)
   if (params.iskTaxRate !== undefined) {
     query.itr = params.iskTaxRate.toString()
@@ -642,6 +645,9 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   const cgt = parseNum('cgt')
   const itr = parseNum('itr')
   const its = parseNum('its')
+
+  const ra = parseNum('ra')
+  if (ra !== undefined) params.returnAdjustment = ra
 
   if (bwr !== undefined) params.balanceWithdrawalRate = bwr
   if (pwr !== undefined) params.profitWithdrawalRate = pwr

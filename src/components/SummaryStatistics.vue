@@ -33,12 +33,7 @@ const COLORS = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754'
 // Helper to get a value from statistics for a specific scenario and percentile
 const getValue = (
   scenarioIdx: number,
-  statKey:
-    | 'mean'
-    | 'stdDev'
-    | 'percentile10'
-    | 'median'
-    | 'percentile90',
+  statKey: 'mean' | 'stdDev' | 'percentile10' | 'median' | 'percentile90',
   field:
     | 'liquidValue'
     | 'totalValue'
@@ -85,12 +80,7 @@ const getValue = (
 // Average values across periods
 const getAverageInflation = (
   scenarioIdx: number,
-  statKey:
-    | 'mean'
-    | 'stdDev'
-    | 'percentile10'
-    | 'median'
-    | 'percentile90',
+  statKey: 'mean' | 'stdDev' | 'percentile10' | 'median' | 'percentile90',
 ): number => {
   if (!statistics.value[scenarioIdx]) return 0
   const rates = statistics.value[scenarioIdx]![statKey].periodData.inflationRate
@@ -99,12 +89,7 @@ const getAverageInflation = (
 
 const getAverageDevelopment = (
   scenarioIdx: number,
-  statKey:
-    | 'mean'
-    | 'stdDev'
-    | 'percentile10'
-    | 'median'
-    | 'percentile90',
+  statKey: 'mean' | 'stdDev' | 'percentile10' | 'median' | 'percentile90',
 ): number => {
   if (!statistics.value[scenarioIdx]) return 0
   const assetReturns = statistics.value[scenarioIdx]![statKey].periodData.assetReturnRates
@@ -119,12 +104,7 @@ const getAverageDevelopment = (
 
 const getAverageIskTaxRate = (
   scenarioIdx: number,
-  statKey:
-    | 'mean'
-    | 'stdDev'
-    | 'percentile10'
-    | 'median'
-    | 'percentile90',
+  statKey: 'mean' | 'stdDev' | 'percentile10' | 'median' | 'percentile90',
 ): number => {
   if (!statistics.value[scenarioIdx]) return 0
   const rates = statistics.value[scenarioIdx]![statKey].periodData.iskTaxRate
