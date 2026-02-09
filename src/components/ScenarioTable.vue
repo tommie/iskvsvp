@@ -469,8 +469,8 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
 
 .confirm-popover-content {
   padding: 1rem;
-  background: white;
-  border: 1px solid #dee2e6;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.375rem;
   box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
   max-width: 300px;
@@ -486,7 +486,7 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
 }
 
 .new-scenario-row {
-  background-color: #f8f9fa;
+  background-color: var(--bs-tertiary-bg);
 }
 
 .new-scenario-row input::placeholder {

@@ -189,7 +189,7 @@ const drawBoxPlotChart = (svgElement: SVGSVGElement, containerElement: HTMLDivEl
         .attr('x2', width)
         .attr('y1', scenarioY + scenarioHeight - scenarioGap / 2)
         .attr('y2', scenarioY + scenarioHeight - scenarioGap / 2)
-        .attr('stroke', '#dee2e6')
+        .attr('stroke', 'var(--bs-border-color)')
         .attr('stroke-width', 1)
         .attr('stroke-dasharray', '4,4')
     }

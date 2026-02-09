@@ -186,7 +186,7 @@ watch(simulationResults, (newResults) => {
 
 <style scoped>
 header {
-  border-bottom: 2px solid #dee2e6;
+  border-bottom: 2px solid var(--bs-border-color);
   padding-bottom: 1rem;
 }
 

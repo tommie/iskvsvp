@@ -1026,8 +1026,8 @@ const expectedTotalWithdrawalRate = computed(() => {
 .portfolio-table thead th {
   font-size: 0.85rem;
   font-weight: 600;
-  color: #6c757d;
-  border-bottom: 2px solid #dee2e6;
+  color: var(--bs-secondary-color);
+  border-bottom: 2px solid var(--bs-border-color);
   padding: 0.5rem 0.25rem;
 }
 
@@ -1085,23 +1085,24 @@ const expectedTotalWithdrawalRate = computed(() => {
 
 .portfolio-stats {
   font-size: 0.875rem;
-  color: #495057;
+  color: var(--bs-secondary-color);
 }
 
 /* Scenario table styling */
 .clickable-input {
   cursor: pointer;
-  border-color: #0d6efd !important;
-  background-color: #e7f1ff !important;
+  border-color: var(--bs-primary) !important;
+  background-color: var(--bs-primary-bg-subtle) !important;
 }
 
 .clickable-input:hover {
-  border-color: #0a58ca !important;
-  background-color: #cfe2ff !important;
+  border-color: var(--bs-primary-border-subtle) !important;
+  background-color: var(--bs-primary-bg-subtle) !important;
+  filter: brightness(0.9);
 }
 
 .table-controlled {
-  background-color: #f8f9fa !important;
+  background-color: var(--bs-tertiary-bg) !important;
   cursor: not-allowed;
 }
 </style>
