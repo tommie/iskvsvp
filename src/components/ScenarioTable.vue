@@ -268,7 +268,7 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
 
     <div class="table-responsive">
       <table class="table table-bordered table-hover">
-        <thead class="table-light">
+        <thead>
           <tr>
             <th class="scenario-label-col">Scenario</th>
             <th v-for="param in controlledParamsArray" :key="param" class="param-col">
@@ -330,7 +330,7 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
             <th class="actions-col"></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="table-group-divider">
           <tr v-for="(scenario, idx) in scenarioTable.scenarios" :key="idx">
             <td>
               <input

@@ -140,5 +140,15 @@ watch(
 svg {
   display: block;
   margin: 0 auto;
+  color: var(--bs-body-color);
+}
+
+:deep(svg text) {
+  fill: currentColor;
+}
+
+:deep(svg .domain),
+:deep(svg .tick line) {
+  stroke: currentColor;
 }
 </style>

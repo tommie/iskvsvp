@@ -490,16 +490,16 @@ const positionPopover = (popoverId: string, anchorId: string) => {
 }
 
 .history-card {
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.375rem;
-  background: #fff;
+  background: var(--bs-body-bg);
   overflow: hidden;
 }
 
 .history-card-header {
-  background: #f8f9fa;
+  background: var(--bs-tertiary-bg);
   padding: 0.75rem;
-  border-bottom: 1px solid #dee2e6;
+  border-bottom: 1px solid var(--bs-border-color);
 }
 
 .title-display {
@@ -539,9 +539,10 @@ const positionPopover = (popoverId: string, anchorId: string) => {
 }
 
 .confirm-popover-content {
-  border: 1px solid #dee2e6;
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.375rem;
   padding: 0.75rem;
+  background: var(--bs-body-bg);
   box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.15);
   min-width: 200px;
   margin: 0.5rem 0 0 0;
@@ -554,7 +555,7 @@ const positionPopover = (popoverId: string, anchorId: string) => {
 
 .confirm-popover-content p {
   margin: 0;
-  color: #212529;
+  color: var(--bs-body-color);
 }
 
 .history-card-body {
@@ -564,7 +565,7 @@ const positionPopover = (popoverId: string, anchorId: string) => {
 .result-summary {
   margin-bottom: 0.75rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid var(--bs-border-color);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -591,7 +592,7 @@ const positionPopover = (popoverId: string, anchorId: string) => {
 }
 
 .param-label {
-  color: #6c757d;
+  color: var(--bs-secondary-color);
   white-space: nowrap;
 }
 
@@ -611,7 +612,7 @@ const positionPopover = (popoverId: string, anchorId: string) => {
 .param-diff {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #6c757d;
+  color: var(--bs-secondary-color);
   min-width: 3rem;
   text-align: right;
 }

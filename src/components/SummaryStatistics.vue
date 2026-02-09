@@ -217,13 +217,13 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
     <!-- Outcome Probabilities Table -->
     <div class="table-responsive mb-4">
       <table class="table table-bordered table-hover">
-        <thead class="table-light">
+        <thead>
           <tr>
             <th>Sannolikhet</th>
             <th v-for="label in labels" :key="label">{{ label }}</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="table-group-divider">
           <tr>
             <th scope="row">Mer än noll</th>
             <td v-for="(_, idx) in labels" :key="idx">
@@ -241,7 +241,7 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
     </div>
     <div class="table-responsive">
       <table class="table table-bordered table-hover">
-        <thead class="table-light">
+        <thead>
           <tr>
             <th rowspan="2" class="align-middle">Mått</th>
             <th rowspan="2" class="align-middle">Scenario</th>
@@ -255,7 +255,7 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
             <th>90%</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody class="table-group-divider">
           <!-- Total Value -->
           <template v-for="(label, idx) in labels" :key="`totalValue-${idx}`">
             <tr>
@@ -496,7 +496,7 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
 
             <!-- Asset Return (per scenario) -->
             <template v-for="(label, idx) in labels" :key="`assetReturn-${idx}`">
-              <tr class="table-light">
+              <tr class="table-group-divider">
                 <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                   Avkastning
                 </th>
@@ -515,7 +515,7 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
 
             <!-- Inflation Rate (per scenario) -->
             <template v-for="(label, idx) in labels" :key="`inflation-${idx}`">
-              <tr class="table-light">
+              <tr class="table-group-divider">
                 <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                   Inflationstakt
                 </th>
@@ -534,7 +534,7 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
 
             <!-- ISK Tax Rate (only for scenarios that have it) -->
             <template v-for="(label, idx) in labels" :key="`iskTax-${idx}`">
-              <tr v-if="getAverageIskTaxRate(idx, 'percentile90') > 0" class="table-light">
+              <tr v-if="getAverageIskTaxRate(idx, 'percentile90') > 0" class="table-group-divider">
                 <th scope="row">ISK-skattesats</th>
                 <th scope="row">{{ label }}</th>
                 <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile10')) }}</td>
