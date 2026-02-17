@@ -39,14 +39,18 @@ const error = ref<string | null>(null)
 
 // Category translations
 const categoryNames: Record<string, string> = {
+  developed: 'Utvecklade marknader',
   emerging: 'Tillväxtmarknader',
   europe: 'Europa',
   finance: 'Finans',
   global: 'Global',
+  globalinterest: 'Global ränta',
   highyield: 'Högavkastning',
+  japan: 'Japan',
   metals: 'Metaller',
   nordics: 'Norden',
   nordicsinterest: 'Nordisk ränta',
+  nordicsmoneymarket: 'Nordisk penningmarknad',
   pe: 'Private Equity',
   property: 'Fastighet',
   sweden: 'Sverige',
