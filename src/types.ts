@@ -38,6 +38,10 @@ export interface InputParameters {
   inflationStdDev: number
 
   returnAdjustment: number // Shift each asset's return by this many sigmas (default 0)
+
+  stressPresetId?: string // ID of stress test preset to apply
+  stressYearReturns?: (number | null)[] // Per-asset overridden annual returns for stress year
+  stressYear?: number // Year index at which stress returns apply (default: depositYears)
 }
 
 export interface SimulationPeriodData<T = number> {

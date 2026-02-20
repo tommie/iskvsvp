@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import type { SimulationAsset } from '../types'
 import FundPresetSelector from './FundPresetSelector.vue'
 
@@ -28,10 +28,17 @@ const {
   yearsLater,
   simulationCount,
   returnAdjustment,
+  stressPresetId,
+  stressWarning,
+  stressPresetList,
   isRunning,
   progress,
   isAddToTableMode,
 } = storeToRefs(store)
+
+onMounted(() => {
+  store.initStressPresets()
+})
 
 // Import ScenarioParameter type for parameter click handling
 import type { ScenarioParameter } from '../types'
@@ -59,7 +66,7 @@ function isFieldDisabled(paramKey: ScenarioParameter): boolean {
 
 // Get class for input field (add clickable styling when in add-to-table mode)
 function getInputClass(paramKey: ScenarioParameter): string {
-  const baseClass = paramKey === 'accountType' ? 'form-select' : 'form-control text-end'
+  const baseClass = paramKey === 'accountType' || paramKey === 'stressPresetId' ? 'form-select' : 'form-control text-end'
   if (isAddToTableMode.value && !store.isParameterControlled(paramKey)) {
     return `${baseClass} clickable-input`
   }
@@ -929,6 +936,23 @@ const expectedTotalWithdrawalRate = computed(() => {
                   :disabled="isFieldDisabled('simulationCount')"
                   @click="handleParameterClick('simulationCount', $event)"
                 />
+              </div>
+              <div class="col-12" v-if="stressPresetList.length > 0">
+                <label class="form-label">Stresstest</label>
+                <select
+                  :class="getInputClass('stressPresetId')"
+                  v-model="stressPresetId"
+                  :disabled="isFieldDisabled('stressPresetId')"
+                  @click="handleParameterClick('stressPresetId', $event)"
+                >
+                  <option value="">Ingen</option>
+                  <option v-for="preset in stressPresetList" :key="preset.id" :value="preset.id">
+                    {{ preset.label }}
+                  </option>
+                </select>
+                <div v-if="stressWarning" class="alert alert-warning mt-2 mb-0 py-1 px-2 small">
+                  {{ stressWarning }}
+                </div>
               </div>
             </div>
           </div>

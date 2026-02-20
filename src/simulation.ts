@@ -149,6 +149,17 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
       rng,
     )
 
+    // Apply stress test returns at the designated year
+    const stressYear = params.stressYear ?? params.depositYears
+    if (params.stressYearReturns && i === stressYear) {
+      for (let idx = 0; idx < assetReturns.length; idx++) {
+        const stressed = params.stressYearReturns[idx]
+        if (stressed != null) {
+          assetReturns[idx] = stressed
+        }
+      }
+    }
+
     cumulativeInflation *= 1 + inflationRate
 
     // Update ISK tax rate if ISK (random walk)
