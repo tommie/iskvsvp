@@ -10,6 +10,7 @@ const {
   yearsLater,
   depositYears,
   profitWithdrawalRate,
+  assets,
 } = storeToRefs(store)
 
 const labels = computed(() => simulationResults.value?.labels ?? [])
@@ -94,10 +95,15 @@ const getAverageDevelopment = (
   if (!statistics.value[scenarioIdx]) return 0
   const assetReturns = statistics.value[scenarioIdx]![statKey].periodData.assetReturnRates
   if (assetReturns.length === 0) return 0
+  const weights = assets.value.map((a) => a.weight)
+  const totalWeight = weights.reduce((a, b) => a + b, 0)
   return (
     assetReturns.reduce((sum, periodReturns) => {
-      const periodAvg = periodReturns.reduce((a, b) => a + b, 0) / periodReturns.length
-      return sum + periodAvg
+      const weightedAvg = periodReturns.reduce(
+        (acc, ret, i) => acc + ret * (weights[i] ?? 0),
+        0,
+      ) / totalWeight
+      return sum + weightedAvg
     }, 0) / assetReturns.length
   )
 }

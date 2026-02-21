@@ -6,7 +6,7 @@ import * as d3 from 'd3'
 import D3Chart from './D3Chart.vue'
 
 const store = useCalculatorStore()
-const { simulationResults, startYear } = storeToRefs(store)
+const { simulationResults, startYear, assets } = storeToRefs(store)
 
 // Generate distribution data from percentile statistics
 interface DistributionPoint {
@@ -74,9 +74,10 @@ const assetReturnsDistribution = computed<DistributionPoint[]>(() => {
   return generateDistribution((percentile, periodIndex) => {
     const iskStats = simulationResults.value!.statistics[0]!
     const assetReturns = iskStats[percentile].periodData.assetReturnRates[periodIndex] ?? []
-    return assetReturns.length > 0
-      ? assetReturns.reduce((a, b) => a + b, 0) / assetReturns.length
-      : 0
+    if (assetReturns.length === 0) return 0
+    const weights = assets.value.map((a) => a.weight)
+    const totalWeight = weights.reduce((a, b) => a + b, 0)
+    return assetReturns.reduce((acc, ret, i) => acc + ret * (weights[i] ?? 0), 0) / totalWeight
   })
 })
 
