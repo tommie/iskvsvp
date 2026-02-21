@@ -34,6 +34,8 @@ import {
 } from '../utils/url-params'
 import { loadStressData, computeStressReturns } from '../stress'
 import type { StressPreset } from '../stress'
+import { loadBootstrapData, prepareBootstrapPayload } from '../bootstrap'
+import type { GmmPreset, BootstrapPayload } from '../bootstrap'
 import SimulationWorker from '../simulation.worker?worker'
 
 export const useCalculatorStore = defineStore('calculator', () => {
@@ -72,6 +74,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const stressPresetId = ref('')
   const stressWarning = ref('')
   const stressPresetList = ref<StressPreset[]>([])
+  const gmmPresetId = ref('uniform')
+  const gmmWarning = ref('')
+  const gmmPresetList = ref<GmmPreset[]>([])
   const seed = ref<string | undefined>(undefined)
 
   // Scenario table state
@@ -343,6 +348,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
       inflationStdDev: inflationStdDev.value,
       returnAdjustment: returnAdjustment.value,
       stressPresetId: stressPresetId.value,
+      gmmPresetId: gmmPresetId.value,
     }
     return paramMap[paramKey]
   }
@@ -371,6 +377,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     inflationStdDev: inflationStdDev.value,
     returnAdjustment: returnAdjustment.value,
     stressPresetId: stressPresetId.value || undefined,
+    gmmPresetId: gmmPresetId.value || undefined,
   })
 
   /**
@@ -382,6 +389,18 @@ export const useCalculatorStore = defineStore('calculator', () => {
       stressPresetList.value = presets
     } catch (e) {
       console.warn('Failed to load stress presets:', e)
+    }
+  }
+
+  /**
+   * Load bootstrap data and GMM presets (called once at startup).
+   */
+  async function initBootstrapData() {
+    try {
+      const { gmmPresets } = await loadBootstrapData()
+      gmmPresetList.value = gmmPresets
+    } catch (e) {
+      console.warn('Failed to load bootstrap data:', e)
     }
   }
 
@@ -496,6 +515,37 @@ export const useCalculatorStore = defineStore('calculator', () => {
         }
       }
 
+      // Prepare bootstrap payload if GMM preset is set
+      let bootstrapPayload: BootstrapPayload | undefined
+      gmmWarning.value = ''
+
+      const effectiveGmmPresetId = paramSets[0]?.gmmPresetId ?? gmmPresetId.value
+      if (effectiveGmmPresetId) {
+        try {
+          const { bootstrapData, gmmPresets } = await loadBootstrapData()
+          const { fundsDb } = await loadStressData()
+          const preset = gmmPresets.find((p) => p.id === effectiveGmmPresetId)
+          if (preset) {
+            const assetNames = paramSets[0]!.assets.map((a) => a.name)
+            const result = prepareBootstrapPayload(
+              assetNames,
+              fundsDb,
+              bootstrapData,
+              preset.components,
+            )
+            if ('warnings' in result) {
+              gmmWarning.value = result.warnings.join('; ')
+              // Fall back to Gaussian (no bootstrap payload sent)
+            } else {
+              bootstrapPayload = result
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to prepare bootstrap payload:', e)
+          gmmWarning.value = 'Kunde inte ladda bootstrapdata'
+        }
+      }
+
       // Create plain object copy for worker
       const plainParamSets = JSON.parse(JSON.stringify(paramSets))
 
@@ -521,7 +571,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         }
 
         // Start simulation
-        worker.postMessage({ paramSets: plainParamSets, labels })
+        worker.postMessage({ paramSets: plainParamSets, labels, bootstrapPayload })
       })
 
       simulationResults.value = results
@@ -569,6 +619,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     capitalGainsTax.value = params.capitalGainsTaxRate
     returnAdjustment.value = params.returnAdjustment
     stressPresetId.value = params.stressPresetId ?? ''
+    gmmPresetId.value = params.gmmPresetId ?? 'uniform'
     seed.value = params.seed
 
     // ISK-specific parameters (may be undefined for VP)
@@ -642,6 +693,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
                 returnAdjustment.value = urlParams.returnAdjustment
               if (urlParams.stressPresetId !== undefined)
                 stressPresetId.value = urlParams.stressPresetId ?? ''
+              if (urlParams.gmmPresetId !== undefined)
+                gmmPresetId.value = urlParams.gmmPresetId ?? 'uniform'
               if (urlParams.seed !== undefined) seed.value = urlParams.seed
             }
 
@@ -683,6 +736,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         simulationCount,
         returnAdjustment,
         stressPresetId,
+        gmmPresetId,
         seed,
       ],
       () => {
@@ -741,6 +795,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
     stressPresetId,
     stressWarning,
     stressPresetList,
+    gmmPresetId,
+    gmmWarning,
+    gmmPresetList,
     seed,
 
     // State
@@ -756,6 +813,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
 
     // Actions
     initStressPresets,
+    initBootstrapData,
     runSimulation,
     resetResults,
     loadParameters,

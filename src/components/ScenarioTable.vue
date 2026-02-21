@@ -354,7 +354,7 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
                 v-else-if="param === 'assetRebalanceFrequency'"
                 type="text"
                 class="form-control form-control-sm"
-                :value="formatValue(param, scenario.parameters[param])"
+                :value="formatValue(param, scenario.parameters[param] as ScenarioValue)"
                 disabled
                 title="Ändra detta fält via parametersektionen"
               />
@@ -363,7 +363,7 @@ const confirmRemoveScenario = (scenarioIdx: number, event: Event) => {
                 type="number"
                 step="any"
                 class="form-control form-control-sm"
-                :value="formatValue(param, scenario.parameters[param])"
+                :value="formatValue(param, scenario.parameters[param] as ScenarioValue)"
                 @input="handleUpdateValue(idx, param, $event)"
               />
             </td>

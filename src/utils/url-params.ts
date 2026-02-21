@@ -33,6 +33,7 @@ const PARAM_KEYS: Record<string, string> = {
   inflationStdDev: 'is',
   returnAdjustment: 'ra',
   stressPresetId: 'sp',
+  gmmPresetId: 'gp',
 }
 
 // Get URL key for a parameter (asset properties are not directly encoded in URL)
@@ -434,7 +435,7 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
       // Parse the value based on parameter type
       if (paramKey === 'accountType') {
         parameters[paramKey] = value as 'ISK' | 'VP'
-      } else if (paramKey === 'stressPresetId') {
+      } else if (paramKey === 'stressPresetId' || paramKey === 'gmmPresetId') {
         parameters[paramKey] = value
       } else if (paramKey === 'assets') {
         // If we have asset property overrides, don't set full assets array
@@ -526,6 +527,11 @@ export function encodeParamsToUrl(
   // Stress preset (optional)
   if (params.stressPresetId) {
     query.sp = params.stressPresetId
+  }
+
+  // GMM preset (optional)
+  if (params.gmmPresetId) {
+    query.gp = params.gmmPresetId
   }
 
   // ISK-specific params (optional)
@@ -659,6 +665,9 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
 
   const sp = getString('sp')
   if (sp) params.stressPresetId = sp
+
+  const gp = getString('gp')
+  if (gp) params.gmmPresetId = gp
 
   if (bwr !== undefined) params.balanceWithdrawalRate = bwr
   if (pwr !== undefined) params.profitWithdrawalRate = pwr

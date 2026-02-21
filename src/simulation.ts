@@ -7,6 +7,8 @@ import type {
   SimulationPeriodData,
   FinalAssetWeights,
 } from './types'
+import type { BootstrapPayload } from './bootstrap'
+import { sampleAnnualReturns } from './bootstrap'
 
 // Extended result that includes final asset weights and cumulative inflation
 export interface SingleSimulationResult extends SimulationResult<number> {
@@ -94,9 +96,23 @@ interface AssetPosition {
  * Run a single simulation for a single scenario (ISK or VP).
  * Returns period-by-period data, cumulative snapshots, and final asset weights.
  */
-export function runSingleSimulation(params: InputParameters): SingleSimulationResult {
+export function runSingleSimulation(
+  params: InputParameters,
+  bootstrapPayload?: BootstrapPayload,
+): SingleSimulationResult {
   const rng = alea(params.seed)
   const isISK = params.iskTaxRate !== undefined
+
+  // Pre-compute bootstrap returns if payload is provided
+  const precomputedReturns = bootstrapPayload
+    ? sampleAnnualReturns(
+        bootstrapPayload.returnMatrix,
+        bootstrapPayload.nMonths,
+        bootstrapPayload.gmmComponents,
+        rng,
+        params.yearsLater,
+      )
+    : null
 
   // Initialize asset positions
   const assetPositions: AssetPosition[] = params.assets.map((asset) => ({
@@ -142,20 +158,28 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
   for (let i = 0; i < params.yearsLater; i++) {
     // Generate stochastic parameters
     const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev, rng)
-    const assetReturns = sampleCorrelatedNormals(
-      params.assets.map((a) => a.expectedReturn + params.returnAdjustment * a.volatility),
-      params.assets.map((a) => a.volatility),
-      params.assetCorrelationMatrix,
-      rng,
-    )
 
-    // Apply stress test returns at the designated year
-    const stressYear = params.stressYear ?? params.depositYears
-    if (params.stressYearReturns && i === stressYear) {
-      for (let idx = 0; idx < assetReturns.length; idx++) {
-        const stressed = params.stressYearReturns[idx]
-        if (stressed != null) {
-          assetReturns[idx] = stressed
+    let assetReturns: number[]
+    if (precomputedReturns) {
+      // Block bootstrap: use pre-sampled historical returns
+      assetReturns = precomputedReturns[i]!
+    } else {
+      // Gaussian: sample correlated normals
+      assetReturns = sampleCorrelatedNormals(
+        params.assets.map((a) => a.expectedReturn + params.returnAdjustment * a.volatility),
+        params.assets.map((a) => a.volatility),
+        params.assetCorrelationMatrix,
+        rng,
+      )
+
+      // Apply stress test returns at the designated year
+      const stressYear = params.stressYear ?? params.depositYears
+      if (params.stressYearReturns && i === stressYear) {
+        for (let idx = 0; idx < assetReturns.length; idx++) {
+          const stressed = params.stressYearReturns[idx]
+          if (stressed != null) {
+            assetReturns[idx] = stressed
+          }
         }
       }
     }
@@ -485,6 +509,7 @@ export function simulateAll(
   paramSets: InputParameters[],
   labels: string[],
   onProgress?: (progress: number) => void,
+  bootstrapPayload?: BootstrapPayload,
 ): SimulationResults {
   const allResults: SingleSimulationResult[][] = []
 
@@ -495,7 +520,7 @@ export function simulateAll(
 
     for (let i = 0; i < params.simulationCount; i++) {
       const params2 = { ...params, seed: params.seed + i.toString() }
-      results.push(runSingleSimulation(params2))
+      results.push(runSingleSimulation(params2, bootstrapPayload))
 
       if (onProgress && i % 100 === 0) {
         const overallProgress =

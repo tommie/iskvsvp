@@ -31,6 +31,9 @@ const {
   stressPresetId,
   stressWarning,
   stressPresetList,
+  gmmPresetId,
+  gmmWarning,
+  gmmPresetList,
   isRunning,
   progress,
   isAddToTableMode,
@@ -38,6 +41,7 @@ const {
 
 onMounted(() => {
   store.initStressPresets()
+  store.initBootstrapData()
 })
 
 // Import ScenarioParameter type for parameter click handling
@@ -66,7 +70,10 @@ function isFieldDisabled(paramKey: ScenarioParameter): boolean {
 
 // Get class for input field (add clickable styling when in add-to-table mode)
 function getInputClass(paramKey: ScenarioParameter): string {
-  const baseClass = paramKey === 'accountType' || paramKey === 'stressPresetId' ? 'form-select' : 'form-control text-end'
+  const baseClass =
+    paramKey === 'accountType' || paramKey === 'stressPresetId' || paramKey === 'gmmPresetId'
+      ? 'form-select'
+      : 'form-control text-end'
   if (isAddToTableMode.value && !store.isParameterControlled(paramKey)) {
     return `${baseClass} clickable-input`
   }
@@ -952,6 +959,26 @@ const expectedTotalWithdrawalRate = computed(() => {
                 </select>
                 <div v-if="stressWarning" class="alert alert-warning mt-2 mb-0 py-1 px-2 small">
                   {{ stressWarning }}
+                </div>
+              </div>
+              <div class="col-12" v-if="gmmPresetList.length > 0">
+                <label class="form-label">Bootstrapping</label>
+                <select
+                  :class="getInputClass('gmmPresetId')"
+                  v-model="gmmPresetId"
+                  :disabled="isFieldDisabled('gmmPresetId')"
+                  @click="handleParameterClick('gmmPresetId', $event)"
+                >
+                  <option value="">Gaussisk (ingen bootstrap)</option>
+                  <option v-for="preset in gmmPresetList" :key="preset.id" :value="preset.id">
+                    {{ preset.label }}
+                  </option>
+                </select>
+                <small class="form-text text-muted">
+                  Historisk blockbootstrap med GMM-viktad periodsampling.
+                </small>
+                <div v-if="gmmWarning" class="alert alert-warning mt-2 mb-0 py-1 px-2 small">
+                  {{ gmmWarning }}
                 </div>
               </div>
             </div>

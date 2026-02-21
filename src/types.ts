@@ -42,6 +42,8 @@ export interface InputParameters {
   stressPresetId?: string // ID of stress test preset to apply
   stressYearReturns?: (number | null)[] // Per-asset overridden annual returns for stress year
   stressYear?: number // Year index at which stress returns apply (default: depositYears)
+
+  gmmPresetId?: string // ID of GMM preset for block bootstrap weighting
 }
 
 export interface SimulationPeriodData<T = number> {

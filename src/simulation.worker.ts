@@ -1,13 +1,25 @@
 import type { InputParameters } from './types'
+import type { BootstrapPayload } from './bootstrap'
 import { simulateAll } from './simulation'
 
-self.onmessage = (e: MessageEvent<{ paramSets: InputParameters[]; labels: string[] }>) => {
+self.onmessage = (
+  e: MessageEvent<{
+    paramSets: InputParameters[]
+    labels: string[]
+    bootstrapPayload?: BootstrapPayload
+  }>,
+) => {
   try {
-    const { paramSets, labels } = e.data
+    const { paramSets, labels, bootstrapPayload } = e.data
 
-    const results = simulateAll(paramSets, labels, (progress) => {
-      self.postMessage({ type: 'progress', progress })
-    })
+    const results = simulateAll(
+      paramSets,
+      labels,
+      (progress) => {
+        self.postMessage({ type: 'progress', progress })
+      },
+      bootstrapPayload,
+    )
 
     self.postMessage({ type: 'complete', results })
   } catch (error) {
