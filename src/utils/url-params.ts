@@ -31,9 +31,7 @@ const PARAM_KEYS: Record<string, string> = {
   iskTaxRateStdDev: 'its',
   inflationRate: 'ir',
   inflationStdDev: 'is',
-  returnAdjustment: 'ra',
-  stressPresetId: 'sp',
-  gmmPresetId: 'gp',
+  bootstrapProfileId: 'bp',
 }
 
 // Get URL key for a parameter (asset properties are not directly encoded in URL)
@@ -435,7 +433,7 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
       // Parse the value based on parameter type
       if (paramKey === 'accountType') {
         parameters[paramKey] = value as 'ISK' | 'VP'
-      } else if (paramKey === 'stressPresetId' || paramKey === 'gmmPresetId') {
+      } else if (paramKey === 'bootstrapProfileId') {
         parameters[paramKey] = value
       } else if (paramKey === 'assets') {
         // If we have asset property overrides, don't set full assets array
@@ -522,16 +520,9 @@ export function encodeParamsToUrl(
   query.ibw = params.inflationBasedWithdrawal.toString()
   query.cgt = params.capitalGainsTaxRate.toString()
 
-  query.ra = params.returnAdjustment.toString()
-
-  // Stress preset (optional)
-  if (params.stressPresetId) {
-    query.sp = params.stressPresetId
-  }
-
-  // GMM preset (optional)
-  if (params.gmmPresetId) {
-    query.gp = params.gmmPresetId
+  // Bootstrap profile (optional)
+  if (params.bootstrapProfileId) {
+    query.bp = params.bootstrapProfileId
   }
 
   // ISK-specific params (optional)
@@ -660,14 +651,8 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   const itr = parseNum('itr')
   const its = parseNum('its')
 
-  const ra = parseNum('ra')
-  if (ra !== undefined) params.returnAdjustment = ra
-
-  const sp = getString('sp')
-  if (sp) params.stressPresetId = sp
-
-  const gp = getString('gp')
-  if (gp) params.gmmPresetId = gp
+  const bp = getString('bp')
+  if (bp) params.bootstrapProfileId = bp
 
   if (bwr !== undefined) params.balanceWithdrawalRate = bwr
   if (pwr !== undefined) params.profitWithdrawalRate = pwr

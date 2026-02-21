@@ -28,65 +28,6 @@ function randomNormal(mean: number, stdDev: number, rng: () => number): number {
   return mean + z0 * stdDev
 }
 
-/**
- * Cholesky decomposition of a symmetric positive definite matrix.
- * Returns the lower triangular matrix L such that A = L * L^T
- */
-function choleskyDecomposition(matrix: number[][]): number[][] {
-  const n = matrix.length
-  const L: number[][] = Array.from({ length: n }, () => Array(n).fill(0))
-
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j <= i; j++) {
-      let sum = 0
-      for (let k = 0; k < j; k++) {
-        sum += L[i]![k]! * L[j]![k]!
-      }
-
-      if (i === j) {
-        L[i]![j] = Math.sqrt(matrix[i]![i]! - sum)
-      } else {
-        L[i]![j] = (matrix[i]![j]! - sum) / L[j]![j]!
-      }
-    }
-  }
-
-  return L
-}
-
-/**
- * Generate correlated normal random variables using Cholesky decomposition.
- */
-function sampleCorrelatedNormals(
-  means: number[],
-  stdDevs: number[],
-  correlationMatrix: number[][],
-  rng: () => number,
-): number[] {
-  const n = means.length
-
-  // Generate independent standard normal samples
-  const z: number[] = []
-  for (let i = 0; i < n; i++) {
-    z.push(randomNormal(0, 1, rng))
-  }
-
-  // Compute Cholesky decomposition of correlation matrix
-  const L = choleskyDecomposition(correlationMatrix)
-
-  // Transform to correlated samples
-  const samples: number[] = []
-  for (let i = 0; i < n; i++) {
-    let sum = 0
-    for (let j = 0; j <= i; j++) {
-      sum += L[i]![j]! * z[j]!
-    }
-    samples.push(means[i]! + stdDevs[i]! * sum)
-  }
-
-  return samples
-}
-
 interface AssetPosition {
   value: number
   costBasis: number
@@ -98,21 +39,19 @@ interface AssetPosition {
  */
 export function runSingleSimulation(
   params: InputParameters,
-  bootstrapPayload?: BootstrapPayload,
+  bootstrapPayload: BootstrapPayload,
 ): SingleSimulationResult {
   const rng = alea(params.seed)
   const isISK = params.iskTaxRate !== undefined
 
-  // Pre-compute bootstrap returns if payload is provided
-  const precomputedReturns = bootstrapPayload
-    ? sampleAnnualReturns(
-        bootstrapPayload.returnMatrix,
-        bootstrapPayload.nMonths,
-        bootstrapPayload.gmmComponents,
-        rng,
-        params.yearsLater,
-      )
-    : null
+  // Pre-compute bootstrap returns from historical data
+  const precomputedReturns = sampleAnnualReturns(
+    bootstrapPayload.returnMatrix,
+    bootstrapPayload.nMonths,
+    bootstrapPayload.profileComponents,
+    rng,
+    params.yearsLater,
+  )
 
   // Initialize asset positions
   const assetPositions: AssetPosition[] = params.assets.map((asset) => ({
@@ -159,30 +98,7 @@ export function runSingleSimulation(
     // Generate stochastic parameters
     const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev, rng)
 
-    let assetReturns: number[]
-    if (precomputedReturns) {
-      // Block bootstrap: use pre-sampled historical returns
-      assetReturns = precomputedReturns[i]!
-    } else {
-      // Gaussian: sample correlated normals
-      assetReturns = sampleCorrelatedNormals(
-        params.assets.map((a) => a.expectedReturn + params.returnAdjustment * a.volatility),
-        params.assets.map((a) => a.volatility),
-        params.assetCorrelationMatrix,
-        rng,
-      )
-
-      // Apply stress test returns at the designated year
-      const stressYear = params.stressYear ?? params.depositYears
-      if (params.stressYearReturns && i === stressYear) {
-        for (let idx = 0; idx < assetReturns.length; idx++) {
-          const stressed = params.stressYearReturns[idx]
-          if (stressed != null) {
-            assetReturns[idx] = stressed
-          }
-        }
-      }
-    }
+    const assetReturns: number[] = precomputedReturns[i]!
 
     cumulativeInflation *= 1 + inflationRate
 
@@ -508,8 +424,8 @@ function calculateStats(values: number[]): {
 export function simulateAll(
   paramSets: InputParameters[],
   labels: string[],
-  onProgress?: (progress: number) => void,
-  bootstrapPayload?: BootstrapPayload,
+  onProgress: ((progress: number) => void) | undefined,
+  bootstrapPayload: BootstrapPayload,
 ): SimulationResults {
   const allResults: SingleSimulationResult[][] = []
 

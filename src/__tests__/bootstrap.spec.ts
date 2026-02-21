@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { alea } from 'seedrandom'
 import { sampleAnnualReturns, prepareBootstrapPayload } from '../bootstrap'
-import type { GmmComponent, BootstrapPayload } from '../bootstrap'
+import type { BootstrapComponent, BootstrapPayload } from '../bootstrap'
 
 describe('sampleAnnualReturns', () => {
   // Build a simple return matrix: 60 months, 2 assets
@@ -12,7 +12,7 @@ describe('sampleAnnualReturns', () => {
     returnMatrix.push([0.01, 0.02])
   }
 
-  const uniformComponents: GmmComponent[] = [{ weight: 1.0, mean: 0.5, std: 0.29 }]
+  const uniformComponents: BootstrapComponent[] = [{ weight: 1.0, mean: 0.5, std: 0.29 }]
 
   it('returns correct number of years', () => {
     const rng = alea('test-seed')
@@ -66,7 +66,7 @@ describe('sampleAnnualReturns', () => {
     }
   })
 
-  it('respects GMM weighting by biasing block start', () => {
+  it('respects profile weighting by biasing block start', () => {
     // Build a matrix where early months have 10% return, late months have -10%
     const biasedMatrix: number[][] = []
     const biasedMonths = 60
@@ -75,10 +75,10 @@ describe('sampleAnnualReturns', () => {
       biasedMatrix.push([ret])
     }
 
-    // GMM heavily weighted toward early period (mean=0.1, std=0.02)
-    const earlyComponents: GmmComponent[] = [{ weight: 1.0, mean: 0.1, std: 0.02 }]
-    // GMM heavily weighted toward late period (mean=0.9, std=0.02)
-    const lateComponents: GmmComponent[] = [{ weight: 1.0, mean: 0.9, std: 0.02 }]
+    // Profile heavily weighted toward early period (mean=0.1, std=0.02)
+    const earlyComponents: BootstrapComponent[] = [{ weight: 1.0, mean: 0.1, std: 0.02 }]
+    // Profile heavily weighted toward late period (mean=0.9, std=0.02)
+    const lateComponents: BootstrapComponent[] = [{ weight: 1.0, mean: 0.9, std: 0.02 }]
 
     // Run many samples and compare average returns
     let earlySum = 0
@@ -93,13 +93,13 @@ describe('sampleAnnualReturns', () => {
       lateSum += lateResult[0]![0]!
     }
 
-    // Early-biased GMM should produce higher average returns
+    // Early-biased profile should produce higher average returns
     expect(earlySum / trials).toBeGreaterThan(lateSum / trials)
   })
 })
 
 describe('prepareBootstrapPayload', () => {
-  const gmmComponents: GmmComponent[] = [{ weight: 1.0, mean: 0.5, std: 0.29 }]
+  const profileComponents: BootstrapComponent[] = [{ weight: 1.0, mean: 0.5, std: 0.29 }]
 
   // Mock per-fund monthly data
   const fundAData = {
@@ -177,7 +177,7 @@ describe('prepareBootstrapPayload', () => {
   })
 
   it('builds a dense return matrix for assets with full overlap', async () => {
-    const result = await prepareBootstrapPayload(['Fund A', 'Fund B'], fundsDb, gmmComponents)
+    const result = await prepareBootstrapPayload(['Fund A', 'Fund B'], fundsDb, profileComponents)
     expect('warnings' in result).toBe(false)
 
     const payload = result as BootstrapPayload
@@ -188,7 +188,7 @@ describe('prepareBootstrapPayload', () => {
   })
 
   it('restricts to common date range when one fund starts later', async () => {
-    const result = await prepareBootstrapPayload(['Fund A', 'Fund C'], fundsDb, gmmComponents)
+    const result = await prepareBootstrapPayload(['Fund A', 'Fund C'], fundsDb, profileComponents)
     expect('warnings' in result).toBe(false)
 
     const payload = result as BootstrapPayload
@@ -198,7 +198,11 @@ describe('prepareBootstrapPayload', () => {
   })
 
   it('returns warning for unknown asset', async () => {
-    const result = await prepareBootstrapPayload(['Fund A', 'Unknown Fund'], fundsDb, gmmComponents)
+    const result = await prepareBootstrapPayload(
+      ['Fund A', 'Unknown Fund'],
+      fundsDb,
+      profileComponents,
+    )
     expect('warnings' in result).toBe(true)
     const warnings = (result as { warnings: string[] }).warnings
     expect(warnings[0]).toContain('Unknown Fund')
@@ -226,20 +230,20 @@ describe('prepareBootstrapPayload', () => {
       return new Response(JSON.stringify(fundDData), { status: 200 })
     })
 
-    const result = await prepareBootstrapPayload(['Fund D'], shortFundsDb, gmmComponents)
+    const result = await prepareBootstrapPayload(['Fund D'], shortFundsDb, profileComponents)
     expect('warnings' in result).toBe(true)
     const warnings = (result as { warnings: string[] }).warnings
     expect(warnings[0]).toContain('Otillräcklig')
   })
 
-  it('passes through GMM components', async () => {
-    const customGmm: GmmComponent[] = [
+  it('passes through profile components', async () => {
+    const customProfile: BootstrapComponent[] = [
       { weight: 0.6, mean: 0.3, std: 0.1 },
       { weight: 0.4, mean: 0.8, std: 0.05 },
     ]
-    const result = await prepareBootstrapPayload(['Fund A'], fundsDb, customGmm)
+    const result = await prepareBootstrapPayload(['Fund A'], fundsDb, customProfile)
     expect('warnings' in result).toBe(false)
     const payload = result as BootstrapPayload
-    expect(payload.gmmComponents).toEqual(customGmm)
+    expect(payload.profileComponents).toEqual(customProfile)
   })
 })

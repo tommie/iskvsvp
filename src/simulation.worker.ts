@@ -6,7 +6,7 @@ self.onmessage = (
   e: MessageEvent<{
     paramSets: InputParameters[]
     labels: string[]
-    bootstrapPayload?: BootstrapPayload
+    bootstrapPayload: BootstrapPayload
   }>,
 ) => {
   try {

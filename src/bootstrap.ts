@@ -3,27 +3,27 @@
  *
  * Replaces Gaussian return generation with historical block bootstrap,
  * preserving autocorrelation, fat tails, and cross-asset correlation.
- * A GMM over the time axis lets users weight certain historical periods.
+ * A bootstrap sampling profile over the time axis lets users weight certain historical periods.
  */
 
 export const BLOCK_MONTHS = 24
 
-export interface GmmComponent {
+export interface BootstrapComponent {
   weight: number
   mean: number // Normalized time [0, 1]
   std: number
 }
 
-export interface GmmPreset {
+export interface BootstrapProfile {
   id: string
   label: string
-  components: GmmComponent[]
+  components: BootstrapComponent[]
 }
 
 export interface BootstrapPayload {
   returnMatrix: number[][] // [monthIdx][assetIdx]
   nMonths: number
-  gmmComponents: GmmComponent[]
+  profileComponents: BootstrapComponent[]
   assetOrder: string[] // ISINs in column order
 }
 
@@ -45,38 +45,38 @@ interface FundsDb {
   funds: FundIndexEntry[]
 }
 
-let cachedGmmPresets: GmmPreset[] | null = null
+let cachedBootstrapProfiles: BootstrapProfile[] | null = null
 let cachedFundsDb: FundsDb | null = null
 const cachedMonthlyData = new Map<string, FundMonthlyData>()
 
 /**
- * Fetch and cache GMM presets and fund index.
+ * Fetch and cache bootstrap profiles and fund index.
  */
 export async function loadBootstrapData(): Promise<{
   fundsDb: FundsDb
-  gmmPresets: GmmPreset[]
+  profiles: BootstrapProfile[]
 }> {
-  if (cachedFundsDb && cachedGmmPresets) {
-    return { fundsDb: cachedFundsDb, gmmPresets: cachedGmmPresets }
+  if (cachedFundsDb && cachedBootstrapProfiles) {
+    return { fundsDb: cachedFundsDb, profiles: cachedBootstrapProfiles }
   }
 
   const [fundsResp, presetsResp] = await Promise.all([
     fetch('/data/index.json'),
-    fetch('/gmm-presets.json'),
+    fetch('/bootstrap-profiles.json'),
   ])
 
   if (!fundsResp.ok) {
     throw new Error(`Failed to load data/index.json: ${fundsResp.status}`)
   }
   if (!presetsResp.ok) {
-    throw new Error(`Failed to load gmm-presets.json: ${presetsResp.status}`)
+    throw new Error(`Failed to load bootstrap-profiles.json: ${presetsResp.status}`)
   }
 
   cachedFundsDb = (await fundsResp.json()) as FundsDb
-  const presetsJson = (await presetsResp.json()) as { presets: GmmPreset[] }
-  cachedGmmPresets = presetsJson.presets
+  const presetsJson = (await presetsResp.json()) as { presets: BootstrapProfile[] }
+  cachedBootstrapProfiles = presetsJson.presets
 
-  return { fundsDb: cachedFundsDb, gmmPresets: cachedGmmPresets }
+  return { fundsDb: cachedFundsDb, profiles: cachedBootstrapProfiles }
 }
 
 /**
@@ -104,7 +104,7 @@ async function fetchMonthlyData(monthlyFile: string): Promise<FundMonthlyData> {
 export async function prepareBootstrapPayload(
   assetNames: string[],
   fundsDb: FundsDb,
-  gmmComponents: GmmComponent[],
+  profileComponents: BootstrapComponent[],
 ): Promise<BootstrapPayload | { warnings: string[] }> {
   const warnings: string[] = []
   const fundEntries: FundIndexEntry[] = []
@@ -184,22 +184,22 @@ export async function prepareBootstrapPayload(
   return {
     returnMatrix,
     nMonths: commonMonths,
-    gmmComponents,
+    profileComponents,
     assetOrder: fundEntries.map((e) => e.isin),
   }
 }
 
 /**
- * Sample annual returns using block bootstrap with GMM weighting.
+ * Sample annual returns using block bootstrap with profile-weighted period sampling.
  *
- * For each 2-year chunk, samples a block start from the GMM distribution
+ * For each 2-year chunk, samples a block start from the bootstrap profile distribution
  * and extracts BLOCK_MONTHS consecutive months of historical returns,
  * then compounds them into annual returns.
  */
 export function sampleAnnualReturns(
   returnMatrix: number[][], // [monthIdx][assetIdx]
   nMonths: number,
-  gmmComponents: GmmComponent[],
+  profileComponents: BootstrapComponent[],
   rng: () => number,
   yearsNeeded: number,
 ): number[][] {
@@ -210,8 +210,7 @@ export function sampleAnnualReturns(
   // Process in 2-year chunks
   let yearsRemaining = yearsNeeded
   while (yearsRemaining > 0) {
-    // Sample block start from GMM
-    const blockStart = sampleBlockStart(gmmComponents, maxStart, rng)
+    const blockStart = sampleBlockStart(profileComponents, maxStart, rng)
 
     // Extract block of BLOCK_MONTHS consecutive months
     const monthsToUse = yearsRemaining >= 2 ? BLOCK_MONTHS : 12
@@ -245,10 +244,14 @@ export function sampleAnnualReturns(
 }
 
 /**
- * Sample a block start index from the GMM distribution.
+ * Sample a block start index from the bootstrap profile distribution.
  * Components define P(block_start) in normalized time [0, 1].
  */
-function sampleBlockStart(components: GmmComponent[], maxStart: number, rng: () => number): number {
+function sampleBlockStart(
+  components: BootstrapComponent[],
+  maxStart: number,
+  rng: () => number,
+): number {
   // Select component by weight
   const u = rng()
   let cumWeight = 0

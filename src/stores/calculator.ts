@@ -22,7 +22,6 @@ type ScenarioValue =
   | RebalanceFrequency
   | SimulationAsset[]
   | number[][]
-  | (number | null)[]
   | undefined
 import { isAssetPropertyParameter, parseAssetPropertyParameter } from '../types'
 import { useHistoryStore } from './history'
@@ -32,10 +31,8 @@ import {
   encodeScenarioTableToUrl,
   decodeScenarioTableFromUrl,
 } from '../utils/url-params'
-import { loadStressData, computeStressReturns } from '../stress'
-import type { StressPreset } from '../stress'
 import { loadBootstrapData, prepareBootstrapPayload } from '../bootstrap'
-import type { GmmPreset, BootstrapPayload } from '../bootstrap'
+import type { BootstrapProfile, BootstrapPayload } from '../bootstrap'
 import SimulationWorker from '../simulation.worker?worker'
 
 export const useCalculatorStore = defineStore('calculator', () => {
@@ -70,13 +67,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const startYear = ref(45)
   const yearsLater = ref(36)
   const simulationCount = ref(1000)
-  const returnAdjustment = ref(0)
-  const stressPresetId = ref('')
-  const stressWarning = ref('')
-  const stressPresetList = ref<StressPreset[]>([])
-  const gmmPresetId = ref('uniform')
-  const gmmWarning = ref('')
-  const gmmPresetList = ref<GmmPreset[]>([])
+  const bootstrapProfileId = ref('uniform')
+  const bootstrapWarning = ref('')
+  const bootstrapProfileList = ref<BootstrapProfile[]>([])
   const seed = ref<string | undefined>(undefined)
 
   // Scenario table state
@@ -137,15 +130,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     }
 
     const variations: ParamVariation[] = []
-
-    // Return adjustment: ±1 sigma
-    variations.push({
-      key: 'returnAdjustment',
-      upLabel: 'Avkastning +1σ',
-      downLabel: 'Avkastning -1σ',
-      upValue: 1,
-      downValue: -1,
-    })
 
     // Inflation: ±1 stddev (only if stddev > 0)
     if (inflationStdDev.value > 0) {
@@ -346,9 +330,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
       iskTaxRateStdDev: iskTaxRateStdDev.value,
       inflationRate: inflationRate.value,
       inflationStdDev: inflationStdDev.value,
-      returnAdjustment: returnAdjustment.value,
-      stressPresetId: stressPresetId.value,
-      gmmPresetId: gmmPresetId.value,
+      bootstrapProfileId: bootstrapProfileId.value,
     }
     return paramMap[paramKey]
   }
@@ -375,30 +357,16 @@ export const useCalculatorStore = defineStore('calculator', () => {
     capitalGainsTaxRate: capitalGainsTax.value,
     inflationRate: inflationRate.value,
     inflationStdDev: inflationStdDev.value,
-    returnAdjustment: returnAdjustment.value,
-    stressPresetId: stressPresetId.value || undefined,
-    gmmPresetId: gmmPresetId.value || undefined,
+    bootstrapProfileId: bootstrapProfileId.value || undefined,
   })
 
   /**
-   * Load available stress presets (called once at startup).
-   */
-  async function initStressPresets() {
-    try {
-      const { presets } = await loadStressData()
-      stressPresetList.value = presets
-    } catch (e) {
-      console.warn('Failed to load stress presets:', e)
-    }
-  }
-
-  /**
-   * Load bootstrap data and GMM presets (called once at startup).
+   * Load bootstrap profiles and fund index (called once at startup).
    */
   async function initBootstrapData() {
     try {
-      const { gmmPresets } = await loadBootstrapData()
-      gmmPresetList.value = gmmPresets
+      const { profiles } = await loadBootstrapData()
+      bootstrapProfileList.value = profiles
     } catch (e) {
       console.warn('Failed to load bootstrap data:', e)
     }
@@ -496,48 +464,26 @@ export const useCalculatorStore = defineStore('calculator', () => {
         labels = [accountType.value]
       }
 
-      // Compute stress returns for each param set that has a stress preset
-      stressWarning.value = ''
-      for (const params of paramSets) {
-        const effectivePresetId = params.stressPresetId
-        if (effectivePresetId) {
-          const { factorData, fundsDb } = await loadStressData()
-          const result = computeStressReturns(effectivePresetId, params.assets, fundsDb, factorData)
-          if (result.warnings.length > 0) {
-            stressWarning.value = result.warnings.join('; ')
-            // Run without stress
-            delete params.stressYearReturns
-            delete params.stressYear
-          } else {
-            params.stressYearReturns = result.returns
-            params.stressYear = params.depositYears + 1
-          }
-        }
+      // Prepare bootstrap payload
+      bootstrapWarning.value = ''
+      const effectiveProfileId = paramSets[0]?.bootstrapProfileId ?? bootstrapProfileId.value
+      const { fundsDb, profiles } = await loadBootstrapData()
+      const profile = profiles.find((p) => p.id === effectiveProfileId)
+
+      if (!profile) {
+        bootstrapWarning.value = `Okänd bootstrapprofil: ${effectiveProfileId}`
+        return
       }
 
-      // Prepare bootstrap payload if GMM preset is set
-      let bootstrapPayload: BootstrapPayload | undefined
-      gmmWarning.value = ''
+      const assetNames = paramSets[0]!.assets.map((a) => a.name)
+      const bootstrapResult = await prepareBootstrapPayload(assetNames, fundsDb, profile.components)
 
-      const effectiveGmmPresetId = paramSets[0]?.gmmPresetId ?? gmmPresetId.value
-      if (effectiveGmmPresetId) {
-        try {
-          const { fundsDb, gmmPresets } = await loadBootstrapData()
-          const preset = gmmPresets.find((p) => p.id === effectiveGmmPresetId)
-          if (preset) {
-            const assetNames = paramSets[0]!.assets.map((a) => a.name)
-            const result = await prepareBootstrapPayload(assetNames, fundsDb, preset.components)
-            if ('warnings' in result) {
-              gmmWarning.value = result.warnings.join('; ')
-            } else {
-              bootstrapPayload = result
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to prepare bootstrap payload:', e)
-          gmmWarning.value = 'Kunde inte ladda bootstrapdata'
-        }
+      if ('warnings' in bootstrapResult) {
+        bootstrapWarning.value = bootstrapResult.warnings.join('; ')
+        return
       }
+
+      const bootstrapPayload: BootstrapPayload = bootstrapResult
 
       // Create plain object copy for worker
       const plainParamSets = JSON.parse(JSON.stringify(paramSets))
@@ -610,9 +556,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     inflationStdDev.value = params.inflationStdDev
     vpFundTaxRate.value = params.vpWealthTaxRate
     capitalGainsTax.value = params.capitalGainsTaxRate
-    returnAdjustment.value = params.returnAdjustment
-    stressPresetId.value = params.stressPresetId ?? ''
-    gmmPresetId.value = params.gmmPresetId ?? 'uniform'
+    bootstrapProfileId.value = params.bootstrapProfileId ?? 'uniform'
     seed.value = params.seed
 
     // ISK-specific parameters (may be undefined for VP)
@@ -682,12 +626,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
               if (urlParams.iskTaxRate !== undefined) iskTaxRate.value = urlParams.iskTaxRate
               if (urlParams.iskTaxRateStdDev !== undefined)
                 iskTaxRateStdDev.value = urlParams.iskTaxRateStdDev
-              if (urlParams.returnAdjustment !== undefined)
-                returnAdjustment.value = urlParams.returnAdjustment
-              if (urlParams.stressPresetId !== undefined)
-                stressPresetId.value = urlParams.stressPresetId ?? ''
-              if (urlParams.gmmPresetId !== undefined)
-                gmmPresetId.value = urlParams.gmmPresetId ?? 'uniform'
+              if (urlParams.bootstrapProfileId !== undefined)
+                bootstrapProfileId.value = urlParams.bootstrapProfileId ?? 'uniform'
               if (urlParams.seed !== undefined) seed.value = urlParams.seed
             }
 
@@ -727,9 +667,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         startYear,
         yearsLater,
         simulationCount,
-        returnAdjustment,
-        stressPresetId,
-        gmmPresetId,
+        bootstrapProfileId,
         seed,
       ],
       () => {
@@ -784,13 +722,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
     startYear,
     yearsLater,
     simulationCount,
-    returnAdjustment,
-    stressPresetId,
-    stressWarning,
-    stressPresetList,
-    gmmPresetId,
-    gmmWarning,
-    gmmPresetList,
+    bootstrapProfileId,
+    bootstrapWarning,
+    bootstrapProfileList,
     seed,
 
     // State
@@ -805,7 +739,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     controlledParameters,
 
     // Actions
-    initStressPresets,
     initBootstrapData,
     runSimulation,
     resetResults,

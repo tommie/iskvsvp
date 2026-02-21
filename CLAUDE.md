@@ -28,7 +28,7 @@ src/
 ├── stores/
 │   ├── calculator.ts            - Main simulation state and parameters
 │   └── history.ts               - Simulation history with localStorage
-├── bootstrap.ts                 - Block bootstrap with GMM-weighted period sampling
+├── bootstrap.ts                 - Block bootstrap with profile-weighted period sampling
 ├── simulation.ts                - Monte Carlo simulation logic
 ├── types.ts                     - TypeScript interfaces
 └── utils/

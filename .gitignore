@@ -37,6 +37,4 @@ __screenshots__/
 
 # External data (symlinked from fundcmp)
 public/data
-public/fund-factors.json
-public/factor-presets.json
-public/gmm-presets.json
+public/bootstrap-profiles.json

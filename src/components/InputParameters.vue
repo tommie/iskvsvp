@@ -27,20 +27,15 @@ const {
   startYear,
   yearsLater,
   simulationCount,
-  returnAdjustment,
-  stressPresetId,
-  stressWarning,
-  stressPresetList,
-  gmmPresetId,
-  gmmWarning,
-  gmmPresetList,
+  bootstrapProfileId,
+  bootstrapWarning,
+  bootstrapProfileList,
   isRunning,
   progress,
   isAddToTableMode,
 } = storeToRefs(store)
 
 onMounted(() => {
-  store.initStressPresets()
   store.initBootstrapData()
 })
 
@@ -71,7 +66,7 @@ function isFieldDisabled(paramKey: ScenarioParameter): boolean {
 // Get class for input field (add clickable styling when in add-to-table mode)
 function getInputClass(paramKey: ScenarioParameter): string {
   const baseClass =
-    paramKey === 'accountType' || paramKey === 'stressPresetId' || paramKey === 'gmmPresetId'
+    paramKey === 'accountType' || paramKey === 'bootstrapProfileId'
       ? 'form-select'
       : 'form-control text-end'
   if (isAddToTableMode.value && !store.isParameterControlled(paramKey)) {
@@ -769,24 +764,6 @@ const expectedTotalWithdrawalRate = computed(() => {
                 </span>
               </div>
             </div>
-
-            <div class="mt-3">
-              <label class="form-label">Avkastningsjustering</label>
-              <div class="input-group">
-                <input
-                  type="number"
-                  step="0.1"
-                  :class="getInputClass('returnAdjustment')"
-                  v-model.number="returnAdjustment"
-                  :disabled="isFieldDisabled('returnAdjustment')"
-                  @click="handleParameterClick('returnAdjustment', $event)"
-                />
-                <span class="input-group-text">σ</span>
-              </div>
-              <small class="form-text text-muted">
-                Justerar varje fonds avkastning med detta antal standardavvikelser.
-              </small>
-            </div>
           </div>
         </div>
 
@@ -944,41 +921,27 @@ const expectedTotalWithdrawalRate = computed(() => {
                   @click="handleParameterClick('simulationCount', $event)"
                 />
               </div>
-              <div class="col-12" v-if="stressPresetList.length > 0">
+              <div class="col-12" v-if="bootstrapProfileList.length > 0">
                 <label class="form-label">Stresstest</label>
                 <select
-                  :class="getInputClass('stressPresetId')"
-                  v-model="stressPresetId"
-                  :disabled="isFieldDisabled('stressPresetId')"
-                  @click="handleParameterClick('stressPresetId', $event)"
+                  :class="getInputClass('bootstrapProfileId')"
+                  v-model="bootstrapProfileId"
+                  :disabled="isFieldDisabled('bootstrapProfileId')"
+                  @click="handleParameterClick('bootstrapProfileId', $event)"
                 >
-                  <option value="">Ingen</option>
-                  <option v-for="preset in stressPresetList" :key="preset.id" :value="preset.id">
-                    {{ preset.label }}
-                  </option>
-                </select>
-                <div v-if="stressWarning" class="alert alert-warning mt-2 mb-0 py-1 px-2 small">
-                  {{ stressWarning }}
-                </div>
-              </div>
-              <div class="col-12" v-if="gmmPresetList.length > 0">
-                <label class="form-label">Bootstrapping</label>
-                <select
-                  :class="getInputClass('gmmPresetId')"
-                  v-model="gmmPresetId"
-                  :disabled="isFieldDisabled('gmmPresetId')"
-                  @click="handleParameterClick('gmmPresetId', $event)"
-                >
-                  <option value="">Gaussisk (ingen bootstrap)</option>
-                  <option v-for="preset in gmmPresetList" :key="preset.id" :value="preset.id">
-                    {{ preset.label }}
+                  <option
+                    v-for="profile in bootstrapProfileList"
+                    :key="profile.id"
+                    :value="profile.id"
+                  >
+                    {{ profile.label }}
                   </option>
                 </select>
                 <small class="form-text text-muted">
-                  Historisk blockbootstrap med GMM-viktad periodsampling.
+                  Väljer vilka historiska perioder som viktas i simuleringen.
                 </small>
-                <div v-if="gmmWarning" class="alert alert-warning mt-2 mb-0 py-1 px-2 small">
-                  {{ gmmWarning }}
+                <div v-if="bootstrapWarning" class="alert alert-warning mt-2 mb-0 py-1 px-2 small">
+                  {{ bootstrapWarning }}
                 </div>
               </div>
             </div>
