@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { alea } from 'seedrandom'
-import { sampleAnnualReturns, prepareBootstrapPayload, parseYearMonth } from '../bootstrap'
-import type { BootstrapComponent, BootstrapPayload } from '../bootstrap'
+import { sampleAnnualReturns, prepareBootstrapPayload, parseYearMonth, filterProfilesByDateRange, getCommonDateRange } from '../bootstrap'
+import type { BootstrapComponent, BootstrapPayload, BootstrapProfile } from '../bootstrap'
 
 describe('parseYearMonth', () => {
   it('converts YYYY-MM to absolute month index', () => {
@@ -160,18 +160,21 @@ describe('prepareBootstrapPayload', () => {
         name: 'Fund A',
         category: 'global',
         monthly_file: 'global/fund_se0001_monthly.json',
+        start_month: '2015-01',
       },
       {
         isin: 'SE0002',
         name: 'Fund B',
         category: 'global',
         monthly_file: 'global/fund_se0002_monthly.json',
+        start_month: '2015-01',
       },
       {
         isin: 'SE0003',
         name: 'Fund C',
         category: 'global',
         monthly_file: 'global/fund_se0003_monthly.json',
+        start_month: '2017-07',
       },
     ],
   }
@@ -239,6 +242,7 @@ describe('prepareBootstrapPayload', () => {
           name: 'Fund D',
           category: 'global',
           monthly_file: 'global/fund_se0004_monthly.json',
+          start_month: '2020-01',
         },
       ],
     }
@@ -276,5 +280,82 @@ describe('prepareBootstrapPayload', () => {
     const payload = result as BootstrapPayload
     // Fund C starts at month 30 = 2017-07
     expect(payload.startDate).toBe('2017-07')
+  })
+})
+
+describe('filterProfilesByDateRange', () => {
+  const profiles: BootstrapProfile[] = [
+    { id: 'uniform', label: 'Uniform', components: [] },
+    { id: 'early', label: 'Early', components: [{ weight: 0.4, centerMonth: '2005-01', stdMonths: 6 }] },
+    { id: 'mid', label: 'Mid', components: [{ weight: 0.4, centerMonth: '2015-06', stdMonths: 4 }] },
+    { id: 'late', label: 'Late', components: [{ weight: 0.4, centerMonth: '2024-01', stdMonths: 3 }] },
+  ]
+
+  it('always includes profiles with no components', () => {
+    const result = filterProfilesByDateRange(profiles, '2010-01', 120)
+    expect(result.map((p) => p.id)).toContain('uniform')
+  })
+
+  it('excludes profiles whose center predates the data range', () => {
+    // Data starts 2010-01, 120 months. "Early" at 2005-01 is before the range.
+    const result = filterProfilesByDateRange(profiles, '2010-01', 120)
+    expect(result.map((p) => p.id)).not.toContain('early')
+    expect(result.map((p) => p.id)).toContain('mid')
+  })
+
+  it('excludes profiles whose center exceeds maxStart', () => {
+    // Data starts 2010-01, 60 months (ends ~2015-01). "Late" at 2024-01 is way past.
+    const result = filterProfilesByDateRange(profiles, '2010-01', 60)
+    expect(result.map((p) => p.id)).not.toContain('late')
+  })
+})
+
+describe('getCommonDateRange', () => {
+  const fundsDb = {
+    funds: [
+      { isin: 'A', name: 'Fund A', category: 'x', monthly_file: 'a.json', start_month: '2010-01' },
+      { isin: 'B', name: 'Fund B', category: 'x', monthly_file: 'b.json', start_month: '2015-06' },
+    ],
+  }
+
+  it('returns the latest start_month as startDate', () => {
+    const range = getCommonDateRange(['Fund A', 'Fund B'], fundsDb)
+    expect(range).not.toBeNull()
+    expect(range!.startDate).toBe('2015-06')
+  })
+
+  it('returns null for unknown assets', () => {
+    expect(getCommonDateRange(['Unknown'], fundsDb)).toBeNull()
+  })
+
+  it('returns null when data range is too short', () => {
+    const tinyDb = {
+      funds: [
+        { isin: 'C', name: 'Fund C', category: 'x', monthly_file: 'c.json', start_month: '2026-01' },
+      ],
+    }
+    expect(getCommonDateRange(['Fund C'], tinyDb)).toBeNull()
+  })
+})
+
+describe('sampleBlockStart retry', () => {
+  it('produces valid samples even when profile center is near data boundary', () => {
+    // 60-month matrix, profile centered at month 2 from start with tight std.
+    // With BLOCK_MONTHS/2 offset, adjusted center is negative — tests retry logic.
+    const nMonths = 60
+    const startDate = '2015-01'
+    const returnMatrix: number[][] = Array.from({ length: nMonths }, () => [0.01])
+    const components: BootstrapComponent[] = [
+      { weight: 0.4, centerMonth: '2015-03', stdMonths: 1 },
+    ]
+
+    const rng = alea('retry-test')
+    const result = sampleAnnualReturns(returnMatrix, nMonths, components, rng, 10, startDate)
+
+    // All years should produce finite returns (no out-of-bounds access)
+    for (const year of result) {
+      expect(year[0]).toBeDefined()
+      expect(Number.isFinite(year[0])).toBe(true)
+    }
   })
 })

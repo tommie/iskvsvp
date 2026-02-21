@@ -1,15 +1,119 @@
 {
   "presets": [
-    { "id": "uniform", "label": "Likformig",
-      "components": [] },
-    { "id": "gfc", "label": "GFC-viktad",
+    {
+      "id": "uniform",
+      "label": "Likformig",
+      "components": []
+    },
+    {
+      "id": "dotcom",
+      "label": "Dotcom 2002",
       "components": [
-        { "weight": 0.4, "centerMonth": "2008-07", "stdMonths": 6 }] },
-    { "id": "covid", "label": "Covid-viktad",
+        {
+          "weight": 0.4,
+          "centerMonth": "2002-09",
+          "stdMonths": 12
+        }
+      ]
+    },
+    {
+      "id": "commodities",
+      "label": "Commodity Supercycle 2006",
       "components": [
-        { "weight": 0.4, "centerMonth": "2020-03", "stdMonths": 4 }] },
-    { "id": "recent", "label": "Senaste 5 år",
+        {
+          "weight": 0.4,
+          "centerMonth": "2006-06",
+          "stdMonths": 9
+        }
+      ]
+    },
+    {
+      "id": "gfc",
+      "label": "GFC 2008",
       "components": [
-        { "weight": 0.7, "centerMonth": "2022-01", "stdMonths": 18 }] }
+        {
+          "weight": 0.4,
+          "centerMonth": "2009-02",
+          "stdMonths": 12
+        }
+      ]
+    },
+    {
+      "id": "euro",
+      "label": "Euro Crisis 2011",
+      "components": [
+        {
+          "weight": 0.4,
+          "centerMonth": "2011-09",
+          "stdMonths": 6
+        }
+      ]
+    },
+    {
+      "id": "taper",
+      "label": "Taper Tantrum 2013",
+      "components": [
+        {
+          "weight": 0.4,
+          "centerMonth": "2013-06",
+          "stdMonths": 3
+        }
+      ]
+    },
+    {
+      "id": "em_crisis",
+      "label": "China/EM/Oil 2016",
+      "components": [
+        {
+          "weight": 0.4,
+          "centerMonth": "2016-02",
+          "stdMonths": 4
+        }
+      ]
+    },
+    {
+      "id": "covid",
+      "label": "COVID 2020",
+      "components": [
+        {
+          "weight": 0.4,
+          "centerMonth": "2020-03",
+          "stdMonths": 3
+        }
+      ]
+    },
+    {
+      "id": "reflation",
+      "label": "Reflation 2021",
+      "components": [
+        {
+          "weight": 0.4,
+          "centerMonth": "2021-10",
+          "stdMonths": 4
+        }
+      ]
+    },
+    {
+      "id": "ukraine",
+      "label": "Ukraine/Inflation 2022",
+      "components": [
+        {
+          "weight": 0.4,
+          "centerMonth": "2022-09",
+          "stdMonths": 6
+        }
+      ]
+    },
+    {
+      "id": "tariffs",
+      "label": "Tariffs 2025",
+      "components": [
+        {
+          "weight": 0.4,
+          "centerMonth": "2025-04",
+          "stdMonths": 6
+        }
+      ]
+    }
   ]
 }

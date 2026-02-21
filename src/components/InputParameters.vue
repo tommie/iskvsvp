@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { SimulationAsset } from '../types'
 import FundPresetSelector from './FundPresetSelector.vue'
+import { loadBootstrapData, getCommonDateRange, filterProfilesByDateRange } from '../bootstrap'
 
 const store = useCalculatorStore()
 const {
@@ -38,6 +39,34 @@ const {
 onMounted(() => {
   store.initBootstrapData()
 })
+
+// Disable bootstrap profiles whose events fall outside the fund data range
+const disabledProfileIds = ref(new Set<string>())
+watch(
+  [assets, bootstrapProfileList],
+  async () => {
+    if (bootstrapProfileList.value.length === 0) return
+    const assetNames = assets.value.map((a) => a.name)
+    try {
+      const { fundsDb } = await loadBootstrapData()
+      const range = getCommonDateRange(assetNames, fundsDb)
+      if (range) {
+        const available = new Set(
+          filterProfilesByDateRange(bootstrapProfileList.value, range.startDate, range.nMonths)
+            .map((p) => p.id),
+        )
+        disabledProfileIds.value = new Set(
+          bootstrapProfileList.value.filter((p) => !available.has(p.id)).map((p) => p.id),
+        )
+      } else {
+        disabledProfileIds.value = new Set()
+      }
+    } catch {
+      disabledProfileIds.value = new Set()
+    }
+  },
+  { deep: true, immediate: true },
+)
 
 // Import ScenarioParameter type for parameter click handling
 import type { ScenarioParameter } from '../types'
@@ -854,6 +883,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                     v-for="profile in bootstrapProfileList"
                     :key="profile.id"
                     :value="profile.id"
+                    :disabled="disabledProfileIds.has(profile.id)"
                   >
                     {{ profile.label }}
                   </option>

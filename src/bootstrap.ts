@@ -33,6 +33,7 @@ interface FundIndexEntry {
   name: string
   category: string
   monthly_file: string
+  start_month: string // "YYYY-MM"
 }
 
 interface FundMonthlyData {
@@ -94,6 +95,55 @@ async function fetchMonthlyData(monthlyFile: string): Promise<FundMonthlyData> {
   const data = (await resp.json()) as FundMonthlyData
   cachedMonthlyData.set(monthlyFile, data)
   return data
+}
+
+/**
+ * Filter profiles to only those whose center month falls within the data range.
+ * Profiles with no components (e.g. Uniform) are always included.
+ */
+export function filterProfilesByDateRange(
+  profiles: BootstrapProfile[],
+  startDate: string,
+  nMonths: number,
+): BootstrapProfile[] {
+  const startIdx = parseYearMonth(startDate)
+  const maxStart = nMonths - BLOCK_MONTHS
+  return profiles.filter((p) => {
+    if (p.components.length === 0) return true
+    return p.components.every((c) => {
+      const centerIdx = parseYearMonth(c.centerMonth) - startIdx - Math.floor(BLOCK_MONTHS / 2)
+      return centerIdx >= 0 && centerIdx <= maxStart
+    })
+  })
+}
+
+/**
+ * Estimate the common date range for a set of assets using start_month from the fund index.
+ * Returns null if any asset is missing from the database.
+ */
+export function getCommonDateRange(
+  assetNames: string[],
+  fundsDb: FundsDb,
+): { startDate: string; nMonths: number } | null {
+  let latestStart = 0
+  for (const name of assetNames) {
+    const entry = fundsDb.funds.find((f) => f.name === name)
+    if (!entry?.start_month) return null
+    const idx = parseYearMonth(entry.start_month)
+    if (idx > latestStart) latestStart = idx
+  }
+
+  const now = new Date()
+  const nowIdx = now.getFullYear() * 12 + now.getMonth()
+  const nMonths = nowIdx - latestStart
+
+  if (nMonths < BLOCK_MONTHS) return null
+
+  const startYear = Math.floor(latestStart / 12)
+  const startMonth = (latestStart % 12) + 1
+  const startDate = `${startYear}-${String(startMonth).padStart(2, '0')}`
+
+  return { startDate, nMonths }
 }
 
 /**
@@ -233,26 +283,35 @@ function sampleBlockStart(
   rng: () => number,
   startDate: string,
 ): number {
-  const u = rng()
-  let cumWeight = 0
-  for (const comp of components) {
-    cumWeight += comp.weight
-    if (u < cumWeight) {
-      // Draw from this component's Gaussian in absolute month space
-      const startIdx = parseYearMonth(startDate)
-      const centerIdx = parseYearMonth(comp.centerMonth) - startIdx
-      for (let attempt = 0; attempt < 100; attempt++) {
-        const monthIdx = Math.round(randomNormalBM(centerIdx, comp.stdMonths, rng))
-        if (monthIdx >= 0 && monthIdx <= maxStart) {
-          return monthIdx
-        }
+  const startIdx = parseYearMonth(startDate)
+
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const u = rng()
+    let cumWeight = 0
+    let monthIdx: number | null = null
+
+    for (const comp of components) {
+      cumWeight += comp.weight
+      if (u < cumWeight) {
+        // Draw from this component's Gaussian in absolute month space.
+        // Offset by half the block length so the block midpoint aligns with centerMonth.
+        const centerIdx = parseYearMonth(comp.centerMonth) - startIdx - Math.floor(BLOCK_MONTHS / 2)
+        monthIdx = Math.round(randomNormalBM(centerIdx, comp.stdMonths, rng))
+        break
       }
-      // Fallback: clamp center to valid range
-      return Math.max(0, Math.min(maxStart, Math.round(centerIdx)))
+    }
+
+    // Implicit uniform for remainder weight
+    if (monthIdx === null) {
+      monthIdx = Math.floor(rng() * (maxStart + 1))
+    }
+
+    if (monthIdx >= 0 && monthIdx <= maxStart) {
+      return monthIdx
     }
   }
 
-  // Implicit uniform for remainder weight
+  // Fallback after 100 failed attempts: uniform
   return Math.floor(rng() * (maxStart + 1))
 }
 
