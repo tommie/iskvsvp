@@ -1,0 +1,15 @@
+{
+  "presets": [
+    { "id": "uniform", "label": "Likformig",
+      "components": [] },
+    { "id": "gfc", "label": "GFC-viktad",
+      "components": [
+        { "weight": 0.4, "centerMonth": "2008-07", "stdMonths": 6 }] },
+    { "id": "covid", "label": "Covid-viktad",
+      "components": [
+        { "weight": 0.4, "centerMonth": "2020-03", "stdMonths": 4 }] },
+    { "id": "recent", "label": "Senaste 5 år",
+      "components": [
+        { "weight": 0.7, "centerMonth": "2022-01", "stdMonths": 18 }] }
+  ]
+}

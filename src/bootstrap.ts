@@ -10,8 +10,8 @@ export const BLOCK_MONTHS = 24
 
 export interface BootstrapComponent {
   weight: number
-  mean: number // Normalized time [0, 1]
-  std: number
+  centerMonth: string // "YYYY-MM", e.g. "2008-07"
+  stdMonths: number // standard deviation in months, e.g. 6
 }
 
 export interface BootstrapProfile {
@@ -25,6 +25,7 @@ export interface BootstrapPayload {
   nMonths: number
   profileComponents: BootstrapComponent[]
   assetOrder: string[] // ISINs in column order
+  startDate: string // "YYYY-MM" of first month in common range
 }
 
 interface FundIndexEntry {
@@ -186,6 +187,7 @@ export async function prepareBootstrapPayload(
     nMonths: commonMonths,
     profileComponents,
     assetOrder: fundEntries.map((e) => e.isin),
+    startDate: sortedDates[firstCommon]!,
   }
 }
 
@@ -202,6 +204,7 @@ export function sampleAnnualReturns(
   profileComponents: BootstrapComponent[],
   rng: () => number,
   yearsNeeded: number,
+  startDate: string,
 ): number[][] {
   const nAssets = returnMatrix[0]!.length
   const maxStart = nMonths - BLOCK_MONTHS
@@ -210,7 +213,7 @@ export function sampleAnnualReturns(
   // Process in 2-year chunks
   let yearsRemaining = yearsNeeded
   while (yearsRemaining > 0) {
-    const blockStart = sampleBlockStart(profileComponents, maxStart, rng)
+    const blockStart = sampleBlockStart(profileComponents, maxStart, rng, startDate)
 
     // Extract block of BLOCK_MONTHS consecutive months
     const monthsToUse = yearsRemaining >= 2 ? BLOCK_MONTHS : 12
@@ -244,36 +247,43 @@ export function sampleAnnualReturns(
 }
 
 /**
+ * Parse a "YYYY-MM" string into an absolute month index (year * 12 + (month - 1)).
+ */
+export function parseYearMonth(s: string): number {
+  const [y, m] = s.split('-').map(Number)
+  return y! * 12 + (m! - 1)
+}
+
+/**
  * Sample a block start index from the bootstrap profile distribution.
- * Components define P(block_start) in normalized time [0, 1].
+ * Component weights don't need to sum to 1; the remainder is implicit uniform.
  */
 function sampleBlockStart(
   components: BootstrapComponent[],
   maxStart: number,
   rng: () => number,
+  startDate: string,
 ): number {
-  // Select component by weight
   const u = rng()
   let cumWeight = 0
-  let selectedComponent = components[0]!
   for (const comp of components) {
     cumWeight += comp.weight
     if (u < cumWeight) {
-      selectedComponent = comp
-      break
+      // Draw from this component's Gaussian in absolute month space
+      const startIdx = parseYearMonth(startDate)
+      const centerIdx = parseYearMonth(comp.centerMonth) - startIdx
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const monthIdx = Math.round(randomNormalBM(centerIdx, comp.stdMonths, rng))
+        if (monthIdx >= 0 && monthIdx <= maxStart) {
+          return monthIdx
+        }
+      }
+      // Fallback: clamp center to valid range
+      return Math.max(0, Math.min(maxStart, Math.round(centerIdx)))
     }
   }
 
-  // Draw from selected Gaussian, retry if out of bounds
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const t = randomNormalBM(selectedComponent.mean, selectedComponent.std, rng)
-    const monthIdx = Math.round(t * maxStart)
-    if (monthIdx >= 0 && monthIdx <= maxStart) {
-      return monthIdx
-    }
-  }
-
-  // Fallback: uniform sample
+  // Implicit uniform for remainder weight
   return Math.floor(rng() * (maxStart + 1))
 }
 

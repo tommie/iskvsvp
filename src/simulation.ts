@@ -51,6 +51,7 @@ export function runSingleSimulation(
     bootstrapPayload.profileComponents,
     rng,
     params.yearsLater,
+    bootstrapPayload.startDate,
   )
 
   // Initialize asset positions
