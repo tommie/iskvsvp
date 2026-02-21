@@ -114,6 +114,100 @@
           "stdMonths": 6
         }
       ]
+    },
+    {
+      "id": "recession_25",
+      "label": "Alla recessioner +25%",
+      "components": [
+        {
+          "weight": 0.031,
+          "centerMonth": "2002-09",
+          "stdMonths": 12
+        },
+        {
+          "weight": 0.031,
+          "centerMonth": "2009-02",
+          "stdMonths": 12
+        },
+        {
+          "weight": 0.031,
+          "centerMonth": "2011-09",
+          "stdMonths": 6
+        },
+        {
+          "weight": 0.031,
+          "centerMonth": "2013-06",
+          "stdMonths": 3
+        },
+        {
+          "weight": 0.031,
+          "centerMonth": "2016-02",
+          "stdMonths": 4
+        },
+        {
+          "weight": 0.031,
+          "centerMonth": "2020-03",
+          "stdMonths": 3
+        },
+        {
+          "weight": 0.031,
+          "centerMonth": "2022-09",
+          "stdMonths": 6
+        },
+        {
+          "weight": 0.031,
+          "centerMonth": "2025-04",
+          "stdMonths": 6
+        }
+      ],
+      "allowPartial": true
+    },
+    {
+      "id": "recession_75",
+      "label": "Alla recessioner +75%",
+      "components": [
+        {
+          "weight": 0.094,
+          "centerMonth": "2002-09",
+          "stdMonths": 12
+        },
+        {
+          "weight": 0.094,
+          "centerMonth": "2009-02",
+          "stdMonths": 12
+        },
+        {
+          "weight": 0.094,
+          "centerMonth": "2011-09",
+          "stdMonths": 6
+        },
+        {
+          "weight": 0.094,
+          "centerMonth": "2013-06",
+          "stdMonths": 3
+        },
+        {
+          "weight": 0.094,
+          "centerMonth": "2016-02",
+          "stdMonths": 4
+        },
+        {
+          "weight": 0.094,
+          "centerMonth": "2020-03",
+          "stdMonths": 3
+        },
+        {
+          "weight": 0.094,
+          "centerMonth": "2022-09",
+          "stdMonths": 6
+        },
+        {
+          "weight": 0.094,
+          "centerMonth": "2025-04",
+          "stdMonths": 6
+        }
+      ],
+      "allowPartial": true
     }
   ]
 }

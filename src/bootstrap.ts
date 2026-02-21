@@ -18,6 +18,7 @@ export interface BootstrapProfile {
   id: string
   label: string
   components: BootstrapComponent[]
+  allowPartial?: boolean // If true, skip date range filtering (out-of-range components handled by retry)
 }
 
 export interface BootstrapPayload {
@@ -109,7 +110,7 @@ export function filterProfilesByDateRange(
   const startIdx = parseYearMonth(startDate)
   const maxStart = nMonths - BLOCK_MONTHS
   return profiles.filter((p) => {
-    if (p.components.length === 0) return true
+    if (p.components.length === 0 || p.allowPartial) return true
     return p.components.every((c) => {
       const centerIdx = parseYearMonth(c.centerMonth) - startIdx - Math.floor(BLOCK_MONTHS / 2)
       return centerIdx >= 0 && centerIdx <= maxStart

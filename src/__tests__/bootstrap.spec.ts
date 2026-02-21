@@ -308,6 +308,20 @@ describe('filterProfilesByDateRange', () => {
     const result = filterProfilesByDateRange(profiles, '2010-01', 60)
     expect(result.map((p) => p.id)).not.toContain('late')
   })
+
+  it('includes allowPartial profiles even when some components are out of range', () => {
+    const mixed: BootstrapProfile[] = [
+      {
+        id: 'combo', label: 'Combo', allowPartial: true,
+        components: [
+          { weight: 0.03, centerMonth: '2005-01', stdMonths: 6 }, // out of range
+          { weight: 0.03, centerMonth: '2015-06', stdMonths: 4 }, // in range
+        ],
+      },
+    ]
+    const result = filterProfilesByDateRange(mixed, '2010-01', 120)
+    expect(result.map((p) => p.id)).toContain('combo')
+  })
 })
 
 describe('getCommonDateRange', () => {
