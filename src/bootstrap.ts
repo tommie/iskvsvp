@@ -149,31 +149,19 @@ export async function prepareBootstrapPayload(
   }
   const sortedDates = [...allDates].sort()
 
-  // Find contiguous range where all funds have data
-  let firstCommon = -1
-  let lastCommon = -1
+  // Find dates where all funds have data
+  const commonDates = sortedDates.filter((date) => dateMaps.every((m) => m.has(date)))
 
-  for (let i = 0; i < sortedDates.length; i++) {
-    const date = sortedDates[i]!
-    const allHaveData = dateMaps.every((m) => m.has(date))
-    if (allHaveData) {
-      if (firstCommon === -1) firstCommon = i
-      lastCommon = i
-    }
-  }
-
-  const commonMonths = firstCommon === -1 ? 0 : lastCommon - firstCommon + 1
-  if (commonMonths < BLOCK_MONTHS) {
+  if (commonDates.length < BLOCK_MONTHS) {
     warnings.push(
-      `Otillräcklig gemensam historik (${commonMonths} månader, behöver ${BLOCK_MONTHS})`,
+      `Otillräcklig gemensam historik (${commonDates.length} månader, behöver ${BLOCK_MONTHS})`,
     )
     return { warnings }
   }
 
-  // Build dense return matrix for common period
+  // Build dense return matrix for common dates
   const returnMatrix: number[][] = []
-  for (let i = firstCommon; i <= lastCommon; i++) {
-    const date = sortedDates[i]!
+  for (const date of commonDates) {
     const row: number[] = []
     for (let a = 0; a < monthlyDataArr.length; a++) {
       const idx = dateMaps[a]!.get(date)!
@@ -184,10 +172,10 @@ export async function prepareBootstrapPayload(
 
   return {
     returnMatrix,
-    nMonths: commonMonths,
+    nMonths: commonDates.length,
     profileComponents,
     assetOrder: fundEntries.map((e) => e.isin),
-    startDate: sortedDates[firstCommon]!,
+    startDate: commonDates[0]!,
   }
 }
 
@@ -272,7 +260,7 @@ function sampleBlockStart(
  * Box-Muller normal random variate.
  */
 function randomNormalBM(mean: number, std: number, rng: () => number): number {
-  const u1 = rng()
+  const u1 = rng() || Number.MIN_VALUE
   const u2 = rng()
   const z = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2)
   return mean + z * std

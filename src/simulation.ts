@@ -22,7 +22,7 @@ const ISK_TAX_RATE_MIN = 0.0125
  * Generate a random number from a normal distribution using Box-Muller transform.
  */
 function randomNormal(mean: number, stdDev: number, rng: () => number): number {
-  const u1 = rng()
+  const u1 = rng() || Number.MIN_VALUE
   const u2 = rng()
   const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2)
   return mean + z0 * stdDev
@@ -278,14 +278,16 @@ export function runSingleSimulation(
       tax = fundTax + withdrawalTax + rebalancingTax
     }
 
-    tax = Math.min(Math.max(0, tax), amount)
+    tax = Math.min(Math.max(0, tax), Math.max(0, amount))
 
     // Pay tax
-    for (const position of assetPositions) {
-      const taxFraction = tax / amount
-      const taxFromAsset = position.value * taxFraction
-      position.value -= taxFromAsset
-      position.costBasis *= 1 - taxFraction
+    if (tax > 0 && amount > 0) {
+      for (const position of assetPositions) {
+        const taxFraction = tax / amount
+        const taxFromAsset = position.value * taxFraction
+        position.value -= taxFromAsset
+        position.costBasis *= 1 - taxFraction
+      }
     }
 
     amount = assetPositions.reduce((sum, pos) => sum + pos.value, 0)

@@ -29,6 +29,8 @@ const firstWithdrawalPeriod = computed(() => {
   return depositYears.value
 })
 
+const withdrawalYears = computed(() => Math.max(1, yearsLater.value - depositYears.value))
+
 const COLORS = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
 
 // Helper to get a value from statistics for a specific scenario and percentile
@@ -379,22 +381,22 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
               <th scope="row">{{ label }}</th>
               <td :style="getCellStyle('percentile10', idx, 'withdrawalRealSnapshot', true)">
                 {{
-                  formatNumber(getValue(idx, 'percentile10', 'withdrawalRealSnapshot') / yearsLater)
+                  formatNumber(getValue(idx, 'percentile10', 'withdrawalRealSnapshot') / withdrawalYears)
                 }}
               </td>
               <td :style="getCellStyle('median', idx, 'withdrawalRealSnapshot', true)">
-                {{ formatNumber(getValue(idx, 'median', 'withdrawalRealSnapshot') / yearsLater) }}
+                {{ formatNumber(getValue(idx, 'median', 'withdrawalRealSnapshot') / withdrawalYears) }}
               </td>
               <td :style="getCellStyle('percentile90', idx, 'withdrawalRealSnapshot', true)">
                 {{
-                  formatNumber(getValue(idx, 'percentile90', 'withdrawalRealSnapshot') / yearsLater)
+                  formatNumber(getValue(idx, 'percentile90', 'withdrawalRealSnapshot') / withdrawalYears)
                 }}
               </td>
               <td v-if="showDetailedStatistics">
-                {{ formatNumber(getValue(idx, 'mean', 'withdrawalRealSnapshot') / yearsLater) }}
+                {{ formatNumber(getValue(idx, 'mean', 'withdrawalRealSnapshot') / withdrawalYears) }}
               </td>
               <td v-if="showDetailedStatistics">
-                {{ formatNumber(getValue(idx, 'stdDev', 'withdrawalRealSnapshot') / yearsLater) }}
+                {{ formatNumber(getValue(idx, 'stdDev', 'withdrawalRealSnapshot') / withdrawalYears) }}
               </td>
             </tr>
           </template>
