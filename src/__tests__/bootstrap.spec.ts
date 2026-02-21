@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { alea } from 'seedrandom'
 import { sampleAnnualReturns, prepareBootstrapPayload } from '../bootstrap'
-import type { GmmComponent, BootstrapData, BootstrapPayload } from '../bootstrap'
+import type { GmmComponent, BootstrapPayload } from '../bootstrap'
 
 describe('sampleAnnualReturns', () => {
   // Build a simple return matrix: 60 months, 2 assets
@@ -99,43 +99,85 @@ describe('sampleAnnualReturns', () => {
 })
 
 describe('prepareBootstrapPayload', () => {
-  const bootstrapData: BootstrapData = {
+  const gmmComponents: GmmComponent[] = [{ weight: 1.0, mean: 0.5, std: 0.29 }]
+
+  // Mock per-fund monthly data
+  const fundAData = {
+    isin: 'SE0001',
+    name: 'Fund A',
     dates: Array.from({ length: 60 }, (_, i) => {
       const year = 2015 + Math.floor(i / 12)
       const month = (i % 12) + 1
       return `${year}-${String(month).padStart(2, '0')}`
     }),
-    funds: {
-      SE0001: { name: 'Fund A', returns: Array.from({ length: 60 }, () => 0.01) },
-      SE0002: { name: 'Fund B', returns: Array.from({ length: 60 }, () => 0.02) },
-      SE0003: {
-        name: 'Fund C',
-        returns: [
-          // Only available from month 30 onward
-          ...Array.from({ length: 30 }, () => null),
-          ...Array.from({ length: 30 }, () => 0.015),
-        ],
-      },
-    },
+    returns: Array.from({ length: 60 }, () => 0.01),
+  }
+
+  const fundBData = {
+    isin: 'SE0002',
+    name: 'Fund B',
+    dates: Array.from({ length: 60 }, (_, i) => {
+      const year = 2015 + Math.floor(i / 12)
+      const month = (i % 12) + 1
+      return `${year}-${String(month).padStart(2, '0')}`
+    }),
+    returns: Array.from({ length: 60 }, () => 0.02),
+  }
+
+  // Fund C only has data from month 30 onward
+  const fundCData = {
+    isin: 'SE0003',
+    name: 'Fund C',
+    dates: Array.from({ length: 30 }, (_, i) => {
+      const totalMonth = 30 + i
+      const year = 2015 + Math.floor(totalMonth / 12)
+      const month = (totalMonth % 12) + 1
+      return `${year}-${String(month).padStart(2, '0')}`
+    }),
+    returns: Array.from({ length: 30 }, () => 0.015),
   }
 
   const fundsDb = {
     funds: [
-      { name: 'Fund A', isin: 'SE0001', category: 'global' },
-      { name: 'Fund B', isin: 'SE0002', category: 'global' },
-      { name: 'Fund C', isin: 'SE0003', category: 'global' },
+      {
+        isin: 'SE0001',
+        name: 'Fund A',
+        category: 'global',
+        monthly_file: 'global/fund_se0001_monthly.json',
+      },
+      {
+        isin: 'SE0002',
+        name: 'Fund B',
+        category: 'global',
+        monthly_file: 'global/fund_se0002_monthly.json',
+      },
+      {
+        isin: 'SE0003',
+        name: 'Fund C',
+        category: 'global',
+        monthly_file: 'global/fund_se0003_monthly.json',
+      },
     ],
   }
 
-  const gmmComponents: GmmComponent[] = [{ weight: 1.0, mean: 0.5, std: 0.29 }]
+  beforeEach(() => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) => {
+      const urlStr = typeof url === 'string' ? url : url.toString()
+      const dataMap: Record<string, unknown> = {
+        '/data/global/fund_se0001_monthly.json': fundAData,
+        '/data/global/fund_se0002_monthly.json': fundBData,
+        '/data/global/fund_se0003_monthly.json': fundCData,
+      }
+      const data = dataMap[urlStr]
+      if (data) {
+        return new Response(JSON.stringify(data), { status: 200 })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+  })
 
-  it('builds a dense return matrix for assets with full overlap', () => {
-    const result = prepareBootstrapPayload(
-      ['Fund A', 'Fund B'],
-      fundsDb,
-      bootstrapData,
-      gmmComponents,
-    )
+  it('builds a dense return matrix for assets with full overlap', async () => {
+    const result = await prepareBootstrapPayload(['Fund A', 'Fund B'], fundsDb, gmmComponents)
     expect('warnings' in result).toBe(false)
 
     const payload = result as BootstrapPayload
@@ -145,13 +187,8 @@ describe('prepareBootstrapPayload', () => {
     expect(payload.assetOrder).toEqual(['SE0001', 'SE0002'])
   })
 
-  it('restricts to common date range when one fund starts later', () => {
-    const result = prepareBootstrapPayload(
-      ['Fund A', 'Fund C'],
-      fundsDb,
-      bootstrapData,
-      gmmComponents,
-    )
+  it('restricts to common date range when one fund starts later', async () => {
+    const result = await prepareBootstrapPayload(['Fund A', 'Fund C'], fundsDb, gmmComponents)
     expect('warnings' in result).toBe(false)
 
     const payload = result as BootstrapPayload
@@ -160,37 +197,47 @@ describe('prepareBootstrapPayload', () => {
     expect(payload.returnMatrix).toHaveLength(30)
   })
 
-  it('returns warning for unknown asset', () => {
-    const result = prepareBootstrapPayload(
-      ['Fund A', 'Unknown Fund'],
-      fundsDb,
-      bootstrapData,
-      gmmComponents,
-    )
+  it('returns warning for unknown asset', async () => {
+    const result = await prepareBootstrapPayload(['Fund A', 'Unknown Fund'], fundsDb, gmmComponents)
     expect('warnings' in result).toBe(true)
     const warnings = (result as { warnings: string[] }).warnings
     expect(warnings[0]).toContain('Unknown Fund')
   })
 
-  it('returns warning when common period is too short', () => {
-    const shortData: BootstrapData = {
+  it('returns warning when common period is too short', async () => {
+    // Fund D has only 10 months of data
+    const fundDData = {
+      isin: 'SE0004',
+      name: 'Fund D',
       dates: Array.from({ length: 10 }, (_, i) => `2020-${String(i + 1).padStart(2, '0')}`),
-      funds: {
-        SE0001: { name: 'Fund A', returns: Array.from({ length: 10 }, () => 0.01) },
-      },
+      returns: Array.from({ length: 10 }, () => 0.01),
     }
-    const result = prepareBootstrapPayload(['Fund A'], fundsDb, shortData, gmmComponents)
+    const shortFundsDb = {
+      funds: [
+        {
+          isin: 'SE0004',
+          name: 'Fund D',
+          category: 'global',
+          monthly_file: 'global/fund_se0004_monthly.json',
+        },
+      ],
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      return new Response(JSON.stringify(fundDData), { status: 200 })
+    })
+
+    const result = await prepareBootstrapPayload(['Fund D'], shortFundsDb, gmmComponents)
     expect('warnings' in result).toBe(true)
     const warnings = (result as { warnings: string[] }).warnings
     expect(warnings[0]).toContain('Otillräcklig')
   })
 
-  it('passes through GMM components', () => {
+  it('passes through GMM components', async () => {
     const customGmm: GmmComponent[] = [
       { weight: 0.6, mean: 0.3, std: 0.1 },
       { weight: 0.4, mean: 0.8, std: 0.05 },
     ]
-    const result = prepareBootstrapPayload(['Fund A'], fundsDb, bootstrapData, customGmm)
+    const result = await prepareBootstrapPayload(['Fund A'], fundsDb, customGmm)
     expect('warnings' in result).toBe(false)
     const payload = result as BootstrapPayload
     expect(payload.gmmComponents).toEqual(customGmm)

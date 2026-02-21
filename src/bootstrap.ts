@@ -20,11 +20,6 @@ export interface GmmPreset {
   components: GmmComponent[]
 }
 
-export interface BootstrapData {
-  dates: string[]
-  funds: Record<string, { name: string; returns: (number | null)[] }>
-}
-
 export interface BootstrapPayload {
   returnMatrix: number[][] // [monthIdx][assetIdx]
   nMonths: number
@@ -32,112 +27,165 @@ export interface BootstrapPayload {
   assetOrder: string[] // ISINs in column order
 }
 
-interface FundsDb {
-  funds: Array<{ name: string; isin: string; category: string }>
+interface FundIndexEntry {
+  isin: string
+  name: string
+  category: string
+  monthly_file: string
 }
 
-let cachedBootstrapData: BootstrapData | null = null
+interface FundMonthlyData {
+  isin: string
+  name: string
+  dates: string[] // "YYYY-MM" format, only months with data
+  returns: number[]
+}
+
+interface FundsDb {
+  funds: FundIndexEntry[]
+}
+
 let cachedGmmPresets: GmmPreset[] | null = null
+let cachedFundsDb: FundsDb | null = null
+const cachedMonthlyData = new Map<string, FundMonthlyData>()
 
 /**
- * Fetch and cache fund-returns.json and gmm-presets.json.
+ * Fetch and cache GMM presets and fund index.
  */
 export async function loadBootstrapData(): Promise<{
-  bootstrapData: BootstrapData
+  fundsDb: FundsDb
   gmmPresets: GmmPreset[]
 }> {
-  if (cachedBootstrapData && cachedGmmPresets) {
-    return { bootstrapData: cachedBootstrapData, gmmPresets: cachedGmmPresets }
+  if (cachedFundsDb && cachedGmmPresets) {
+    return { fundsDb: cachedFundsDb, gmmPresets: cachedGmmPresets }
   }
 
-  const [returnsResp, presetsResp] = await Promise.all([
-    fetch('/fund-returns.json'),
+  const [fundsResp, presetsResp] = await Promise.all([
+    fetch('/data/index.json'),
     fetch('/gmm-presets.json'),
   ])
 
-  if (!returnsResp.ok) {
-    throw new Error(`Failed to load fund-returns.json: ${returnsResp.status}`)
+  if (!fundsResp.ok) {
+    throw new Error(`Failed to load data/index.json: ${fundsResp.status}`)
   }
   if (!presetsResp.ok) {
     throw new Error(`Failed to load gmm-presets.json: ${presetsResp.status}`)
   }
 
-  cachedBootstrapData = (await returnsResp.json()) as BootstrapData
+  cachedFundsDb = (await fundsResp.json()) as FundsDb
   const presetsJson = (await presetsResp.json()) as { presets: GmmPreset[] }
   cachedGmmPresets = presetsJson.presets
 
-  return { bootstrapData: cachedBootstrapData, gmmPresets: cachedGmmPresets }
+  return { fundsDb: cachedFundsDb, gmmPresets: cachedGmmPresets }
+}
+
+/**
+ * Fetch a fund's monthly return data, with caching.
+ */
+async function fetchMonthlyData(monthlyFile: string): Promise<FundMonthlyData> {
+  const cached = cachedMonthlyData.get(monthlyFile)
+  if (cached) return cached
+
+  const resp = await fetch(`/data/${monthlyFile}`)
+  if (!resp.ok) {
+    throw new Error(`Failed to load ${monthlyFile}: ${resp.status}`)
+  }
+  const data = (await resp.json()) as FundMonthlyData
+  cachedMonthlyData.set(monthlyFile, data)
+  return data
 }
 
 /**
  * Prepare a bootstrap payload for the simulation worker.
  *
- * Maps asset names to ISINs via funds.json, finds the common date range
- * where all assets have return data, and builds a dense return matrix.
+ * Looks up each asset in the fund index, fetches per-fund monthly files,
+ * finds the common date range, and builds a dense return matrix.
  */
-export function prepareBootstrapPayload(
+export async function prepareBootstrapPayload(
   assetNames: string[],
   fundsDb: FundsDb,
-  bootstrapData: BootstrapData,
   gmmComponents: GmmComponent[],
-): BootstrapPayload | { warnings: string[] } {
+): Promise<BootstrapPayload | { warnings: string[] }> {
   const warnings: string[] = []
-  const isins: string[] = []
+  const fundEntries: FundIndexEntry[] = []
 
-  // Map asset names → ISINs
+  // Map asset names → fund index entries
   for (const name of assetNames) {
-    const fund = fundsDb.funds.find((f) => f.name === name)
-    if (!fund) {
+    const entry = fundsDb.funds.find((f) => f.name === name)
+    if (!entry) {
       warnings.push(`${name}: saknas i fonddatabasen`)
       return { warnings }
     }
-    if (!bootstrapData.funds[fund.isin]) {
+    if (!entry.monthly_file) {
       warnings.push(`${name}: saknar historisk prisdata`)
       return { warnings }
     }
-    isins.push(fund.isin)
+    fundEntries.push(entry)
   }
 
-  // Find common date range where all assets have non-null returns
-  const nDates = bootstrapData.dates.length
-  const returnArrays = isins.map((isin) => bootstrapData.funds[isin]!.returns)
+  // Fetch all per-fund monthly files in parallel
+  let monthlyDataArr: FundMonthlyData[]
+  try {
+    monthlyDataArr = await Promise.all(fundEntries.map((e) => fetchMonthlyData(e.monthly_file)))
+  } catch (e) {
+    warnings.push(`Kunde inte ladda historisk data: ${e instanceof Error ? e.message : String(e)}`)
+    return { warnings }
+  }
 
-  // Find first and last month where ALL assets have data
+  // Build date→index maps for each fund
+  const dateMaps = monthlyDataArr.map((md) => {
+    const map = new Map<string, number>()
+    md.dates.forEach((d, i) => map.set(d, i))
+    return map
+  })
+
+  // Collect all unique dates across all funds, sorted
+  const allDates = new Set<string>()
+  for (const md of monthlyDataArr) {
+    for (const d of md.dates) {
+      allDates.add(d)
+    }
+  }
+  const sortedDates = [...allDates].sort()
+
+  // Find contiguous range where all funds have data
   let firstCommon = -1
   let lastCommon = -1
 
-  for (let i = 0; i < nDates; i++) {
-    const allHaveData = returnArrays.every((r) => r[i] != null)
+  for (let i = 0; i < sortedDates.length; i++) {
+    const date = sortedDates[i]!
+    const allHaveData = dateMaps.every((m) => m.has(date))
     if (allHaveData) {
       if (firstCommon === -1) firstCommon = i
       lastCommon = i
     }
   }
 
-  if (firstCommon === -1 || lastCommon - firstCommon + 1 < BLOCK_MONTHS) {
+  const commonMonths = firstCommon === -1 ? 0 : lastCommon - firstCommon + 1
+  if (commonMonths < BLOCK_MONTHS) {
     warnings.push(
-      `Otillräcklig gemensam historik (${lastCommon - firstCommon + 1} månader, behöver ${BLOCK_MONTHS})`,
+      `Otillräcklig gemensam historik (${commonMonths} månader, behöver ${BLOCK_MONTHS})`,
     )
     return { warnings }
   }
 
   // Build dense return matrix for common period
-  const nMonths = lastCommon - firstCommon + 1
   const returnMatrix: number[][] = []
-
   for (let i = firstCommon; i <= lastCommon; i++) {
+    const date = sortedDates[i]!
     const row: number[] = []
-    for (const returns of returnArrays) {
-      row.push(returns[i] as number)
+    for (let a = 0; a < monthlyDataArr.length; a++) {
+      const idx = dateMaps[a]!.get(date)!
+      row.push(monthlyDataArr[a]!.returns[idx]!)
     }
     returnMatrix.push(row)
   }
 
   return {
     returnMatrix,
-    nMonths,
+    nMonths: commonMonths,
     gmmComponents,
-    assetOrder: isins,
+    assetOrder: fundEntries.map((e) => e.isin),
   }
 }
 

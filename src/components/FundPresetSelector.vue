@@ -13,9 +13,14 @@ interface FundData {
   r_squared: number
 }
 
+interface CorrelationsData {
+  isins: string[]
+  correlations: number[][]
+}
+
 interface FundDatabase {
   funds: FundData[]
-  correlations: number[][]
+  correlations: number[][] // Loaded separately from correlations.json
 }
 
 interface GroupedFund {
@@ -58,14 +63,25 @@ const categoryNames: Record<string, string> = {
   usa: 'USA',
 }
 
-// Load fund data on mount
+// Load fund data and correlations on mount
 onMounted(async () => {
   try {
-    const response = await fetch('/funds.json')
-    if (!response.ok) {
+    const [fundsResp, corrResp] = await Promise.all([
+      fetch('/data/index.json'),
+      fetch('/data/correlations.json'),
+    ])
+    if (!fundsResp.ok) {
       throw new Error('Failed to load fund database')
     }
-    fundDatabase.value = await response.json()
+    if (!corrResp.ok) {
+      throw new Error('Failed to load correlations')
+    }
+    const fundsJson = await fundsResp.json()
+    const corrJson: CorrelationsData = await corrResp.json()
+    fundDatabase.value = {
+      funds: fundsJson.funds,
+      correlations: corrJson.correlations,
+    }
     emit('loaded')
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Unknown error'

@@ -28,6 +28,7 @@ src/
 ├── stores/
 │   ├── calculator.ts            - Main simulation state and parameters
 │   └── history.ts               - Simulation history with localStorage
+├── bootstrap.ts                 - Block bootstrap with GMM-weighted period sampling
 ├── simulation.ts                - Monte Carlo simulation logic
 ├── types.ts                     - TypeScript interfaces
 └── utils/
@@ -37,7 +38,7 @@ src/
 ### Key Components
 
 **FundPresetSelector.vue**
-- Loads fund database from `/funds.json` (not tracked in git)
+- Loads fund database from `/data/index.json` and correlations from `/data/correlations.json`
 - Groups funds by category with Swedish translations (search: `categoryNames`)
 - Exposes `getCorrelation(index1, index2)` and `getFundIndexByName(name)` methods
 - Emits `select` event with fund data and `loaded` event when database ready
@@ -63,10 +64,12 @@ src/
 
 ### Fund Database
 
-- External file: `public/funds.json` (gitignored)
-- Structure: `{ funds: FundData[], correlations: number[][] }`
+- Symlinked from fundcmp: `public/data` → `fundcmp/data/export/`
+- Fund index: `/data/index.json` — `{ funds: FundData[] }` with `monthly_file` paths
+- Correlations: `/data/correlations.json` — `{ isins: string[], correlations: number[][] }`
+- Per-fund monthly returns: `/data/{category}/fund_{isin}_monthly.json`
 - Correlations are lower triangular: `correlations[i][j]` where `i > j`
-- Fund properties: isin, name, category, mu (%), sigma (%), alpha, beta, r_squared
+- Fund properties: isin, name, category, monthly_file, mu (%), sigma (%), alpha, beta, r_squared
 
 ### Correlation Matrix
 
@@ -103,7 +106,7 @@ npm run build   # Build for production
 npm run type-check  # TypeScript checking
 ```
 
-Note: Place fund database at `public/funds.json` before running.
+Note: Symlink `public/data` to the fundcmp export directory before running.
 
 ## Commit Message Style
 

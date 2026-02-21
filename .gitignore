@@ -35,10 +35,8 @@ coverage
 # Vitest
 __screenshots__/
 
-# Fund database and factor model data (external data)
+# External data (symlinked from fundcmp)
 public/data
-public/funds.json
 public/fund-factors.json
 public/factor-presets.json
-public/fund-returns.json
 public/gmm-presets.json

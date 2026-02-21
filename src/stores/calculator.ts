@@ -522,20 +522,13 @@ export const useCalculatorStore = defineStore('calculator', () => {
       const effectiveGmmPresetId = paramSets[0]?.gmmPresetId ?? gmmPresetId.value
       if (effectiveGmmPresetId) {
         try {
-          const { bootstrapData, gmmPresets } = await loadBootstrapData()
-          const { fundsDb } = await loadStressData()
+          const { fundsDb, gmmPresets } = await loadBootstrapData()
           const preset = gmmPresets.find((p) => p.id === effectiveGmmPresetId)
           if (preset) {
             const assetNames = paramSets[0]!.assets.map((a) => a.name)
-            const result = prepareBootstrapPayload(
-              assetNames,
-              fundsDb,
-              bootstrapData,
-              preset.components,
-            )
+            const result = await prepareBootstrapPayload(assetNames, fundsDb, preset.components)
             if ('warnings' in result) {
               gmmWarning.value = result.warnings.join('; ')
-              // Fall back to Gaussian (no bootstrap payload sent)
             } else {
               bootstrapPayload = result
             }

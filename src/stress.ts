@@ -28,7 +28,7 @@ let cachedFactorData: FactorData | null = null
 let cachedFundsDb: FundsDb | null = null
 
 /**
- * Load and cache stress test data (factor-presets.json, fund-factors.json, funds.json).
+ * Load and cache stress test data (factor-presets.json, fund-factors.json, data/index.json).
  */
 export async function loadStressData(): Promise<{
   presets: StressPreset[]
@@ -42,7 +42,7 @@ export async function loadStressData(): Promise<{
   const [presetsResp, factorsResp, fundsResp] = await Promise.all([
     fetch('/factor-presets.json'),
     fetch('/fund-factors.json'),
-    fetch('/funds.json'),
+    fetch('/data/index.json'),
   ])
 
   const presetsJson = await presetsResp.json()
