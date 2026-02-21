@@ -111,9 +111,9 @@ export interface SimulationResults {
   outcomeProbabilities: OutcomeProbabilities[]
 }
 
-// Asset property parameter format: "assets.expectedReturn.0", "assets.volatility.1", etc.
-export type AssetPropertyParameter =
-  `assets.${'expectedReturn' | 'volatility' | 'weight'}.${number}`
+// Asset property parameter format: "assets.weight.0", etc.
+// expectedReturn and volatility are from the fund database and not user-editable.
+export type AssetPropertyParameter = `assets.${'weight'}.${number}`
 
 // Mapped type for asset properties
 type AssetProperties = {
@@ -138,18 +138,18 @@ export type ScenarioParameter =
 
 // Helper to check if a parameter is an asset property
 export function isAssetPropertyParameter(param: string): param is AssetPropertyParameter {
-  return /^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)
+  return /^assets\.weight\.\d+$/.test(param)
 }
 
 // Helper to parse asset property parameter
 export function parseAssetPropertyParameter(param: AssetPropertyParameter): {
   index: number
-  property: 'expectedReturn' | 'volatility' | 'weight'
+  property: 'weight'
 } | null {
-  const match = param.match(/^assets\.(expectedReturn|volatility|weight)\.(\d+)$/)
+  const match = param.match(/^assets\.weight\.(\d+)$/)
   if (!match) return null
   return {
-    property: match[1]! as 'expectedReturn' | 'volatility' | 'weight',
-    index: parseInt(match[2]!, 10),
+    property: 'weight',
+    index: parseInt(match[1]!, 10),
   }
 }

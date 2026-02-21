@@ -303,57 +303,6 @@ const normalizeWeights = () => {
 }
 
 /**
- * Calculate expected portfolio return (weighted average)
- */
-const expectedPortfolioReturn = computed(() => {
-  return assets.value.reduce((sum, asset) => sum + asset.weight * asset.expectedReturn, 0)
-})
-
-/**
- * Calculate portfolio volatility accounting for correlations.
- * σ_p = sqrt(Σᵢ Σⱼ wᵢ wⱼ σᵢ σⱼ ρᵢⱼ)
- */
-const portfolioVolatility = computed(() => {
-  const n = assets.value.length
-  let variance = 0
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      const wi = assets.value[i]!.weight
-      const wj = assets.value[j]!.weight
-      const si = assets.value[i]!.volatility
-      const sj = assets.value[j]!.volatility
-      const rho = assetCorrelationMatrix.value[i]?.[j] ?? (i === j ? 1 : 0.5)
-      variance += wi * wj * si * sj * rho
-    }
-  }
-  return Math.sqrt(Math.max(0, variance))
-})
-
-/**
- * Calculate portfolio Sharpe ratio using inflation as the risk-free rate.
- */
-const portfolioSharpe = computed(() => {
-  const vol = portfolioVolatility.value
-  if (vol === 0) return 0
-  return (expectedPortfolioReturn.value - inflationRate.value) / vol
-})
-
-/**
- * Update a correlation matrix cell
- */
-const updateCorrelation = (i: number, j: number, value: string) => {
-  const numValue = parseFloat(value)
-
-  if (isNaN(numValue) || numValue < -1 || numValue > 1) {
-    return
-  }
-
-  // Update both symmetric positions
-  assetCorrelationMatrix.value[i]![j] = numValue
-  assetCorrelationMatrix.value[j]![i] = numValue
-}
-
-/**
  * Get correlation value for display (formatted)
  */
 const getCorrelation = (i: number, j: number): string => {
@@ -371,7 +320,8 @@ const getTargetValue = (event: Event) => {
 const expectedTotalWithdrawalRate = computed(() => {
   const b = balanceWithdrawalRate.value
   const p = profitWithdrawalRate.value
-  const d = expectedPortfolioReturn.value
+  // Use weighted average of fund database expected returns as growth estimate.
+  const d = assets.value.reduce((sum, asset) => sum + asset.weight * asset.expectedReturn, 0)
   const n = profitLookbackYears.value
 
   // Balance-based component
@@ -611,28 +561,17 @@ const expectedTotalWithdrawalRate = computed(() => {
                     <td>
                       <input
                         type="number"
-                        step="0.1"
-                        :class="
-                          'form-control-sm text-end ' +
-                          getInputClass(`assets.expectedReturn.${index}`)
-                        "
+                        class="form-control-sm text-end form-control-plaintext"
                         :value="(asset.expectedReturn * 100).toFixed(1)"
-                        @change="asset.expectedReturn = getTargetValue($event) / 100"
-                        @click="handleParameterClick(`assets.expectedReturn.${index}`, $event)"
-                        :disabled="isFieldDisabled(`assets.expectedReturn.${index}`)"
+                        disabled
                       />
                     </td>
                     <td>
                       <input
                         type="number"
-                        step="0.1"
-                        :class="
-                          'form-control-sm text-end ' + getInputClass(`assets.volatility.${index}`)
-                        "
+                        class="form-control-sm text-end form-control-plaintext"
                         :value="(asset.volatility * 100).toFixed(1)"
-                        @change="asset.volatility = getTargetValue($event) / 100"
-                        @click="handleParameterClick(`assets.volatility.${index}`, $event)"
-                        :disabled="isFieldDisabled(`assets.volatility.${index}`)"
+                        disabled
                       />
                     </td>
                     <td>
@@ -714,7 +653,7 @@ const expectedTotalWithdrawalRate = computed(() => {
             <div v-if="assets.length > 1" class="mt-3">
               <label class="form-label">Korrelationsmatris</label>
               <small class="form-text text-muted d-block mb-1">
-                Korrelationer mellan -1 och 1.
+                Från fonddatabasen. Används inte i simuleringen.
               </small>
               <div class="table-responsive">
                 <table class="table table-sm table-striped correlation-matrix-table">
@@ -736,32 +675,14 @@ const expectedTotalWithdrawalRate = computed(() => {
                         <input
                           v-else-if="i > j"
                           type="number"
-                          step="0.01"
-                          min="-1"
-                          max="1"
-                          class="form-control form-control-sm text-center"
+                          class="form-control form-control-sm text-center form-control-plaintext"
                           :value="getCorrelation(i, j)"
-                          @change="
-                            updateCorrelation(i, j, ($event.target as HTMLInputElement).value)
-                          "
-                          :disabled="isRunning"
+                          disabled
                         />
                       </td>
                     </tr>
                   </tbody>
                 </table>
-              </div>
-              <div class="portfolio-stats mt-2">
-                <label class="form-label d-block">Portföljstatistik</label>
-                <span>
-                  <strong>E[R]:</strong> {{ (expectedPortfolioReturn * 100).toFixed(1) }}%
-                </span>
-                <span class="ms-3">
-                  <strong>σ:</strong> {{ (portfolioVolatility * 100).toFixed(1) }}%
-                </span>
-                <span class="ms-3">
-                  <strong>Sharpe:</strong> {{ portfolioSharpe.toFixed(2) }}
-                </span>
               </div>
             </div>
           </div>
@@ -1095,11 +1016,6 @@ const expectedTotalWithdrawalRate = computed(() => {
 .correlation-matrix-table .diagonal-cell {
   font-weight: 500;
   padding: 0.5rem 0.25rem;
-}
-
-.portfolio-stats {
-  font-size: 0.875rem;
-  color: var(--bs-secondary-color);
 }
 
 /* Scenario table styling */

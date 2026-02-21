@@ -49,27 +49,18 @@ const parameterLabels: Record<string, string> = {
 }
 
 function getParameterLabel(param: string, truncate: boolean = false): string {
-  // Check if it's an asset property parameter
-  if (/^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)) {
-    const match = param.match(/^assets\.(expectedReturn|volatility|weight)\.(\d+)$/)
+  // Check if it's an asset weight parameter
+  if (/^assets\.weight\.\d+$/.test(param)) {
+    const match = param.match(/^assets\.weight\.(\d+)$/)
     if (match) {
-      const property = match[1]!
-      const index = parseInt(match[2]!, 10)
+      const index = parseInt(match[1]!, 10)
       const assetName = store.assets[index]?.name ?? `Tillgång ${index + 1}`
 
-      const propertyLabels: Record<string, string> = {
-        expectedReturn: 'Avkastning (%)',
-        volatility: 'Volatilitet (%)',
-        weight: 'Vikt',
-      }
-
-      const propertyLabel = propertyLabels[property] ?? property
-
       if (truncate && assetName.length > 16) {
-        return `${assetName.slice(0, 16)}…: ${propertyLabel}`
+        return `${assetName.slice(0, 16)}…: Vikt`
       }
 
-      return `${assetName}: ${propertyLabel}`
+      return `${assetName}: Vikt`
     }
   }
 
@@ -77,7 +68,7 @@ function getParameterLabel(param: string, truncate: boolean = false): string {
 }
 
 function isAssetParameter(param: string): boolean {
-  return /^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)
+  return /^assets\.weight\.\d+$/.test(param)
 }
 
 function formatValue(param: ScenarioParameter, value: ScenarioValue): string {
@@ -88,21 +79,10 @@ function formatValue(param: ScenarioParameter, value: ScenarioValue): string {
     return String(value)
   }
 
-  // Check if it's an asset property parameter
-  if (
-    typeof param === 'string' &&
-    /^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)
-  ) {
-    const match = param.match(/^assets\.(expectedReturn|volatility|weight)\.(\d+)$/)
-    if (match && typeof value === 'number') {
-      const property = match[1]!
-      if (property === 'expectedReturn' || property === 'volatility') {
-        // Percentages
-        return (value * 100).toFixed(2)
-      } else {
-        // Weight (plain number)
-        return String(value)
-      }
+  // Check if it's an asset weight parameter
+  if (typeof param === 'string' && /^assets\.weight\.\d+$/.test(param)) {
+    if (typeof value === 'number') {
+      return String(value)
     }
   }
 
@@ -135,22 +115,9 @@ function formatValue(param: ScenarioParameter, value: ScenarioValue): string {
 }
 
 function parseValue(param: ScenarioParameter, inputValue: string): ScenarioValue {
-  // Check if it's an asset property parameter
-  if (
-    typeof param === 'string' &&
-    /^assets\.(expectedReturn|volatility|weight)\.\d+$/.test(param)
-  ) {
-    const match = param.match(/^assets\.(expectedReturn|volatility|weight)\.(\d+)$/)
-    if (match) {
-      const property = match[1]!
-      if (property === 'expectedReturn' || property === 'volatility') {
-        // Percentages
-        return parseFloat(inputValue) / 100
-      } else {
-        // Weight (plain number)
-        return parseFloat(inputValue)
-      }
-    }
+  // Check if it's an asset weight parameter
+  if (typeof param === 'string' && /^assets\.weight\.\d+$/.test(param)) {
+    return parseFloat(inputValue)
   }
 
   // Parse percentages
