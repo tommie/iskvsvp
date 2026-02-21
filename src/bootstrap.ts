@@ -6,7 +6,7 @@
  * A bootstrap sampling profile over the time axis lets users weight certain historical periods.
  */
 
-export const BLOCK_MONTHS = 24
+export const BLOCK_MONTHS = 14
 
 export interface BootstrapComponent {
   weight: number
@@ -194,9 +194,10 @@ export async function prepareBootstrapPayload(
 /**
  * Sample annual returns using block bootstrap with profile-weighted period sampling.
  *
- * For each 2-year chunk, samples a block start from the bootstrap profile distribution
- * and extracts BLOCK_MONTHS consecutive months of historical returns,
- * then compounds them into annual returns.
+ * For each year, samples a block start from the bootstrap profile distribution
+ * and compounds 12 consecutive months of historical returns. The block length
+ * (BLOCK_MONTHS = 14) is intentionally non-aligned with calendar quarters to
+ * avoid aliasing with fund rebalances and quarterly reports.
  */
 export function sampleAnnualReturns(
   returnMatrix: number[][], // [monthIdx][assetIdx]
@@ -210,37 +211,17 @@ export function sampleAnnualReturns(
   const maxStart = nMonths - BLOCK_MONTHS
   const result: number[][] = []
 
-  // Process in 2-year chunks
-  let yearsRemaining = yearsNeeded
-  while (yearsRemaining > 0) {
+  for (let y = 0; y < yearsNeeded; y++) {
     const blockStart = sampleBlockStart(profileComponents, maxStart, rng, startDate)
 
-    // Extract block of BLOCK_MONTHS consecutive months
-    const monthsToUse = yearsRemaining >= 2 ? BLOCK_MONTHS : 12
-
-    // Compound months 0–11 → year 1
-    const year1Returns: number[] = new Array(nAssets).fill(1)
+    const yearReturns: number[] = new Array(nAssets).fill(1)
     for (let m = 0; m < 12; m++) {
       const row = returnMatrix[blockStart + m]!
       for (let a = 0; a < nAssets; a++) {
-        year1Returns[a]! *= 1 + row[a]!
+        yearReturns[a]! *= 1 + row[a]!
       }
     }
-    result.push(year1Returns.map((v) => v - 1))
-    yearsRemaining--
-
-    // Compound months 12–23 → year 2 (if needed)
-    if (yearsRemaining > 0 && monthsToUse === BLOCK_MONTHS) {
-      const year2Returns: number[] = new Array(nAssets).fill(1)
-      for (let m = 12; m < BLOCK_MONTHS; m++) {
-        const row = returnMatrix[blockStart + m]!
-        for (let a = 0; a < nAssets; a++) {
-          year2Returns[a]! *= 1 + row[a]!
-        }
-      }
-      result.push(year2Returns.map((v) => v - 1))
-      yearsRemaining--
-    }
+    result.push(yearReturns.map((v) => v - 1))
   }
 
   return result
