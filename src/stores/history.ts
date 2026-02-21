@@ -2,12 +2,40 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { InputParameters, SimulationResults } from '../types'
 
+export interface HistoryScenarioSummary {
+  label: string
+  totalValue: number
+  liquidValue: number
+  accumulatedRealWithdrawal: number
+  taxationDegree: number
+  maxDrawdown: number
+}
+
+export interface HistorySummary {
+  scenarios: HistoryScenarioSummary[]
+}
+
 export interface HistoryRecord {
   id: string
   timestamp: number
   title: string
   parameters: InputParameters
-  results: SimulationResults
+  summary: HistorySummary
+}
+
+function buildSummary(results: SimulationResults): HistorySummary {
+  const scenarios: HistoryScenarioSummary[] = results.statistics.map((stats, i) => {
+    const finalPeriod = stats.median.snapshots.liquidValue.length - 1
+    return {
+      label: results.labels[i] ?? '',
+      totalValue: stats.median.snapshots.totalValue[finalPeriod] ?? 0,
+      liquidValue: stats.median.snapshots.liquidValue[finalPeriod] ?? 0,
+      accumulatedRealWithdrawal: stats.median.snapshots.withdrawalReal[finalPeriod] ?? 0,
+      taxationDegree: stats.median.snapshots.taxationDegree[finalPeriod] ?? 0,
+      maxDrawdown: stats.median.snapshots.maxDrawdown[finalPeriod] ?? 0,
+    }
+  })
+  return { scenarios }
 }
 
 export const useHistoryStore = defineStore('history', () => {
@@ -19,7 +47,9 @@ export const useHistoryStore = defineStore('history', () => {
     try {
       const stored = localStorage.getItem('simulation-history')
       if (stored) {
-        records.value = JSON.parse(stored)
+        const parsed = JSON.parse(stored) as HistoryRecord[]
+        // Only keep records that have the summary field (drop legacy records with results)
+        records.value = parsed.filter((r) => r.summary)
       }
     } catch (e) {
       console.error('Failed to load history from localStorage:', e)
@@ -43,7 +73,7 @@ export const useHistoryStore = defineStore('history', () => {
       timestamp,
       title: new Date(timestamp).toLocaleString('sv-SE'),
       parameters,
-      results,
+      summary: buildSummary(results),
     }
 
     records.value.unshift(record)

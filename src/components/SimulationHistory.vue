@@ -51,17 +51,15 @@ const formatPercent = (value: number | undefined): string => {
 
 // Get the index of the winning scenario based on total value
 const getWinnerIndex = (record: HistoryRecord): number => {
-  if (!record.results || record.results.statistics.length === 0) return -1
-
-  const finalPeriod = record.results.statistics[0]!.median.snapshots.liquidValue.length - 1
+  const scenarios = record.summary?.scenarios
+  if (!scenarios || scenarios.length === 0) return -1
 
   let bestIdx = 0
-  let bestValue = record.results.statistics[0]!.median.snapshots.totalValue[finalPeriod] ?? 0
+  let bestValue = scenarios[0]!.totalValue
 
-  for (let i = 1; i < record.results.statistics.length; i++) {
-    const value = record.results.statistics[i]!.median.snapshots.totalValue[finalPeriod] ?? 0
-    if (value > bestValue) {
-      bestValue = value
+  for (let i = 1; i < scenarios.length; i++) {
+    if (scenarios[i]!.totalValue > bestValue) {
+      bestValue = scenarios[i]!.totalValue
       bestIdx = i
     }
   }
@@ -71,20 +69,18 @@ const getWinnerIndex = (record: HistoryRecord): number => {
 
 // Get the index of the second-best scenario based on total value
 const getSecondBestIndex = (record: HistoryRecord): number => {
-  if (!record.results || record.results.statistics.length < 2) return -1
-
-  const finalPeriod = record.results.statistics[0]!.median.snapshots.liquidValue.length - 1
+  const scenarios = record.summary?.scenarios
+  if (!scenarios || scenarios.length < 2) return -1
 
   const winnerIdx = getWinnerIndex(record)
 
   let secondBestIdx = -1
   let secondBestValue = -Infinity
 
-  for (let i = 0; i < record.results.statistics.length; i++) {
+  for (let i = 0; i < scenarios.length; i++) {
     if (i === winnerIdx) continue
-    const value = record.results.statistics[i]!.median.snapshots.totalValue[finalPeriod] ?? 0
-    if (value > secondBestValue) {
-      secondBestValue = value
+    if (scenarios[i]!.totalValue > secondBestValue) {
+      secondBestValue = scenarios[i]!.totalValue
       secondBestIdx = i
     }
   }
@@ -96,7 +92,7 @@ const getSecondBestIndex = (record: HistoryRecord): number => {
 const getWinnerLabel = (record: HistoryRecord): string => {
   const winnerIdx = getWinnerIndex(record)
   if (winnerIdx === -1) return 'N/A'
-  return record.results?.labels[winnerIdx] ?? 'N/A'
+  return record.summary.scenarios[winnerIdx]?.label ?? 'N/A'
 }
 
 // Get color for winner
@@ -108,43 +104,24 @@ const getWinnerColor = (record: HistoryRecord): string => {
 
 // Get other scenario labels (non-winners)
 const getOtherLabels = (record: HistoryRecord): string[] => {
-  if (!record.results) return []
+  const scenarios = record.summary?.scenarios
+  if (!scenarios) return []
   const winnerIdx = getWinnerIndex(record)
-  return record.results.labels.filter((_, idx) => idx !== winnerIdx)
+  return scenarios.filter((_, idx) => idx !== winnerIdx).map((s) => s.label)
 }
 
 // Get winner's statistics
 const getWinnerStats = (record: HistoryRecord) => {
   const winnerIdx = getWinnerIndex(record)
-  if (winnerIdx === -1 || !record.results) return null
-
-  const stats = record.results.statistics[winnerIdx]!
-  const finalPeriod = stats.median.snapshots.liquidValue.length - 1
-
-  return {
-    totalValue: stats.median.snapshots.totalValue[finalPeriod] ?? 0,
-    liquidValue: stats.median.snapshots.liquidValue[finalPeriod] ?? 0,
-    accumulatedRealWithdrawal: stats.median.snapshots.withdrawalReal[finalPeriod] ?? 0,
-    taxationDegree: stats.median.snapshots.taxationDegree[finalPeriod] ?? 0,
-    maxDrawdown: stats.median.snapshots.maxDrawdown[finalPeriod] ?? 0,
-  }
+  if (winnerIdx === -1) return null
+  return record.summary.scenarios[winnerIdx] ?? null
 }
 
 // Get second-best statistics
 const getSecondBestStats = (record: HistoryRecord) => {
   const secondBestIdx = getSecondBestIndex(record)
-  if (secondBestIdx === -1 || !record.results) return null
-
-  const stats = record.results.statistics[secondBestIdx]!
-  const finalPeriod = stats.median.snapshots.liquidValue.length - 1
-
-  return {
-    totalValue: stats.median.snapshots.totalValue[finalPeriod] ?? 0,
-    liquidValue: stats.median.snapshots.liquidValue[finalPeriod] ?? 0,
-    accumulatedRealWithdrawal: stats.median.snapshots.withdrawalReal[finalPeriod] ?? 0,
-    taxationDegree: stats.median.snapshots.taxationDegree[finalPeriod] ?? 0,
-    maxDrawdown: stats.median.snapshots.maxDrawdown[finalPeriod] ?? 0,
-  }
+  if (secondBestIdx === -1) return null
+  return record.summary.scenarios[secondBestIdx] ?? null
 }
 
 // Calculate percentage difference between winner and second-best
