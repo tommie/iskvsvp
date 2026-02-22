@@ -58,6 +58,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const profitWithdrawalRate = ref(0.15)
   const profitLookbackYears = ref(5)
   const inflationBasedWithdrawal = ref(0)
+  const amortizedWithdrawal = ref(false)
+  const bequestGoal = ref(0)
   const iskTaxRate = ref<number | undefined>(0.0296)
   const iskTaxRateStdDev = ref<number | undefined>(0.005)
   const inflationRate = ref(0.02)
@@ -324,6 +326,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
       profitWithdrawalRate: profitWithdrawalRate.value,
       profitLookbackYears: profitLookbackYears.value,
       inflationBasedWithdrawal: inflationBasedWithdrawal.value,
+      amortizedWithdrawal: amortizedWithdrawal.value,
+      bequestGoal: bequestGoal.value,
       vpWealthTaxRate: vpFundTaxRate.value,
       capitalGainsTaxRate: capitalGainsTax.value,
       iskTaxRate: iskTaxRate.value,
@@ -353,6 +357,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
     profitWithdrawalRate: profitWithdrawalRate.value,
     profitLookbackYears: profitLookbackYears.value,
     inflationBasedWithdrawal: inflationBasedWithdrawal.value,
+    amortizedWithdrawal: amortizedWithdrawal.value,
+    bequestGoal: bequestGoal.value,
     vpWealthTaxRate: vpFundTaxRate.value,
     capitalGainsTaxRate: capitalGainsTax.value,
     inflationRate: inflationRate.value,
@@ -552,6 +558,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
     profitWithdrawalRate.value = params.profitWithdrawalRate
     profitLookbackYears.value = params.profitLookbackYears
     inflationBasedWithdrawal.value = params.inflationBasedWithdrawal
+    amortizedWithdrawal.value = params.amortizedWithdrawal ?? false
+    bequestGoal.value = params.bequestGoal ?? 0
     inflationRate.value = params.inflationRate
     inflationStdDev.value = params.inflationStdDev
     vpFundTaxRate.value = params.vpWealthTaxRate
@@ -615,6 +623,10 @@ export const useCalculatorStore = defineStore('calculator', () => {
                 profitLookbackYears.value = urlParams.profitLookbackYears
               if (urlParams.inflationBasedWithdrawal !== undefined)
                 inflationBasedWithdrawal.value = urlParams.inflationBasedWithdrawal
+              if (urlParams.amortizedWithdrawal !== undefined)
+                amortizedWithdrawal.value = urlParams.amortizedWithdrawal
+              if (urlParams.bequestGoal !== undefined)
+                bequestGoal.value = urlParams.bequestGoal
               if (urlParams.inflationRate !== undefined)
                 inflationRate.value = urlParams.inflationRate
               if (urlParams.inflationStdDev !== undefined)
@@ -658,6 +670,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
         profitWithdrawalRate,
         profitLookbackYears,
         inflationBasedWithdrawal,
+        amortizedWithdrawal,
+        bequestGoal,
         iskTaxRate,
         iskTaxRateStdDev,
         inflationRate,
@@ -713,6 +727,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
     profitWithdrawalRate,
     profitLookbackYears,
     inflationBasedWithdrawal,
+    amortizedWithdrawal,
+    bequestGoal,
     iskTaxRate,
     iskTaxRateStdDev,
     inflationRate,

@@ -19,6 +19,8 @@ const {
   profitWithdrawalRate,
   profitLookbackYears,
   inflationBasedWithdrawal,
+  amortizedWithdrawal,
+  bequestGoal,
   iskTaxRate,
   iskTaxRateStdDev,
   inflationRate,
@@ -347,6 +349,26 @@ const getTargetValue = (event: Event) => {
 }
 
 const expectedTotalWithdrawalRate = computed(() => {
+  if (amortizedWithdrawal.value) {
+    // PMT-based first-year rate
+    const withdrawalYears = yearsLater.value - depositYears.value
+    if (withdrawalYears <= 0 || initialCapital.value <= 0) return 0
+    const r =
+      assets.value.reduce((sum, asset) => sum + asset.weight * asset.expectedReturn, 0) -
+      inflationRate.value
+    const fv = bequestGoal.value * initialCapital.value
+    let amortized: number
+    if (Math.abs(r) < 1e-10) {
+      amortized = (initialCapital.value - fv) / withdrawalYears
+    } else {
+      const disc = Math.pow(1 + r, -withdrawalYears)
+      amortized = (r * (initialCapital.value - fv * disc)) / (1 - disc)
+    }
+    const floor = inflationBasedWithdrawal.value
+    const withdrawal = Math.max(floor, amortized)
+    return withdrawal / initialCapital.value
+  }
+
   const b = balanceWithdrawalRate.value
   const p = profitWithdrawalRate.value
   // Use weighted average of fund database expected returns as growth estimate.
@@ -453,7 +475,43 @@ const expectedTotalWithdrawalRate = computed(() => {
           <div class="param-section">
             <h5 class="section-title">Uttag (per år)</h5>
             <div class="row g-3">
-              <div class="col-12 col-md-6">
+              <div class="col-12">
+                <div class="form-check">
+                  <input
+                    type="checkbox"
+                    class="form-check-input"
+                    id="amortizedWithdrawal"
+                    v-model="amortizedWithdrawal"
+                    :disabled="isRunning"
+                  />
+                  <label class="form-check-label" for="amortizedWithdrawal">
+                    Amorteringsbaserat uttag (Mertons regel)
+                  </label>
+                </div>
+                <small class="form-text text-muted">
+                  Beräknar uttag med PMT-formeln baserat på återstående år och förväntad avkastning.
+                </small>
+              </div>
+              <div class="col-12 col-md-6" v-if="amortizedWithdrawal">
+                <label class="form-label">Arvsmål</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    max="100"
+                    class="form-control text-end"
+                    :value="(bequestGoal * 100).toFixed(0)"
+                    @change="bequestGoal = getTargetValue($event) / 100"
+                    :disabled="isRunning"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+                <small class="form-text text-muted">
+                  Andel av initialt kapital (realt) att bevara. 0% = förbruka allt, 100% = bevara kapitalet.
+                </small>
+              </div>
+              <div class="col-12 col-md-6" v-if="!amortizedWithdrawal">
                 <label class="form-label">Värdebaserad uttagsgrad</label>
                 <div class="input-group">
                   <input
@@ -487,7 +545,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                   kostnader.
                 </small>
               </div>
-              <div class="col-12 col-md-6">
+              <div class="col-12 col-md-6" v-if="!amortizedWithdrawal">
                 <label class="form-label">Vinstbaserad uttagsgrad</label>
                 <div class="input-group">
                   <input
@@ -505,7 +563,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                   Belopp baserat på medel av de senaste årens vinst.
                 </small>
               </div>
-              <div class="col-12 col-md-6">
+              <div class="col-12 col-md-6" v-if="!amortizedWithdrawal">
                 <label class="form-label">Lookback-period (vinst)</label>
                 <div class="input-group">
                   <input

@@ -142,21 +142,44 @@ export function runSingleSimulation(
       amount = assetPositions.reduce((sum, pos) => sum + pos.value, 0)
     } else {
       // Withdrawal years: calculate and execute withdrawals
-      const balanceWithdrawal = amount * params.balanceWithdrawalRate
-
-      let profitWithdrawal = 0
-      if (i > 0 && params.profitWithdrawalRate > 0) {
-        const lookbackYears = Math.min(params.profitLookbackYears, yearlyAmounts.length - 1)
-        if (lookbackYears > 0) {
-          const oldAmount = yearlyAmounts[yearlyAmounts.length - 1 - lookbackYears]!
-          const totalProfit = amount - oldAmount
-          const averageAnnualProfit = totalProfit / lookbackYears
-          profitWithdrawal = Math.max(0, averageAnnualProfit * params.profitWithdrawalRate)
+      if (params.amortizedWithdrawal) {
+        // Merton's rule: PMT-based amortization
+        const withdrawalYearsTotal = params.yearsLater - params.depositYears
+        const remainingYears = withdrawalYearsTotal - (i - params.depositYears)
+        if (remainingYears > 0 && amount > 0) {
+          const r =
+            params.assets.reduce((sum, a) => sum + a.weight * a.expectedReturn, 0) -
+            params.inflationRate
+          const fv = params.bequestGoal * params.initialCapital * cumulativeInflation
+          let amortized: number
+          if (Math.abs(r) < 1e-10) {
+            amortized = (amount - fv) / remainingYears
+          } else {
+            const disc = Math.pow(1 + r, -remainingYears)
+            amortized = (r * (amount - fv * disc)) / (1 - disc)
+          }
+          // Floor: inflation-based withdrawal
+          const floor = params.inflationBasedWithdrawal * cumulativeInflation
+          withdrawn = Math.max(floor, amortized)
+          withdrawn = Math.max(0, Math.min(withdrawn, amount))
         }
-      }
+      } else {
+        const balanceWithdrawal = amount * params.balanceWithdrawalRate
 
-      const inflationWithdrawal = params.inflationBasedWithdrawal * cumulativeInflation
-      withdrawn = balanceWithdrawal + profitWithdrawal + inflationWithdrawal
+        let profitWithdrawal = 0
+        if (i > 0 && params.profitWithdrawalRate > 0) {
+          const lookbackYears = Math.min(params.profitLookbackYears, yearlyAmounts.length - 1)
+          if (lookbackYears > 0) {
+            const oldAmount = yearlyAmounts[yearlyAmounts.length - 1 - lookbackYears]!
+            const totalProfit = amount - oldAmount
+            const averageAnnualProfit = totalProfit / lookbackYears
+            profitWithdrawal = Math.max(0, averageAnnualProfit * params.profitWithdrawalRate)
+          }
+        }
+
+        const inflationWithdrawal = params.inflationBasedWithdrawal * cumulativeInflation
+        withdrawn = balanceWithdrawal + profitWithdrawal + inflationWithdrawal
+      }
       withdrawalRate = amount > 0 ? withdrawn / amount : 0
     }
 

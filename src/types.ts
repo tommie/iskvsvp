@@ -28,6 +28,8 @@ export interface InputParameters {
   profitWithdrawalRate: number
   profitLookbackYears: number
   inflationBasedWithdrawal: number // Fixed withdrawal amount adjusted by inflation each year
+  amortizedWithdrawal: boolean // Enable Merton's rule amortization-based withdrawals
+  bequestGoal: number // Fraction of initial capital to preserve (0 = spend all, 1 = keep 100%)
 
   vpWealthTaxRate: number // VP wealth tax rate (e.g., 0.004 for 0.4%)
   capitalGainsTaxRate: number // Capital gains tax rate (used by both ISK and VP)

@@ -25,6 +25,8 @@ const PARAM_KEYS: Record<string, string> = {
   profitWithdrawalRate: 'pwr',
   profitLookbackYears: 'ply',
   inflationBasedWithdrawal: 'ibw',
+  amortizedWithdrawal: 'aw',
+  bequestGoal: 'bg',
   vpWealthTaxRate: 'vft',
   capitalGainsTaxRate: 'cgt',
   iskTaxRate: 'itr',
@@ -452,6 +454,8 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
         }
       } else if (paramKey === 'assetRebalanceFrequency') {
         parameters[paramKey] = value === 'annually' ? 'annually' : 'never'
+      } else if (paramKey === 'amortizedWithdrawal') {
+        parameters[paramKey] = value === '1'
       } else {
         // Parse as number
         const num = parseFloat(value)
@@ -518,6 +522,12 @@ export function encodeParamsToUrl(
   query.pwr = params.profitWithdrawalRate.toString()
   query.ply = params.profitLookbackYears.toString()
   query.ibw = params.inflationBasedWithdrawal.toString()
+  if (params.amortizedWithdrawal) {
+    query.aw = '1'
+  }
+  if (params.bequestGoal) {
+    query.bg = params.bequestGoal.toString()
+  }
   query.cgt = params.capitalGainsTaxRate.toString()
 
   // Bootstrap profile (optional)
@@ -654,10 +664,15 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   const bp = getString('bp')
   if (bp) params.bootstrapProfileId = bp
 
+  const aw = getString('aw')
+  const bg = parseNum('bg')
+
   if (bwr !== undefined) params.balanceWithdrawalRate = bwr
   if (pwr !== undefined) params.profitWithdrawalRate = pwr
   if (ply !== undefined) params.profitLookbackYears = ply
   if (ibw !== undefined) params.inflationBasedWithdrawal = ibw
+  if (aw !== undefined) params.amortizedWithdrawal = aw === '1'
+  if (bg !== undefined) params.bequestGoal = bg
   if (cgt !== undefined) params.capitalGainsTaxRate = cgt
   if (itr !== undefined) params.iskTaxRate = itr
   if (its !== undefined) params.iskTaxRateStdDev = its
