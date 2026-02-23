@@ -58,6 +58,43 @@ adjustment is the theoretically grounded way to translate return uncertainty
 into a conservative spending rate, and γ=3 produces reasonable behavior
 across the portfolio configurations we tested.
 
+## Age-Adjusted Spending
+
+The inflation-indexed withdrawal can optionally be modulated by an
+age-dependent spending curve. Retirement spending follows a well-documented
+decline: real expenditures peak around age 45–50 and fall to roughly 65–70%
+of peak by age 80+.
+
+### Spending curve
+
+A piecewise-linear curve through five nodes, chosen so that linear
+interpolation exactly preserves the
+[Eurostat HBS](https://ec.europa.eu/eurostat/databrowser/view/hbs_exp_t135/)
+bucket averages for Sweden (average of segment endpoints = bucket mean):
+
+| Age | Multiplier | Eurostat bucket preserved |
+|-----|-----------|--------------------------|
+| 30  | 0.84      | 30–44 avg = 0.96         |
+| 45  | 1.08      | ↑                        |
+| 50  | 1.08      | 45–59 avg = 1.00         |
+| 60  | 0.84      | ↑ and 60+ avg = 0.77     |
+| 80  | 0.70      | ↑                        |
+
+Peak placement at age 50 is cross-validated by the
+[BLS Consumer Expenditure Survey](https://fred.stlouisfed.org/series/CXUTOTALEXPLB0405M)
+(US, 2024), which shows peak spending in the 45–54 bracket. The post-peak
+decline rate is consistent with
+[Blanchett (2014)](https://www.morningstar.com/content/dam/marketing/shared/research/foundational/677785-EstimatingTrueCostRetirement.pdf),
+who finds ~1–2%/year real spending decline in US retirees.
+
+The curve is applied as a multiplier on withdrawals: the inflation-indexed
+amount (standalone and Merton floor) is scaled directly, while the
+balance-based withdrawal rate is normalized so that the user's input
+represents the average rate over the withdrawal period (early retirees
+near peak spending age get a higher initial rate). Values below 30 clamp
+to f(30); values above 80 clamp to f(80). The "start year" field is
+interpreted as the user's age when this feature is enabled.
+
 ## Recommended IDE Setup
 
 [VS Code](https://code.visualstudio.com/) + [Vue (Official)](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).

@@ -5,6 +5,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import type { SimulationAsset } from '../types'
 import FundPresetSelector from './FundPresetSelector.vue'
 import { loadBootstrapData, getCommonDateRange, filterProfilesByDateRange } from '../bootstrap'
+import { spendingMultiplier } from '../simulation'
 
 const store = useCalculatorStore()
 const {
@@ -21,6 +22,7 @@ const {
   inflationBasedWithdrawal,
   amortizedWithdrawal,
   bequestGoal,
+  ageAdjustedSpending,
   iskTaxRate,
   iskTaxRateStdDev,
   inflationRate,
@@ -381,8 +383,24 @@ const expectedTotalWithdrawalRate = computed(() => {
   const d = assets.value.reduce((sum, asset) => sum + asset.weight * asset.expectedReturn, 0)
   const n = profitLookbackYears.value
 
+  // Age-adjusted scaling: the input rate is the average over the withdrawal
+  // period; the first-year rate is higher when starting near peak spending age.
+  let ageScale = 1
+  if (ageAdjustedSpending.value) {
+    const withdrawalYears = yearsLater.value - depositYears.value
+    if (withdrawalYears > 0) {
+      let sum = 0
+      for (let t = 0; t < withdrawalYears; t++) {
+        sum += spendingMultiplier(startYear.value + depositYears.value + t, true)
+      }
+      const avg = sum / withdrawalYears
+      const firstYear = spendingMultiplier(startYear.value + depositYears.value, true)
+      ageScale = avg > 0 ? firstYear / avg : 1
+    }
+  }
+
   // Balance-based component
-  const balanceComponent = b
+  const balanceComponent = b * ageScale
 
   // Profit-based component (steady state approximation)
   // Net growth rate after balance withdrawals
@@ -549,6 +567,24 @@ const expectedTotalWithdrawalRate = computed(() => {
                 <small class="form-text text-muted">
                   Fast belopp som ökas med inflation varje år. Kan användas t.ex. för nödvändiga
                   kostnader.
+                </small>
+              </div>
+              <div class="col-12" v-if="inflationBasedWithdrawal > 0">
+                <div class="form-check">
+                  <input
+                    type="checkbox"
+                    class="form-check-input"
+                    id="ageAdjustedSpending"
+                    v-model="ageAdjustedSpending"
+                    :disabled="isRunning"
+                  />
+                  <label class="form-check-label" for="ageAdjustedSpending">
+                    Åldersjusterat uttag
+                  </label>
+                </div>
+                <small class="form-text text-muted">
+                  Justerar inflationsuttaget efter åldersbaserad utgiftskurva (topp vid 45–50,
+                  avtagande till ~65% vid 80+). Baserat på Eurostat HBS.
                 </small>
               </div>
               <div class="col-12 col-md-6" v-if="!amortizedWithdrawal">

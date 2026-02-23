@@ -60,6 +60,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const inflationBasedWithdrawal = ref(0)
   const amortizedWithdrawal = ref(false)
   const bequestGoal = ref(0)
+  const ageAdjustedSpending = ref(false)
   const iskTaxRate = ref<number | undefined>(0.0296)
   const iskTaxRateStdDev = ref<number | undefined>(0.005)
   const inflationRate = ref(0.02)
@@ -328,6 +329,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
       inflationBasedWithdrawal: inflationBasedWithdrawal.value,
       amortizedWithdrawal: amortizedWithdrawal.value,
       bequestGoal: bequestGoal.value,
+      ageAdjustedSpending: ageAdjustedSpending.value,
       vpWealthTaxRate: vpFundTaxRate.value,
       capitalGainsTaxRate: capitalGainsTax.value,
       iskTaxRate: iskTaxRate.value,
@@ -359,6 +361,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     inflationBasedWithdrawal: inflationBasedWithdrawal.value,
     amortizedWithdrawal: amortizedWithdrawal.value,
     bequestGoal: bequestGoal.value,
+    ageAdjustedSpending: ageAdjustedSpending.value,
     vpWealthTaxRate: vpFundTaxRate.value,
     capitalGainsTaxRate: capitalGainsTax.value,
     inflationRate: inflationRate.value,
@@ -561,6 +564,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     inflationBasedWithdrawal.value = params.inflationBasedWithdrawal
     amortizedWithdrawal.value = params.amortizedWithdrawal ?? false
     bequestGoal.value = params.bequestGoal ?? 0
+    ageAdjustedSpending.value = params.ageAdjustedSpending ?? false
     inflationRate.value = params.inflationRate
     inflationStdDev.value = params.inflationStdDev
     vpFundTaxRate.value = params.vpWealthTaxRate
@@ -628,6 +632,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
                 amortizedWithdrawal.value = urlParams.amortizedWithdrawal
               if (urlParams.bequestGoal !== undefined)
                 bequestGoal.value = urlParams.bequestGoal
+              if (urlParams.ageAdjustedSpending !== undefined)
+                ageAdjustedSpending.value = urlParams.ageAdjustedSpending
               if (urlParams.inflationRate !== undefined)
                 inflationRate.value = urlParams.inflationRate
               if (urlParams.inflationStdDev !== undefined)
@@ -673,6 +679,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         inflationBasedWithdrawal,
         amortizedWithdrawal,
         bequestGoal,
+        ageAdjustedSpending,
         iskTaxRate,
         iskTaxRateStdDev,
         inflationRate,
@@ -730,6 +737,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
     inflationBasedWithdrawal,
     amortizedWithdrawal,
     bequestGoal,
+    ageAdjustedSpending,
     iskTaxRate,
     iskTaxRateStdDev,
     inflationRate,

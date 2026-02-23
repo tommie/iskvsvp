@@ -40,6 +40,7 @@ const parameterLabels: Record<string, string> = {
   profitWithdrawalRate: 'Vinstuttag (%)',
   profitLookbackYears: 'Lookback år',
   inflationBasedWithdrawal: 'Inflationsjusterat uttag',
+  ageAdjustedSpending: 'Åldersjusterat uttag',
   vpWealthTaxRate: 'VP fondskatt (%)',
   capitalGainsTaxRate: 'Kapitalvinstskatt (%)',
   iskTaxRate: 'ISK skattesats (%)',

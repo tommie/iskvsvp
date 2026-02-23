@@ -34,6 +34,45 @@ interface AssetPosition {
 }
 
 /**
+ * Piecewise-linear spending multiplier based on age.
+ *
+ * Derived from Eurostat HBS (Sweden) bucket averages:
+ *   30-44 = 0.96, 45-59 = 1.00, 60+ = 0.77 (normalized to peak).
+ * Nodes chosen so that the linear interpolation exactly preserves
+ * each bucket's average (average of endpoints = bucket mean).
+ * Peak at age 50 aligns with BLS Consumer Expenditure Survey (US, 2024)
+ * which shows peak spending in the 45-54 bracket.
+ *
+ * References:
+ * - Eurostat HBS_EXP_T135 (Sweden, 1999-2015)
+ * - BLS Consumer Expenditure Survey 2024 (FRED series CXUTOTALEXPLB04*)
+ * - Blanchett, "Estimating the True Cost of Retirement" (2014)
+ */
+const SPENDING_CURVE_NODES: [number, number][] = [
+  [30, 0.84],
+  [45, 1.08],
+  [50, 1.08],
+  [60, 0.84],
+  [80, 0.70],
+]
+
+export function spendingMultiplier(age: number, enabled: boolean): number {
+  if (!enabled) return 1
+  const nodes = SPENDING_CURVE_NODES
+  if (age <= nodes[0]![0]) return nodes[0]![1]
+  if (age >= nodes[nodes.length - 1]![0]) return nodes[nodes.length - 1]![1]
+  for (let j = 1; j < nodes.length; j++) {
+    const [x0, y0] = nodes[j - 1]!
+    const [x1, y1] = nodes[j]!
+    if (age <= x1) {
+      const t = (age - x0) / (x1 - x0)
+      return y0 + t * (y1 - y0)
+    }
+  }
+  return nodes[nodes.length - 1]![1]
+}
+
+/**
  * Run a single simulation for a single scenario (ISK or VP).
  * Returns period-by-period data, cumulative snapshots, and final asset weights.
  */
@@ -94,6 +133,21 @@ export function runSingleSimulation(
   const snapshotTaxes: number[] = []
   const snapshotTaxationDegrees: number[] = []
   const snapshotIskTaxRates: number[] = []
+
+  // Precompute the average spending multiplier over the withdrawal period.
+  // The balance withdrawal rate is scaled so that the time-weighted average
+  // rate equals the user's input (the input represents the average, not the
+  // initial rate). Early retirees get a higher initial rate because the
+  // spending curve peaks around age 50.
+  const withdrawalYearsForAvg = params.yearsLater - params.depositYears
+  let avgSpendingMultiplier = 1
+  if (params.ageAdjustedSpending && withdrawalYearsForAvg > 0) {
+    let sum = 0
+    for (let t = 0; t < withdrawalYearsForAvg; t++) {
+      sum += spendingMultiplier(params.startYear + params.depositYears + t, true)
+    }
+    avgSpendingMultiplier = sum / withdrawalYearsForAvg
+  }
 
   for (let i = 0; i < params.yearsLater; i++) {
     // Generate stochastic parameters
@@ -173,14 +227,19 @@ export function runSingleSimulation(
             const pv = amount / (1 + r)
             amortized = (r * (pv - fv * disc)) / (1 - disc)
           }
-          // Floor: inflation-based withdrawal
+          // Floor: inflation-based withdrawal, adjusted for age-dependent spending decline
+          const age = params.startYear + i
           const floor = params.inflationBasedWithdrawal * cumulativeInflation
+            * spendingMultiplier(age, params.ageAdjustedSpending)
           withdrawn = Math.max(floor, amortized)
           withdrawn = Math.max(0, Math.min(withdrawn, amount))
 
         }
       } else {
-        const balanceWithdrawal = amount * params.balanceWithdrawalRate
+        const age = params.startYear + i
+        const spendingScale = spendingMultiplier(age, params.ageAdjustedSpending)
+          / avgSpendingMultiplier
+        const balanceWithdrawal = amount * params.balanceWithdrawalRate * spendingScale
 
         let profitWithdrawal = 0
         if (i > 0 && params.profitWithdrawalRate > 0) {
@@ -194,6 +253,7 @@ export function runSingleSimulation(
         }
 
         const inflationWithdrawal = params.inflationBasedWithdrawal * cumulativeInflation
+          * spendingMultiplier(age, params.ageAdjustedSpending)
         withdrawn = balanceWithdrawal + profitWithdrawal + inflationWithdrawal
       }
       withdrawalRate = amount > 0 ? withdrawn / amount : 0

@@ -27,6 +27,7 @@ const PARAM_KEYS: Record<string, string> = {
   inflationBasedWithdrawal: 'ibw',
   amortizedWithdrawal: 'aw',
   bequestGoal: 'bg',
+  ageAdjustedSpending: 'aas',
   vpWealthTaxRate: 'vft',
   capitalGainsTaxRate: 'cgt',
   iskTaxRate: 'itr',
@@ -525,6 +526,9 @@ export function encodeParamsToUrl(
   if (params.amortizedWithdrawal) {
     query.aw = '1'
   }
+  if (params.ageAdjustedSpending) {
+    query.aas = '1'
+  }
   if (params.bequestGoal) {
     query.bg = params.bequestGoal.toString()
   }
@@ -665,6 +669,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   if (bp) params.bootstrapProfileId = bp
 
   const aw = getString('aw')
+  const aas = getString('aas')
   const bg = parseNum('bg')
 
   if (bwr !== undefined) params.balanceWithdrawalRate = bwr
@@ -672,6 +677,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   if (ply !== undefined) params.profitLookbackYears = ply
   if (ibw !== undefined) params.inflationBasedWithdrawal = ibw
   if (aw !== undefined) params.amortizedWithdrawal = aw === '1'
+  if (aas !== undefined) params.ageAdjustedSpending = aas === '1'
   if (bg !== undefined) params.bequestGoal = bg
   if (cgt !== undefined) params.capitalGainsTaxRate = cgt
   if (itr !== undefined) params.iskTaxRate = itr
