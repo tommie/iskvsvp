@@ -158,6 +158,8 @@ export function runSingleSimulation(
     avgSpendingMultiplier = sum / withdrawalYearsForAvg
   }
 
+  let ratchetFloor = 0
+
   for (let i = 0; i < params.yearsLater; i++) {
     // Generate stochastic parameters
     const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev, rng)
@@ -293,6 +295,19 @@ export function runSingleSimulation(
         const inflationWithdrawal = params.inflationBasedWithdrawal * cumulativeInflation
           * spendingMultiplier(age, params.ageAdjustedSpending)
         withdrawn = balanceWithdrawal + profitWithdrawal + inflationWithdrawal
+
+        // Kitces ratchet: withdrawal can increase but never decrease.
+        // Clamp between [floor, floor*(1+limit)]: the floor tracks the
+        // actual (clamped) withdrawal so it never lags behind.
+        if (params.withdrawalRatchetLimit > 0) {
+          if (ratchetFloor === 0) {
+            ratchetFloor = withdrawn
+          } else {
+            const cap = ratchetFloor * (1 + params.withdrawalRatchetLimit)
+            withdrawn = Math.max(ratchetFloor, Math.min(withdrawn, cap))
+            ratchetFloor = withdrawn
+          }
+        }
       }
       withdrawalRate = amount > 0 ? withdrawn / amount : 0
     }

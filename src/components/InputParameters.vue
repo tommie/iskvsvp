@@ -23,6 +23,7 @@ const {
   amortizedWithdrawal,
   bequestGoal,
   ageAdjustedSpending,
+  withdrawalRatchetLimit,
   iskTaxRate,
   iskTaxRateStdDev,
   inflationRate,
@@ -574,7 +575,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                   kostnader.
                 </small>
               </div>
-              <div class="col-12" v-if="inflationBasedWithdrawal > 0">
+              <div class="col-12 col-md-6" v-if="inflationBasedWithdrawal > 0">
                 <div class="form-check">
                   <input
                     type="checkbox"
@@ -590,6 +591,25 @@ const expectedTotalWithdrawalRate = computed(() => {
                 <small class="form-text text-muted">
                   Justerar inflationsuttaget efter åldersbaserad utgiftskurva (topp vid 45–50,
                   avtagande till ~65% vid 80+). Baserat på Eurostat HBS.
+                </small>
+              </div>
+              <div class="col-12 col-md-6" v-if="!amortizedWithdrawal">
+                <label class="form-label">Spärruppräkning</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="1"
+                    min="0"
+                    :class="getInputClass('withdrawalRatchetLimit')"
+                    :value="(withdrawalRatchetLimit * 100).toFixed(0)"
+                    @change="withdrawalRatchetLimit = getTargetValue($event) / 100"
+                    :disabled="isFieldDisabled('withdrawalRatchetLimit')"
+                    @click="handleParameterClick('withdrawalRatchetLimit', $event)"
+                  />
+                  <span class="input-group-text">%</span>
+                </div>
+                <small class="form-text text-muted">
+                  Max årlig ökning av uttag (Kitces-spärr). 0 = av.
                 </small>
               </div>
               <div class="col-12 col-md-6" v-if="!amortizedWithdrawal">

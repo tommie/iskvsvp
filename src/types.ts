@@ -31,6 +31,7 @@ export interface InputParameters {
   amortizedWithdrawal: boolean // Enable Merton's rule amortization-based withdrawals
   bequestGoal: number // Fraction of initial capital to preserve (0 = spend all, 1 = keep 100%)
   ageAdjustedSpending: boolean // Age-dependent spending decline on inflation-indexed withdrawal
+  withdrawalRatchetLimit: number // Max fractional increase in withdrawal rate per year (0 = disabled)
 
   vpWealthTaxRate: number // VP wealth tax rate (e.g., 0.004 for 0.4%)
   capitalGainsTaxRate: number // Capital gains tax rate (used by both ISK and VP)

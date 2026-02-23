@@ -111,6 +111,7 @@ function makeParams(overrides: Partial<InputParameters> = {}): InputParameters {
     amortizedWithdrawal: false,
     bequestGoal: 0,
     ageAdjustedSpending: false,
+    withdrawalRatchetLimit: 0,
     vpWealthTaxRate: 0,
     capitalGainsTaxRate: 0,
     inflationRate: 0,
@@ -239,5 +240,88 @@ describe('runSingleSimulation age-adjusted Merton floor', () => {
     const earlyWithdrawal = result.periodData.withdrawal[0]!
     const lateWithdrawal = result.periodData.withdrawal[35]!
     expect(earlyWithdrawal).toBeGreaterThan(lateWithdrawal)
+  })
+})
+
+describe('withdrawal ratchet (Kitces)', () => {
+  // Use constant 0% monthly return so the portfolio only changes via withdrawals.
+  // With 4% balance withdrawal and no growth, withdrawals naturally decline each year.
+  // The ratchet should prevent that decline.
+
+  it('without ratchet, withdrawals decline when portfolio shrinks', () => {
+    const payload = makePayload(0)
+    const params = makeParams({
+      balanceWithdrawalRate: 0.04,
+      withdrawalRatchetLimit: 0,
+    })
+    const result = runSingleSimulation(params, payload)
+    const w0 = result.periodData.withdrawal[0]!
+    const w5 = result.periodData.withdrawal[5]!
+    // With 0% return and 4% withdrawal, portfolio shrinks → withdrawals decline
+    expect(w5).toBeLessThan(w0)
+  })
+
+  it('with ratchet, withdrawals never decrease', () => {
+    const payload = makePayload(0)
+    const params = makeParams({
+      balanceWithdrawalRate: 0.04,
+      withdrawalRatchetLimit: 0.10, // 10% max increase per year
+    })
+    const result = runSingleSimulation(params, payload)
+    const withdrawals = result.periodData.withdrawal
+    for (let i = 1; i < withdrawals.length; i++) {
+      expect(withdrawals[i]!).toBeGreaterThanOrEqual(withdrawals[i - 1]! - 0.01)
+    }
+  })
+
+  it('ratchet prevents withdrawal decline in volatile parametric sim', () => {
+    // No bootstrap payload → uses independent normal returns (parametric fallback).
+    // High volatility + high withdrawal rate makes withdrawals decline in bad years.
+    const params = makeParams({
+      seed: 'ratchet-test',
+      balanceWithdrawalRate: 0.05,
+      withdrawalRatchetLimit: 0.10,
+      yearsLater: 20,
+      assets: [{ name: 'A', weight: 1, expectedReturn: 0.06, volatility: 0.20 }],
+    })
+    const result = runSingleSimulation(params) // no bootstrap, no factor model
+    const w = result.periodData.withdrawal
+
+    const declines: string[] = []
+    for (let i = 1; i < w.length; i++) {
+      if (w[i]! < w[i - 1]! - 0.01) {
+        declines.push(`year ${i}: ${w[i - 1]!.toFixed(2)} → ${w[i]!.toFixed(2)}`)
+      }
+    }
+    expect(declines).toEqual([])
+  })
+
+  it('ratchet increases cumulative withdrawals vs no ratchet (same seed)', () => {
+    // With 0% return: portfolio only shrinks from withdrawals.
+    // Without ratchet: withdrawals decline each year (4% of shrinking balance).
+    // With ratchet: withdrawals stay at the first-year level.
+    // So cumulative withdrawals must be strictly higher with ratchet.
+    const payload = makePayload(0)
+    const baseOpts = { balanceWithdrawalRate: 0.04, yearsLater: 20, seed: 'same' }
+
+    const noRatchet = runSingleSimulation(
+      makeParams({ ...baseOpts, withdrawalRatchetLimit: 0 }),
+      payload,
+    )
+    const withRatchet = runSingleSimulation(
+      makeParams({ ...baseOpts, withdrawalRatchetLimit: 0.10 }),
+      payload,
+    )
+
+    const cumNoRatchet = noRatchet.periodData.withdrawal.reduce((a, b) => a + b, 0)
+    const cumWithRatchet = withRatchet.periodData.withdrawal.reduce((a, b) => a + b, 0)
+
+    // Ratchet should produce more total withdrawals
+    expect(cumWithRatchet).toBeGreaterThan(cumNoRatchet * 1.05)
+
+    // Verify specific: year 5 withdrawal is higher with ratchet
+    expect(withRatchet.periodData.withdrawal[5]!).toBeGreaterThan(
+      noRatchet.periodData.withdrawal[5]!,
+    )
   })
 })
