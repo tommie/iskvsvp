@@ -30,6 +30,8 @@ export interface FactorData {
     means: number[]
     covariance_lower: number[]
     factor_ar1?: number[]
+    n_months?: number
+    period?: [string, string]
   }
   factor_presets: {
     presets: StressPreset[]

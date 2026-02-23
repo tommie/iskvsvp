@@ -506,6 +506,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
       const effectiveMethod = paramSets[0]?.simulationMethod ?? simulationMethod.value
       let bootstrapPayload: BootstrapPayload | undefined
       let factorPayload: FactorModelPayload | undefined
+      let dataPeriod: [string, string] | undefined
 
       if (effectiveMethod === 'bootstrap') {
         // Bootstrap mode: prepare historical data payload
@@ -528,10 +529,16 @@ export const useCalculatorStore = defineStore('calculator', () => {
         }
 
         bootstrapPayload = bootstrapResult
+        const [y, m] = bootstrapResult.startDate.split('-').map(Number) as [number, number]
+        const endTotal = y * 12 + (m - 1) + bootstrapResult.nMonths - 1
+        const endY = Math.floor(endTotal / 12)
+        const endM = (endTotal % 12) + 1
+        dataPeriod = [bootstrapResult.startDate, `${endY}-${String(endM).padStart(2, '0')}`]
       } else {
         // Factor model mode: prepare factor payload and stress returns
         try {
           const { factorData, fundsDb } = await loadStressData()
+          dataPeriod = factorData.factor_covariance.period
           const assetNames = paramSets[0]!.assets.map((a) => a.name)
           const assetWeights = paramSets[0]!.assets.map((a) => a.weight)
           const fmResult = prepareFactorModelPayload(assetNames, assetWeights, fundsDb, factorData)
@@ -597,6 +604,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
         worker.postMessage({ paramSets: plainParamSets, labels, bootstrapPayload, factorModelPayload: factorPayload })
       })
 
+      results.simulationMethod = effectiveMethod
+      results.dataPeriod = dataPeriod
       simulationResults.value = results
 
       // Save to history (save first scenario params as the representative parameters)

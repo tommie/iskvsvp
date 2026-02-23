@@ -117,6 +117,12 @@ export interface SimulationResults {
 
   // Outcome probabilities for each scenario
   outcomeProbabilities: OutcomeProbabilities[]
+
+  // Simulation method used to generate these results.
+  simulationMethod?: 'factormodel' | 'bootstrap'
+
+  // Date range of the underlying data (factor model macro series or bootstrap fund history).
+  dataPeriod?: [string, string]
 }
 
 // Asset property parameter format: "assets.weight.0", etc.

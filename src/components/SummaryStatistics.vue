@@ -212,12 +212,30 @@ const getCellStyle = (
 
 const hasResults = computed(() => statistics.value.length > 0)
 const hasMultipleScenarios = computed(() => statistics.value.length > 1)
+
+const formatYearMonth = (ym: string) => {
+  const [y, m] = ym.split('-')
+  const date = new Date(Number(y), Number(m) - 1)
+  return date.toLocaleDateString('sv-SE', { year: 'numeric', month: 'long' })
+}
+
+const dataPeriodText = computed(() => {
+  const period = simulationResults.value?.dataPeriod
+  if (!period) return null
+  return `${formatYearMonth(period[0])} till ${formatYearMonth(period[1])}`
+})
 </script>
 
 <template>
   <div v-if="hasResults">
     <p class="text-muted mb-3">
-      Statistik över alla simuleringar.<span v-if="hasMultipleScenarios">
+      Statistik över alla simuleringar.
+      <span v-if="dataPeriodText">
+        Avkastning samplas från
+        {{ simulationResults?.simulationMethod === 'bootstrap' ? 'historisk data' : 'en faktormodell baserad på makrodata' }}
+        {{ dataPeriodText }}.</span
+      >
+      <span v-if="hasMultipleScenarios">
         Celler med bästa värdet för varje mått och percentil är markerade med färg.</span
       >
     </p>
