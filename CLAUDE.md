@@ -69,9 +69,15 @@ src/
 - Fund index: `/data/index.json` — `{ funds: FundData[] }` with `monthly_file` paths
 - Correlations: `/data/correlations.json` — `{ isins: string[], correlations: number[][] }`
 - Per-fund monthly returns: `/data/{category}/fund_{isin}_monthly.json`
+- Factor model: `public/fund-factors.json` → `../../fundcmp/data/export-factors.json` — per-fund alpha/betas/residual params for Monte Carlo simulation
 - Correlations are lower triangular: `correlations[i][j]` where `i > j`
 - Fund properties: isin, name, category, monthly_file, start_month ("YYYY-MM"), mu (%), sigma (%), alpha, beta, r_squared
 - Bootstrap profiles: `public/bootstrap-profiles.json` — generated from `fundcmp/data/factor_presets.json` via jq
+
+### Factor Model (upstream: fundcmp)
+
+- Alpha is the raw OLS intercept. `E[r] = alpha + betas @ global_factor_means` reflects the full-history factor environment, not the fund's training window.
+- Changes to the factor model are made in fundcmp and re-exported; iskvsvp consumes the output without modification.
 
 ### Correlation Matrix
 

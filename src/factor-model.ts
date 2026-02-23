@@ -5,14 +5,11 @@
  *
  * Matches fundcmp's simulate_fund_returns() pipeline.
  *
- * Expected return note: the factor model's E[r] = alpha + dot(betas, global_means)
- * reflects the fund's arithmetic mean over its full regression window (typically
- * ~275 months). This is lower than the decay-weighted DB mu used by the bootstrap
- * path when recent performance has been strong. For example, Globalfond shows
- * ~10.5% annual (factor model) vs ~16% (DB mu / bootstrap). The difference is
- * not a bug — the factor model averages over the full history while DB mu is
- * recency-biased. fundcmp adjusts alpha for training-window vs global-mean
- * differences, but the recency gap remains by design.
+ * Expected return note: the factor model's E[r] = alpha_ols + dot(betas, global_means)
+ * uses the raw OLS intercept with global (full-history) factor means, so the
+ * expected return reflects what the fund's factor exposures would have earned
+ * over the full factor history (~275 months), not just the fund's own training
+ * window.
  */
 
 import type { FactorData, FundsDb } from './stress'
