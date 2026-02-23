@@ -482,7 +482,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
       }
 
       const assetNames = paramSets[0]!.assets.map((a) => a.name)
-      const bootstrapResult = await prepareBootstrapPayload(assetNames, fundsDb, profile.components)
+      const assetWeights = paramSets[0]!.assets.map((a) => a.weight)
+      const bootstrapResult = await prepareBootstrapPayload(assetNames, fundsDb, profile.components, assetWeights)
 
       if ('warnings' in bootstrapResult) {
         bootstrapWarning.value = bootstrapResult.warnings.join('; ')

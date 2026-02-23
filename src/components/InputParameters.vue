@@ -350,12 +350,18 @@ const getTargetValue = (event: Event) => {
 
 const expectedTotalWithdrawalRate = computed(() => {
   if (amortizedWithdrawal.value) {
-    // PMT-based first-year rate
+    // Approximate first-year PMT rate using parametric expected returns.
+    // The actual simulation uses bootstrap empirical returns with additional
+    // corrections (volatility drag, post-tax FV targeting, PV timing).
     const withdrawalYears = yearsLater.value - depositYears.value
     if (withdrawalYears <= 0 || initialCapital.value <= 0) return 0
-    const r =
-      assets.value.reduce((sum, asset) => sum + asset.weight * asset.expectedReturn, 0) -
-      inflationRate.value
+    const nominalReturn =
+      assets.value.reduce((sum, asset) => sum + asset.weight * asset.expectedReturn, 0)
+    const taxDrag =
+      accountType.value === 'ISK'
+        ? (iskTaxRate.value ?? 0) * capitalGainsTax.value
+        : vpFundTaxRate.value * capitalGainsTax.value
+    const r = nominalReturn - inflationRate.value - taxDrag
     const fv = bequestGoal.value * initialCapital.value
     let amortized: number
     if (Math.abs(r) < 1e-10) {

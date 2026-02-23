@@ -147,21 +147,37 @@ export function runSingleSimulation(
         const withdrawalYearsTotal = params.yearsLater - params.depositYears
         const remainingYears = withdrawalYearsTotal - (i - params.depositYears)
         if (remainingYears > 0 && amount > 0) {
-          const r =
-            params.assets.reduce((sum, a) => sum + a.weight * a.expectedReturn, 0) -
-            params.inflationRate
-          const fv = params.bequestGoal * params.initialCapital * cumulativeInflation
+          // Certainty-equivalent return (CER) per Merton's framework.
+          // The geometric mean already incorporates σ²/2 (γ=1). We apply an
+          // additional (γ-1)×σ²/2 reduction for risk aversion.
+          // γ=3: slightly more conservative than empirical estimates (typically
+          // 2–4 in the literature), chosen as a round number that reduces floor
+          // binding in volatile portfolios without over-suppressing withdrawals.
+          const GAMMA = 3
+          const nominalReturn = bootstrapPayload.portfolioGeometricMean
+            - (GAMMA - 1) * bootstrapPayload.portfolioVariance / 2
+          const taxDrag = isISK
+            ? currentIskTaxRate * params.capitalGainsTaxRate
+            : params.vpWealthTaxRate * params.capitalGainsTaxRate
+          const r = nominalReturn - params.inflationRate - taxDrag
+          // Target FV/(1-t): tax is applied after the final withdrawal,
+          // so aim higher to end at the desired value post-tax.
+          const fv = (params.bequestGoal * params.initialCapital * cumulativeInflation) / (1 - taxDrag)
+          // amount is post-growth (returns already applied in step 1), so
+          // divide by (1+r) to get the pre-growth PV the PMT formula expects.
           let amortized: number
           if (Math.abs(r) < 1e-10) {
             amortized = (amount - fv) / remainingYears
           } else {
             const disc = Math.pow(1 + r, -remainingYears)
-            amortized = (r * (amount - fv * disc)) / (1 - disc)
+            const pv = amount / (1 + r)
+            amortized = (r * (pv - fv * disc)) / (1 - disc)
           }
           // Floor: inflation-based withdrawal
           const floor = params.inflationBasedWithdrawal * cumulativeInflation
           withdrawn = Math.max(floor, amortized)
           withdrawn = Math.max(0, Math.min(withdrawn, amount))
+
         }
       } else {
         const balanceWithdrawal = amount * params.balanceWithdrawalRate

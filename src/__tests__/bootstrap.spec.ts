@@ -196,7 +196,7 @@ describe('prepareBootstrapPayload', () => {
   })
 
   it('builds a dense return matrix for assets with full overlap', async () => {
-    const result = await prepareBootstrapPayload(['Fund A', 'Fund B'], fundsDb, profileComponents)
+    const result = await prepareBootstrapPayload(['Fund A', 'Fund B'], fundsDb, profileComponents, [0.5, 0.5])
     expect('warnings' in result).toBe(false)
 
     const payload = result as BootstrapPayload
@@ -207,7 +207,7 @@ describe('prepareBootstrapPayload', () => {
   })
 
   it('restricts to common date range when one fund starts later', async () => {
-    const result = await prepareBootstrapPayload(['Fund A', 'Fund C'], fundsDb, profileComponents)
+    const result = await prepareBootstrapPayload(['Fund A', 'Fund C'], fundsDb, profileComponents, [0.5, 0.5])
     expect('warnings' in result).toBe(false)
 
     const payload = result as BootstrapPayload
@@ -221,6 +221,7 @@ describe('prepareBootstrapPayload', () => {
       ['Fund A', 'Unknown Fund'],
       fundsDb,
       profileComponents,
+      [0.5, 0.5],
     )
     expect('warnings' in result).toBe(true)
     const warnings = (result as { warnings: string[] }).warnings
@@ -250,7 +251,7 @@ describe('prepareBootstrapPayload', () => {
       return new Response(JSON.stringify(fundDData), { status: 200 })
     })
 
-    const result = await prepareBootstrapPayload(['Fund D'], shortFundsDb, profileComponents)
+    const result = await prepareBootstrapPayload(['Fund D'], shortFundsDb, profileComponents, [1.0])
     expect('warnings' in result).toBe(true)
     const warnings = (result as { warnings: string[] }).warnings
     expect(warnings[0]).toContain('Otillräcklig')
@@ -261,21 +262,21 @@ describe('prepareBootstrapPayload', () => {
       { weight: 0.6, centerMonth: '2016-04', stdMonths: 3 },
       { weight: 0.4, centerMonth: '2019-01', stdMonths: 2 },
     ]
-    const result = await prepareBootstrapPayload(['Fund A'], fundsDb, customProfile)
+    const result = await prepareBootstrapPayload(['Fund A'], fundsDb, customProfile, [1.0])
     expect('warnings' in result).toBe(false)
     const payload = result as BootstrapPayload
     expect(payload.profileComponents).toEqual(customProfile)
   })
 
   it('includes startDate in returned payload', async () => {
-    const result = await prepareBootstrapPayload(['Fund A', 'Fund B'], fundsDb, profileComponents)
+    const result = await prepareBootstrapPayload(['Fund A', 'Fund B'], fundsDb, profileComponents, [0.5, 0.5])
     expect('warnings' in result).toBe(false)
     const payload = result as BootstrapPayload
     expect(payload.startDate).toBe('2015-01')
   })
 
   it('sets startDate to beginning of common range', async () => {
-    const result = await prepareBootstrapPayload(['Fund A', 'Fund C'], fundsDb, profileComponents)
+    const result = await prepareBootstrapPayload(['Fund A', 'Fund C'], fundsDb, profileComponents, [0.5, 0.5])
     expect('warnings' in result).toBe(false)
     const payload = result as BootstrapPayload
     // Fund C starts at month 30 = 2017-07

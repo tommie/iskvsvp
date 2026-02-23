@@ -1,3 +1,5 @@
+import { alea } from 'seedrandom'
+
 /**
  * Block bootstrap simulation module.
  *
@@ -27,6 +29,8 @@ export interface BootstrapPayload {
   profileComponents: BootstrapComponent[]
   assetOrder: string[] // ISINs in column order
   startDate: string // "YYYY-MM" of first month in common range
+  portfolioGeometricMean: number // Portfolio-level geometric mean annual return
+  portfolioVariance: number // Variance of portfolio annual returns (for CER adjustment)
 }
 
 interface FundIndexEntry {
@@ -148,6 +152,47 @@ export function getCommonDateRange(
 }
 
 /**
+ * Estimate the portfolio-level geometric mean annual return by Monte Carlo
+ * sampling of the bootstrap process itself. Compounds the weighted portfolio
+ * return each sample year, matching the actual simulation return distribution.
+ *
+ * Using the portfolio geometric mean (rather than a weighted average of
+ * per-asset geometric means) correctly accounts for Jensen's inequality:
+ * E[log(Σ w_i r_i)] ≠ Σ w_i E[log(r_i)].
+ */
+function estimatePortfolioReturnStats(
+  returnMatrix: number[][],
+  nMonths: number,
+  components: BootstrapComponent[],
+  startDate: string,
+  assetWeights: number[],
+): { geometricMean: number; variance: number } {
+  const rng = alea('return-estimate')
+  const nSampleYears = 10000
+  const samples = sampleAnnualReturns(returnMatrix, nMonths, components, rng, nSampleYears, startDate)
+
+  let logSum = 0
+  let sum = 0
+  let sumSq = 0
+  for (let y = 0; y < nSampleYears; y++) {
+    const row = samples[y]!
+    let portfolioReturn = 0
+    for (let a = 0; a < assetWeights.length; a++) {
+      portfolioReturn += assetWeights[a]! * row[a]!
+    }
+    logSum += Math.log(1 + portfolioReturn)
+    sum += portfolioReturn
+    sumSq += portfolioReturn * portfolioReturn
+  }
+
+  const geometricMean = Math.exp(logSum / nSampleYears) - 1
+  const mean = sum / nSampleYears
+  const variance = sumSq / nSampleYears - mean * mean
+
+  return { geometricMean, variance }
+}
+
+/**
  * Prepare a bootstrap payload for the simulation worker.
  *
  * Looks up each asset in the fund index, fetches per-fund monthly files,
@@ -157,6 +202,7 @@ export async function prepareBootstrapPayload(
   assetNames: string[],
   fundsDb: FundsDb,
   profileComponents: BootstrapComponent[],
+  assetWeights: number[],
 ): Promise<BootstrapPayload | { warnings: string[] }> {
   const warnings: string[] = []
   const fundEntries: FundIndexEntry[] = []
@@ -221,12 +267,25 @@ export async function prepareBootstrapPayload(
     returnMatrix.push(row)
   }
 
+  // Estimate the portfolio-level geometric mean and variance by Monte Carlo
+  // sampling from the exact same bootstrap process the simulation uses.
+  // Uses portfolio weights to correctly account for Jensen's inequality.
+  const { geometricMean, variance } = estimatePortfolioReturnStats(
+    returnMatrix,
+    commonDates.length,
+    profileComponents,
+    commonDates[0]!,
+    assetWeights,
+  )
+
   return {
     returnMatrix,
     nMonths: commonDates.length,
     profileComponents,
     assetOrder: fundEntries.map((e) => e.isin),
     startDate: commonDates[0]!,
+    portfolioGeometricMean: geometricMean,
+    portfolioVariance: variance,
   }
 }
 
