@@ -32,9 +32,13 @@ const {
   startYear,
   yearsLater,
   simulationCount,
+  simulationMethod,
   bootstrapProfileId,
   bootstrapWarning,
   bootstrapProfileList,
+  stressPresetId,
+  stressWarning,
+  stressPresetList,
   isRunning,
   progress,
   isAddToTableMode,
@@ -42,6 +46,7 @@ const {
 
 onMounted(() => {
   store.initBootstrapData()
+  store.initStressPresets()
 })
 
 // Disable bootstrap profiles whose events fall outside the fund data range
@@ -98,10 +103,10 @@ function isFieldDisabled(paramKey: ScenarioParameter): boolean {
 
 // Get class for input field (add clickable styling when in add-to-table mode)
 function getInputClass(paramKey: ScenarioParameter): string {
-  const baseClass =
-    paramKey === 'accountType' || paramKey === 'bootstrapProfileId'
-      ? 'form-select'
-      : 'form-control text-end'
+  const selectKeys = ['accountType', 'bootstrapProfileId', 'simulationMethod', 'stressPresetId']
+  const baseClass = selectKeys.includes(paramKey)
+    ? 'form-select'
+    : 'form-control text-end'
   if (isAddToTableMode.value && !store.isParameterControlled(paramKey)) {
     return `${baseClass} clickable-input`
   }
@@ -782,7 +787,7 @@ const expectedTotalWithdrawalRate = computed(() => {
             <div v-if="assets.length > 1" class="mt-3">
               <label class="form-label">Korrelationsmatris</label>
               <small class="form-text text-muted d-block mb-1">
-                Från fonddatabasen. Används inte i simuleringen.
+                Från fonddatabasen.<template v-if="simulationMethod === 'bootstrap'"> Används inte i simuleringen.</template>
               </small>
               <div class="table-responsive">
                 <table class="table table-sm table-striped correlation-matrix-table">
@@ -971,7 +976,46 @@ const expectedTotalWithdrawalRate = computed(() => {
                   @click="handleParameterClick('simulationCount', $event)"
                 />
               </div>
-              <div class="col-12" v-if="bootstrapProfileList.length > 0">
+              <div class="col-12">
+                <label class="form-label">Simuleringsmetod</label>
+                <select
+                  :class="getInputClass('simulationMethod')"
+                  v-model="simulationMethod"
+                  :disabled="isFieldDisabled('simulationMethod')"
+                  @click="handleParameterClick('simulationMethod', $event)"
+                >
+                  <option value="factormodel">Faktormodell (parametrisk)</option>
+                  <option value="bootstrap">Blockbootstrap (historisk)</option>
+                </select>
+                <small v-if="simulationMethod === 'bootstrap'" class="form-text text-muted">
+                  Samplar historiska block. Begränsas av fondernas historiklängd.
+                </small>
+              </div>
+              <div class="col-12" v-if="simulationMethod === 'factormodel' && stressPresetList.length > 0">
+                <label class="form-label">Stresstest</label>
+                <select
+                  :class="getInputClass('stressPresetId')"
+                  v-model="stressPresetId"
+                  :disabled="isFieldDisabled('stressPresetId')"
+                  @click="handleParameterClick('stressPresetId', $event)"
+                >
+                  <option value="">Ingen</option>
+                  <option
+                    v-for="preset in stressPresetList"
+                    :key="preset.id"
+                    :value="preset.id"
+                  >
+                    {{ preset.label }}
+                  </option>
+                </select>
+                <small class="form-text text-muted">
+                  Applicerar faktormodellens stresscenario vid första uttagsåret.
+                </small>
+                <div v-if="stressWarning" class="alert alert-warning mt-2 mb-0 py-1 px-2 small">
+                  {{ stressWarning }}
+                </div>
+              </div>
+              <div class="col-12" v-if="simulationMethod === 'bootstrap' && bootstrapProfileList.length > 0">
                 <label class="form-label">Stresstest</label>
                 <select
                   :class="getInputClass('bootstrapProfileId')"

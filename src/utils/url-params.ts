@@ -34,7 +34,9 @@ const PARAM_KEYS: Record<string, string> = {
   iskTaxRateStdDev: 'its',
   inflationRate: 'ir',
   inflationStdDev: 'is',
+  simulationMethod: 'sm',
   bootstrapProfileId: 'bp',
+  stressPresetId: 'sp',
 }
 
 // Get URL key for a parameter (asset properties are not directly encoded in URL)
@@ -436,7 +438,9 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
       // Parse the value based on parameter type
       if (paramKey === 'accountType') {
         parameters[paramKey] = value as 'ISK' | 'VP'
-      } else if (paramKey === 'bootstrapProfileId') {
+      } else if (paramKey === 'simulationMethod') {
+        parameters[paramKey] = value as 'factormodel' | 'bootstrap'
+      } else if (paramKey === 'bootstrapProfileId' || paramKey === 'stressPresetId') {
         parameters[paramKey] = value
       } else if (paramKey === 'assets') {
         // If we have asset property overrides, don't set full assets array
@@ -534,9 +538,21 @@ export function encodeParamsToUrl(
   }
   query.cgt = params.capitalGainsTaxRate.toString()
 
+  // Simulation method (only encode when not default)
+  if (params.simulationMethod === 'bootstrap') {
+    query.sm = 'bootstrap'
+  } else if (params.simulationMethod === 'factormodel') {
+    // factormodel is default, don't encode
+  }
+
   // Bootstrap profile (optional)
   if (params.bootstrapProfileId) {
     query.bp = params.bootstrapProfileId
+  }
+
+  // Stress preset (optional, only in factormodel mode)
+  if (params.stressPresetId) {
+    query.sp = params.stressPresetId
   }
 
   // ISK-specific params (optional)
@@ -665,8 +681,15 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   const itr = parseNum('itr')
   const its = parseNum('its')
 
+  const sm = getString('sm')
+  if (sm === 'bootstrap') params.simulationMethod = sm
+  else if (sm === 'factormodel') params.simulationMethod = 'factormodel'
+
   const bp = getString('bp')
   if (bp) params.bootstrapProfileId = bp
+
+  const sp = getString('sp')
+  if (sp) params.stressPresetId = sp
 
   const aw = getString('aw')
   const aas = getString('aas')

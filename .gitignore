@@ -37,3 +37,4 @@ __screenshots__/
 
 # External data (symlinked from fundcmp)
 public/data
+public/fund-factors.json

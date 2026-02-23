@@ -40,7 +40,11 @@ export interface InputParameters {
   inflationRate: number
   inflationStdDev: number
 
+  simulationMethod?: 'factormodel' | 'bootstrap' // Default: 'factormodel'
   bootstrapProfileId?: string // ID of bootstrap sampling profile for block weighting
+  stressPresetId?: string // ID of factor stress preset (factor model mode)
+  stressYearReturns?: (number | null)[] // Per-asset stressed returns for one year
+  stressYear?: number // Year index at which stress returns are applied
 }
 
 export interface SimulationPeriodData<T = number> {
@@ -133,9 +137,9 @@ export interface ScenarioTable {
   scenarios: Scenario[]
 }
 
-// Type-safe parameter keys (excludes seed which is auto-generated)
+// Type-safe parameter keys (excludes internal/auto-generated fields)
 export type ScenarioParameter =
-  | Exclude<keyof InputParameters, 'seed'>
+  | Exclude<keyof InputParameters, 'seed' | 'stressYearReturns' | 'stressYear'>
   | 'accountType'
   | AssetPropertyParameter
 

@@ -33,6 +33,10 @@ import {
 } from '../utils/url-params'
 import { loadBootstrapData, prepareBootstrapPayload } from '../bootstrap'
 import type { BootstrapProfile, BootstrapPayload } from '../bootstrap'
+import { loadStressData, computeStressReturns } from '../stress'
+import type { StressPreset } from '../stress'
+import { prepareFactorModelPayload } from '../factor-model'
+import type { FactorModelPayload } from '../factor-model'
 import SimulationWorker from '../simulation.worker?worker'
 
 export const useCalculatorStore = defineStore('calculator', () => {
@@ -70,9 +74,13 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const startYear = ref(45)
   const yearsLater = ref(36)
   const simulationCount = ref(1000)
+  const simulationMethod = ref<'factormodel' | 'bootstrap'>('factormodel')
   const bootstrapProfileId = ref('uniform')
   const bootstrapWarning = ref('')
   const bootstrapProfileList = ref<BootstrapProfile[]>([])
+  const stressPresetId = ref('')
+  const stressWarning = ref('')
+  const stressPresetList = ref<StressPreset[]>([])
   const seed = ref<string | undefined>(undefined)
 
   // Scenario table state
@@ -336,7 +344,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
       iskTaxRateStdDev: iskTaxRateStdDev.value,
       inflationRate: inflationRate.value,
       inflationStdDev: inflationStdDev.value,
+      simulationMethod: simulationMethod.value,
       bootstrapProfileId: bootstrapProfileId.value,
+      stressPresetId: stressPresetId.value,
     }
     return paramMap[paramKey]
   }
@@ -366,7 +376,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
     capitalGainsTaxRate: capitalGainsTax.value,
     inflationRate: inflationRate.value,
     inflationStdDev: inflationStdDev.value,
+    simulationMethod: simulationMethod.value,
     bootstrapProfileId: bootstrapProfileId.value || undefined,
+    stressPresetId: stressPresetId.value || undefined,
   })
 
   /**
@@ -378,6 +390,18 @@ export const useCalculatorStore = defineStore('calculator', () => {
       bootstrapProfileList.value = profiles
     } catch (e) {
       console.warn('Failed to load bootstrap data:', e)
+    }
+  }
+
+  /**
+   * Load stress presets from the factor model data (called once at startup).
+   */
+  async function initStressPresets() {
+    try {
+      const { presets } = await loadStressData()
+      stressPresetList.value = presets
+    } catch (e) {
+      console.warn('Failed to load stress presets:', e)
     }
   }
 
@@ -473,27 +497,74 @@ export const useCalculatorStore = defineStore('calculator', () => {
         labels = [accountType.value]
       }
 
-      // Prepare bootstrap payload
+      // Prepare simulation payload based on method
       bootstrapWarning.value = ''
-      const effectiveProfileId = paramSets[0]?.bootstrapProfileId ?? bootstrapProfileId.value
-      const { fundsDb, profiles } = await loadBootstrapData()
-      const profile = profiles.find((p) => p.id === effectiveProfileId)
+      stressWarning.value = ''
+      const effectiveMethod = paramSets[0]?.simulationMethod ?? simulationMethod.value
+      let bootstrapPayload: BootstrapPayload | undefined
+      let factorPayload: FactorModelPayload | undefined
 
-      if (!profile) {
-        bootstrapWarning.value = `Okänd bootstrapprofil: ${effectiveProfileId}`
-        return
+      if (effectiveMethod === 'bootstrap') {
+        // Bootstrap mode: prepare historical data payload
+        const effectiveProfileId = paramSets[0]?.bootstrapProfileId ?? bootstrapProfileId.value
+        const { fundsDb, profiles } = await loadBootstrapData()
+        const profile = profiles.find((p) => p.id === effectiveProfileId)
+
+        if (!profile) {
+          bootstrapWarning.value = `Okänd bootstrapprofil: ${effectiveProfileId}`
+          return
+        }
+
+        const assetNames = paramSets[0]!.assets.map((a) => a.name)
+        const assetWeights = paramSets[0]!.assets.map((a) => a.weight)
+        const bootstrapResult = await prepareBootstrapPayload(assetNames, fundsDb, profile.components, assetWeights)
+
+        if ('warnings' in bootstrapResult) {
+          bootstrapWarning.value = bootstrapResult.warnings.join('; ')
+          return
+        }
+
+        bootstrapPayload = bootstrapResult
+      } else {
+        // Factor model mode: prepare factor payload and stress returns
+        try {
+          const { factorData, fundsDb } = await loadStressData()
+          const assetNames = paramSets[0]!.assets.map((a) => a.name)
+          const assetWeights = paramSets[0]!.assets.map((a) => a.weight)
+          const fmResult = prepareFactorModelPayload(assetNames, assetWeights, fundsDb, factorData)
+
+          if ('warnings' in fmResult) {
+            stressWarning.value = fmResult.warnings.join('; ')
+            // Fall through without factor payload — simulation uses independent normals
+          } else {
+            factorPayload = fmResult.payload
+          }
+
+          // Compute stress returns if a preset is selected
+          const effectiveStressId = paramSets[0]?.stressPresetId ?? stressPresetId.value
+          if (effectiveStressId) {
+            const stressResult = computeStressReturns(
+              effectiveStressId,
+              paramSets[0]!.assets,
+              fundsDb,
+              factorData,
+            )
+            if (stressResult.warnings.length > 0) {
+              stressWarning.value = stressResult.warnings.join('; ')
+            }
+            if (stressResult.returns.length > 0) {
+              // Apply stress returns at the first withdrawal year
+              const stressYear = paramSets[0]!.depositYears ?? depositYears.value
+              for (const ps of paramSets) {
+                ps.stressYearReturns = stressResult.returns
+                ps.stressYear = stressYear
+              }
+            }
+          }
+        } catch (e) {
+          stressWarning.value = `Kunde inte ladda faktormodell: ${e}`
+        }
       }
-
-      const assetNames = paramSets[0]!.assets.map((a) => a.name)
-      const assetWeights = paramSets[0]!.assets.map((a) => a.weight)
-      const bootstrapResult = await prepareBootstrapPayload(assetNames, fundsDb, profile.components, assetWeights)
-
-      if ('warnings' in bootstrapResult) {
-        bootstrapWarning.value = bootstrapResult.warnings.join('; ')
-        return
-      }
-
-      const bootstrapPayload: BootstrapPayload = bootstrapResult
 
       // Create plain object copy for worker
       const plainParamSets = JSON.parse(JSON.stringify(paramSets))
@@ -520,7 +591,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         }
 
         // Start simulation
-        worker.postMessage({ paramSets: plainParamSets, labels, bootstrapPayload })
+        worker.postMessage({ paramSets: plainParamSets, labels, bootstrapPayload, factorModelPayload: factorPayload })
       })
 
       simulationResults.value = results
@@ -569,7 +640,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
     inflationStdDev.value = params.inflationStdDev
     vpFundTaxRate.value = params.vpWealthTaxRate
     capitalGainsTax.value = params.capitalGainsTaxRate
+    simulationMethod.value = params.simulationMethod ?? 'factormodel'
     bootstrapProfileId.value = params.bootstrapProfileId ?? 'uniform'
+    stressPresetId.value = params.stressPresetId ?? ''
     seed.value = params.seed
 
     // ISK-specific parameters (may be undefined for VP)
@@ -645,8 +718,12 @@ export const useCalculatorStore = defineStore('calculator', () => {
               if (urlParams.iskTaxRate !== undefined) iskTaxRate.value = urlParams.iskTaxRate
               if (urlParams.iskTaxRateStdDev !== undefined)
                 iskTaxRateStdDev.value = urlParams.iskTaxRateStdDev
+              if (urlParams.simulationMethod !== undefined)
+                simulationMethod.value = urlParams.simulationMethod ?? 'factormodel'
               if (urlParams.bootstrapProfileId !== undefined)
                 bootstrapProfileId.value = urlParams.bootstrapProfileId ?? 'uniform'
+              if (urlParams.stressPresetId !== undefined)
+                stressPresetId.value = urlParams.stressPresetId ?? ''
               if (urlParams.seed !== undefined) seed.value = urlParams.seed
             }
 
@@ -689,7 +766,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
         startYear,
         yearsLater,
         simulationCount,
+        simulationMethod,
         bootstrapProfileId,
+        stressPresetId,
         seed,
       ],
       () => {
@@ -747,9 +826,13 @@ export const useCalculatorStore = defineStore('calculator', () => {
     startYear,
     yearsLater,
     simulationCount,
+    simulationMethod,
     bootstrapProfileId,
     bootstrapWarning,
     bootstrapProfileList,
+    stressPresetId,
+    stressWarning,
+    stressPresetList,
     seed,
 
     // State
@@ -765,6 +848,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
 
     // Actions
     initBootstrapData,
+    initStressPresets,
     runSimulation,
     resetResults,
     loadParameters,

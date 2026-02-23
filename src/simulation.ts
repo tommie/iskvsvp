@@ -9,6 +9,8 @@ import type {
 } from './types'
 import type { BootstrapPayload } from './bootstrap'
 import { sampleAnnualReturns } from './bootstrap'
+import type { FactorModelPayload } from './factor-model'
+import { sampleFactorModelReturns } from './factor-model'
 
 // Extended result that includes final asset weights and cumulative inflation
 export interface SingleSimulationResult extends SimulationResult<number> {
@@ -27,6 +29,7 @@ function randomNormal(mean: number, stdDev: number, rng: () => number): number {
   const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2)
   return mean + z0 * stdDev
 }
+
 
 interface AssetPosition {
   value: number
@@ -78,20 +81,26 @@ export function spendingMultiplier(age: number, enabled: boolean): number {
  */
 export function runSingleSimulation(
   params: InputParameters,
-  bootstrapPayload: BootstrapPayload,
+  bootstrapPayload?: BootstrapPayload,
+  factorModelPayload?: FactorModelPayload,
 ): SingleSimulationResult {
   const rng = alea(params.seed)
   const isISK = params.iskTaxRate !== undefined
 
-  // Pre-compute bootstrap returns from historical data
-  const precomputedReturns = sampleAnnualReturns(
-    bootstrapPayload.returnMatrix,
-    bootstrapPayload.nMonths,
-    bootstrapPayload.profileComponents,
-    rng,
-    params.yearsLater,
-    bootstrapPayload.startDate,
-  )
+  // Pre-compute returns: factor model, bootstrap, or simple parametric
+  let precomputedReturns: number[][] | null = null
+  if (bootstrapPayload) {
+    precomputedReturns = sampleAnnualReturns(
+      bootstrapPayload.returnMatrix,
+      bootstrapPayload.nMonths,
+      bootstrapPayload.profileComponents,
+      rng,
+      params.yearsLater,
+      bootstrapPayload.startDate,
+    )
+  } else if (factorModelPayload) {
+    precomputedReturns = sampleFactorModelReturns(factorModelPayload, rng, params.yearsLater)
+  }
 
   // Initialize asset positions
   const assetPositions: AssetPosition[] = params.assets.map((asset) => ({
@@ -153,7 +162,25 @@ export function runSingleSimulation(
     // Generate stochastic parameters
     const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev, rng)
 
-    const assetReturns: number[] = precomputedReturns[i]!
+    let assetReturns: number[]
+    if (precomputedReturns) {
+      assetReturns = precomputedReturns[i]!
+    } else {
+      // Fallback: independent normal returns (should not be reached with factor model)
+      assetReturns = params.assets.map((a) =>
+        randomNormal(a.expectedReturn, a.volatility, rng),
+      )
+    }
+
+    // Override with stress returns if specified for this year
+    if (params.stressYearReturns && params.stressYear === i) {
+      for (let k = 0; k < assetReturns.length; k++) {
+        const stressed = params.stressYearReturns[k]
+        if (stressed != null) {
+          assetReturns[k] = stressed
+        }
+      }
+    }
 
     cumulativeInflation *= 1 + inflationRate
 
@@ -208,8 +235,19 @@ export function runSingleSimulation(
           // 2–4 in the literature), chosen as a round number that reduces floor
           // binding in volatile portfolios without over-suppressing withdrawals.
           const GAMMA = 3
-          const nominalReturn = bootstrapPayload.portfolioGeometricMean
-            - (GAMMA - 1) * bootstrapPayload.portfolioVariance / 2
+          let nominalReturn: number
+          if (bootstrapPayload) {
+            nominalReturn = bootstrapPayload.portfolioGeometricMean
+              - (GAMMA - 1) * bootstrapPayload.portfolioVariance / 2
+          } else if (factorModelPayload) {
+            nominalReturn = factorModelPayload.portfolioExpectedReturn
+              - (GAMMA - 1) * factorModelPayload.portfolioVariance / 2
+          } else {
+            // Fallback: weighted geometric mean from asset parameters
+            const mu = params.assets.reduce((s, a) => s + a.weight * a.expectedReturn, 0)
+            const sigma2 = params.assets.reduce((s, a) => s + a.weight * a.volatility * a.volatility, 0)
+            nominalReturn = mu - (GAMMA - 1) * sigma2 / 2
+          }
           const taxDrag = isISK
             ? currentIskTaxRate * params.capitalGainsTaxRate
             : params.vpWealthTaxRate * params.capitalGainsTaxRate
@@ -527,7 +565,8 @@ export function simulateAll(
   paramSets: InputParameters[],
   labels: string[],
   onProgress: ((progress: number) => void) | undefined,
-  bootstrapPayload: BootstrapPayload,
+  bootstrapPayload?: BootstrapPayload,
+  factorModelPayload?: FactorModelPayload,
 ): SimulationResults {
   const allResults: SingleSimulationResult[][] = []
 
@@ -538,7 +577,7 @@ export function simulateAll(
 
     for (let i = 0; i < params.simulationCount; i++) {
       const params2 = { ...params, seed: params.seed + i.toString() }
-      results.push(runSingleSimulation(params2, bootstrapPayload))
+      results.push(runSingleSimulation(params2, bootstrapPayload, factorModelPayload))
 
       if (onProgress && i % 100 === 0) {
         const overallProgress =
