@@ -21,7 +21,7 @@ function makeFactorData(overrides: {
   // Lower triangle row-major: [cov[0][0], cov[1][0], cov[1][1]]
   const covariance_lower = [1.0, 0.0, 1.0]
 
-  const fundParams: Record<string, any> = {
+  const fundParams = {
     ISIN001: {
       alpha: 0.5, // 0.5% monthly
       betas: { f1: 0.8 },
@@ -34,13 +34,10 @@ function makeFactorData(overrides: {
         ar1_coefficient: overrides.ar1Coefficient ?? 0,
         ar1_significant: overrides.ar1Significant ?? false,
       },
+      vol_betas: overrides.volBetas,
+      vol_intercept: overrides.volIntercept ?? 0,
+      vol_log_resid_sq_mean: overrides.volLogResidSqMean ?? 0,
     },
-  }
-
-  if (overrides.volBetas) {
-    fundParams.ISIN001.vol_betas = overrides.volBetas
-    fundParams.ISIN001.vol_intercept = overrides.volIntercept ?? 0
-    fundParams.ISIN001.vol_log_resid_sq_mean = overrides.volLogResidSqMean ?? 0
   }
 
   return {
