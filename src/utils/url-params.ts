@@ -401,9 +401,10 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
   const names = getStringArray('sn')
   if (names.length === 0) return null
 
-  // Get controlled parameters
+  // Get controlled parameters (may be empty when only asset property
+  // overrides vary between scenarios).
   const cpStr = query.cp
-  if (!cpStr || Array.isArray(cpStr)) return null
+  if (cpStr === undefined || cpStr === null || Array.isArray(cpStr)) return null
   const controlledParams = cpStr.split(',').filter((p) => p.length > 0)
 
   // Check if assets have property overrides (multi-valued properties)
