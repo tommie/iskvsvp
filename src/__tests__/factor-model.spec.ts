@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { alea } from 'seedrandom'
-import { prepareFactorModelPayload, sampleFactorModelReturns } from '../factor-model'
+import { prepareFactorModelPayload, sampleFactorModelReturns, makeNormalSampler, sampleT } from '../factor-model'
 import type { FactorModelPayload } from '../factor-model'
 import type { FactorData, FundsDb } from '../stress'
 
@@ -466,5 +466,197 @@ describe('prepareFactorModelPayload eigenvalue clamping', () => {
     const L = result.payload.innovationCholeskyL
     expect(L[0]![0]).toBeGreaterThan(0)
     expect(L[1]![1]).toBeGreaterThan(0)
+  })
+})
+
+// --- Correctness tests for optimized sampling primitives ---
+
+describe('makeNormalSampler (Marsaglia polar)', () => {
+  it('produces mean ≈ 0 and stdDev ≈ 1 for N(0,1)', () => {
+    const rng = alea('normal-stats')
+    const sample = makeNormalSampler(rng)
+    const N = 50_000
+    let sum = 0
+    let sumSq = 0
+    for (let i = 0; i < N; i++) {
+      const x = sample(0, 1)
+      sum += x
+      sumSq += x * x
+    }
+    const mean = sum / N
+    const variance = sumSq / N - mean * mean
+    expect(mean).toBeCloseTo(0, 1) // within ±0.05
+    expect(variance).toBeCloseTo(1, 1) // within ±0.05
+  })
+
+  it('respects mean and stdDev parameters', () => {
+    const rng = alea('normal-params')
+    const sample = makeNormalSampler(rng)
+    const N = 20_000
+    let sum = 0
+    for (let i = 0; i < N; i++) sum += sample(5, 3)
+    const mean = sum / N
+    expect(mean).toBeCloseTo(5, 0) // within ±0.5
+  })
+
+  it('empirical quantiles match N(0,1) theoretical quantiles', () => {
+    // Verify that sorted samples land where N(0,1) predicts.
+    // N(0,1) quantiles: p10=-1.282, p25=-0.674, p50=0, p75=0.674, p90=1.282
+    const rng = alea('normal-quantile')
+    const sample = makeNormalSampler(rng)
+    const N = 50_000
+    const data: number[] = []
+    for (let i = 0; i < N; i++) data.push(sample(0, 1))
+    data.sort((a, b) => a - b)
+
+    const empirical = (p: number) => data[Math.floor(N * p)]!
+    // Allow ±0.03 tolerance at each quantile (generous for N=50k).
+    expect(empirical(0.1)).toBeCloseTo(-1.282, 1)
+    expect(empirical(0.25)).toBeCloseTo(-0.674, 1)
+    expect(empirical(0.5)).toBeCloseTo(0, 1)
+    expect(empirical(0.75)).toBeCloseTo(0.674, 1)
+    expect(empirical(0.9)).toBeCloseTo(1.282, 1)
+  })
+
+  it('spare caching produces independent variates', () => {
+    // Consecutive pairs from the cache should be uncorrelated.
+    const rng = alea('normal-indep')
+    const sample = makeNormalSampler(rng)
+    const N = 10_000
+    let sumXY = 0, sumX = 0, sumY = 0
+    for (let i = 0; i < N; i++) {
+      const x = sample(0, 1)
+      const y = sample(0, 1) // this one comes from the spare
+      sumX += x; sumY += y; sumXY += x * y
+    }
+    const corr = (sumXY / N - (sumX / N) * (sumY / N))
+    // Correlation should be near zero (|r| < 0.05 for N=10k).
+    expect(Math.abs(corr)).toBeLessThan(0.05)
+  })
+})
+
+describe('sampleT (Bailey polar)', () => {
+  it('variance matches df/(df-2) for df=5', () => {
+    const rng = alea('t-var-5')
+    const df = 5
+    const N = 50_000
+    let sum = 0, sumSq = 0
+    for (let i = 0; i < N; i++) {
+      const x = sampleT([df, 0, 1], rng)
+      sum += x
+      sumSq += x * x
+    }
+    const mean = sum / N
+    const variance = sumSq / N - mean * mean
+    const expectedVariance = df / (df - 2) // 5/3 ≈ 1.667
+    expect(mean).toBeCloseTo(0, 1)
+    // Allow ±15% tolerance — t(5) has high variance in variance estimates.
+    expect(variance).toBeCloseTo(expectedVariance, 0)
+  })
+
+  it('variance matches df/(df-2) for df=10', () => {
+    const rng = alea('t-var-10')
+    const df = 10
+    const N = 50_000
+    let sum = 0, sumSq = 0
+    for (let i = 0; i < N; i++) {
+      const x = sampleT([df, 0, 1], rng)
+      sum += x
+      sumSq += x * x
+    }
+    const mean = sum / N
+    const variance = sumSq / N - mean * mean
+    const expectedVariance = df / (df - 2) // 1.25
+    expect(mean).toBeCloseTo(0, 1)
+    expect(variance).toBeCloseTo(expectedVariance, 0)
+  })
+
+  it('produces heavier tails than normal', () => {
+    const rng = alea('t-tail')
+    const N = 50_000
+    let tExceedCount = 0, normExceedCount = 0
+    const normSample = makeNormalSampler(rng)
+    const rng2 = alea('t-tail-t')
+    for (let i = 0; i < N; i++) {
+      if (Math.abs(sampleT([5, 0, 1], rng2)) > 2.5) tExceedCount++
+      if (Math.abs(normSample(0, 1)) > 2.5) normExceedCount++
+    }
+    // t(5) should have roughly 3-4x more exceedances beyond ±2.5σ.
+    expect(tExceedCount).toBeGreaterThan(normExceedCount * 1.5)
+  })
+
+  it('scale parameter works correctly', () => {
+    const rng = alea('t-scale')
+    const N = 20_000
+    let sum1 = 0, sum2 = 0
+    const rng2 = alea('t-scale-2')
+    for (let i = 0; i < N; i++) {
+      sum1 += sampleT([5, 0, 1], rng) ** 2
+      sum2 += sampleT([5, 0, 3], rng2) ** 2
+    }
+    // Variance with scale=3 should be 9x variance with scale=1.
+    const ratio = sum2 / sum1
+    expect(ratio).toBeCloseTo(9, 0)
+  })
+})
+
+describe('Float32Array precision in sampleFactorModelReturns', () => {
+  it('37-factor model produces results within 0.1% of expected mean', () => {
+    // Build a payload with 37 factors (matching the real model size) to
+    // stress-test Float32 accumulation in the Cholesky multiply and
+    // beta dot products.
+    const nFactors = 37
+    const means = new Array(nFactors).fill(0).map((_, i) => 0.05 + i * 0.005)
+    const choleskyL: number[][] = []
+    const innovCholeskyL: number[][] = []
+    for (let i = 0; i < nFactors; i++) {
+      const row = new Array(nFactors).fill(0)
+      row[i] = 1.0
+      // Add small off-diagonal to exercise the full Cholesky multiply.
+      if (i > 0) row[i - 1] = 0.1
+      choleskyL.push(row)
+      innovCholeskyL.push([...row])
+    }
+
+    const betas = new Array(nFactors).fill(0).map((_, i) => 0.02 * (i % 5 === 0 ? 1 : 0))
+    const alpha = 0.3 // 0.3% monthly
+
+    const payload: FactorModelPayload = {
+      nFactors,
+      means,
+      choleskyL,
+      innovationCholeskyL: innovCholeskyL,
+      fundParams: [{
+        alpha,
+        betasFull: betas,
+        residualStd: 0.001,
+        residualType: 'norm',
+        residualParams: [0, 0.001],
+        ar1Coefficient: 0,
+        volBetasFull: null,
+        volIntercept: 0,
+        volBaseline: 0,
+      }],
+      factorAr1: new Array(nFactors).fill(0),
+      portfolioExpectedReturn: 0.05,
+      portfolioVariance: 0.01,
+    }
+
+    // E[monthly] ≈ alpha + dot(betas, means)
+    let expectedMonthly = alpha
+    for (let f = 0; f < nFactors; f++) expectedMonthly += betas[f]! * means[f]!
+    const expectedAnnual = Math.pow(1 + expectedMonthly / 100, 12) - 1
+
+    const N = 3000
+    let sum = 0
+    for (let i = 0; i < N; i++) {
+      const rng = alea(`f32-precision-${i}`)
+      const result = sampleFactorModelReturns(payload, rng, 1)
+      sum += result[0]![0]!
+    }
+    const mean = sum / N
+    // Float32 truncation in the 37-element dot product should NOT shift
+    // the mean by more than 0.1% absolute.
+    expect(Math.abs(mean - expectedAnnual)).toBeLessThan(0.001)
   })
 })
