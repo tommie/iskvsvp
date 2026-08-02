@@ -112,6 +112,7 @@ function makeParams(overrides: Partial<InputParameters> = {}): InputParameters {
     bequestGoal: 0,
     ageAdjustedSpending: false,
     withdrawalRatchetLimit: 0,
+    withdrawalCap: 0,
     vpWealthTaxRate: 0,
     capitalGainsTaxRate: 0,
     inflationRate: 0,
@@ -323,6 +324,101 @@ describe('withdrawal ratchet (Kitces)', () => {
     expect(withRatchet.periodData.withdrawal[5]!).toBeGreaterThan(
       noRatchet.periodData.withdrawal[5]!,
     )
+  })
+})
+
+describe('withdrawal cap', () => {
+  // 7%/yr growth against a 4% withdrawal rate means the balance — and thus the
+  // uncapped withdrawal — grows every year, so the cap has something to bind on.
+  const growing = makePayload(Math.pow(1.07, 1 / 12) - 1)
+
+  it('caps withdrawals at the configured amount', () => {
+    const uncapped = runSingleSimulation(makeParams(), growing)
+    const capped = runSingleSimulation(makeParams({ withdrawalCap: 45_000 }), growing)
+
+    // Sanity: the uncapped run must exceed the cap, or the test proves nothing.
+    expect(Math.max(...uncapped.periodData.withdrawal)).toBeGreaterThan(45_000)
+    for (const w of capped.periodData.withdrawal) {
+      expect(w).toBeLessThanOrEqual(45_000 + 1e-6)
+    }
+  })
+
+  it('leaves withdrawals untouched when the cap is above them', () => {
+    const uncapped = runSingleSimulation(makeParams(), growing)
+    const capped = runSingleSimulation(makeParams({ withdrawalCap: 10_000_000 }), growing)
+
+    expect(capped.periodData.withdrawal).toEqual(uncapped.periodData.withdrawal)
+  })
+
+  it('cap grows with inflation', () => {
+    const cap = 45_000
+    const inflationRate = 0.03
+    const result = runSingleSimulation(
+      makeParams({ withdrawalCap: cap, inflationRate, inflationStdDev: 0 }),
+      growing,
+    )
+
+    for (let i = 0; i < result.periodData.withdrawal.length; i++) {
+      // Inflation is applied before the withdrawal in year i, so the ceiling
+      // for year i is the cap compounded i+1 times.
+      const nominalCap = cap * Math.pow(1 + inflationRate, i + 1)
+      expect(result.periodData.withdrawal[i]!).toBeLessThanOrEqual(nominalCap + 1e-6)
+    }
+    // The cap must actually rise, not stay pinned at the real amount.
+    const last = result.periodData.withdrawal[result.periodData.withdrawal.length - 1]!
+    expect(last).toBeGreaterThan(cap)
+  })
+
+  it('cap follows the age curve when age-adjusted spending is on', () => {
+    // spendingMultiplier peaks around 45-50 and declines to ~65% at 80+,
+    // so a cap that binds throughout must decline over the run.
+    const result = runSingleSimulation(
+      makeParams({ withdrawalCap: 30_000, ageAdjustedSpending: true, startYear: 45 }),
+      growing,
+    )
+    const w = result.periodData.withdrawal
+    expect(w[w.length - 1]!).toBeLessThan(w[0]!)
+  })
+
+  it('cap overrides the ratchet floor', () => {
+    // The ratchet alone would lock withdrawals at their peak; the cap must win
+    // and must not leave a stale floor above the ceiling.
+    const result = runSingleSimulation(
+      makeParams({ withdrawalCap: 45_000, withdrawalRatchetLimit: 0.1 }),
+      growing,
+    )
+    for (const w of result.periodData.withdrawal) {
+      expect(w).toBeLessThanOrEqual(45_000 + 1e-6)
+    }
+  })
+
+  it('caps the Merton amortized withdrawal too', () => {
+    const params = makeParams({
+      amortizedWithdrawal: true,
+      withdrawalCap: 45_000,
+      yearsLater: 20,
+    })
+    const uncapped = runSingleSimulation({ ...params, withdrawalCap: 0 }, growing)
+    expect(Math.max(...uncapped.periodData.withdrawal)).toBeGreaterThan(45_000)
+
+    const capped = runSingleSimulation(params, growing)
+    for (const w of capped.periodData.withdrawal) {
+      expect(w).toBeLessThanOrEqual(45_000 + 1e-6)
+    }
+  })
+
+  it('defers VP capital gains tax by leaving gains unrealized', () => {
+    // The point of the cap: unspent gains are never realized, so the annual
+    // CGT bill drops and the invested capital compounds on a larger base.
+    const vp = { capitalGainsTaxRate: 0.3, vpWealthTaxRate: 0.004, yearsLater: 20 }
+    const uncapped = runSingleSimulation(makeParams(vp), growing)
+    const capped = runSingleSimulation(makeParams({ ...vp, withdrawalCap: 45_000 }), growing)
+
+    const cumTax = (r: typeof uncapped) => r.periodData.tax.reduce((a, b) => a + b, 0)
+    const finalCapital = (r: typeof uncapped) => r.snapshots.capital[r.snapshots.capital.length - 1]!
+
+    expect(cumTax(capped)).toBeLessThan(cumTax(uncapped))
+    expect(finalCapital(capped)).toBeGreaterThan(finalCapital(uncapped))
   })
 })
 

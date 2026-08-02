@@ -309,6 +309,24 @@ export function runSingleSimulation(
           }
         }
       }
+
+      // Spending ceiling: an absolute amount in today's money, tracking
+      // inflation and the same age curve as the other absolute inputs (so it
+      // can never bind below the Merton floor). What is not withdrawn stays
+      // invested, which in a VP account defers the capital gains tax on those
+      // gains indefinitely — the point of the cap is to stop percentage-based
+      // rules from realizing more than will actually be spent.
+      if (params.withdrawalCap > 0) {
+        const cap = params.withdrawalCap * cumulativeInflation
+          * spendingMultiplier(params.startYear + i, params.ageAdjustedSpending)
+        if (withdrawn > cap) {
+          withdrawn = cap
+          // The ratchet floor must follow the cap down, otherwise it stays
+          // above the ceiling and pins every later year to the cap regardless
+          // of how the portfolio performs.
+          if (ratchetFloor > cap) ratchetFloor = cap
+        }
+      }
       withdrawalRate = amount > 0 ? withdrawn / amount : 0
     }
 

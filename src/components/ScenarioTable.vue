@@ -40,6 +40,7 @@ const parameterLabels: Record<string, string> = {
   profitWithdrawalRate: 'Vinstuttag (%)',
   profitLookbackYears: 'Lookback år',
   inflationBasedWithdrawal: 'Inflationsjusterat uttag',
+  withdrawalCap: 'Uttagstak',
   ageAdjustedSpending: 'Åldersjusterat uttag',
   vpWealthTaxRate: 'VP fondskatt (%)',
   capitalGainsTaxRate: 'Kapitalvinstskatt (%)',
@@ -142,7 +143,8 @@ function parseValue(param: ScenarioParameter, inputValue: string): ScenarioValue
     param === 'yearsLater' ||
     param === 'simulationCount' ||
     param === 'profitLookbackYears' ||
-    param === 'inflationBasedWithdrawal'
+    param === 'inflationBasedWithdrawal' ||
+    param === 'withdrawalCap'
   ) {
     return parseInt(inputValue, 10)
   }
