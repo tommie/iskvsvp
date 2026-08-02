@@ -29,6 +29,7 @@ const PARAM_KEYS: Record<string, string> = {
   bequestGoal: 'bg',
   ageAdjustedSpending: 'aas',
   withdrawalRatchetLimit: 'wrl',
+  withdrawalCap: 'wc',
   vpWealthTaxRate: 'vft',
   capitalGainsTaxRate: 'cgt',
   iskTaxRate: 'itr',
@@ -538,6 +539,9 @@ export function encodeParamsToUrl(
   if (params.withdrawalRatchetLimit) {
     query.wrl = params.withdrawalRatchetLimit.toString()
   }
+  if (params.withdrawalCap) {
+    query.wc = params.withdrawalCap.toString()
+  }
   if (params.bequestGoal) {
     query.bg = params.bequestGoal.toString()
   }
@@ -699,6 +703,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   const aw = getString('aw')
   const aas = getString('aas')
   const wrl = parseNum('wrl')
+  const wc = parseNum('wc')
   const bg = parseNum('bg')
 
   if (bwr !== undefined) params.balanceWithdrawalRate = bwr
@@ -708,6 +713,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   if (aw !== undefined) params.amortizedWithdrawal = aw === '1'
   if (aas !== undefined) params.ageAdjustedSpending = aas === '1'
   if (wrl !== undefined) params.withdrawalRatchetLimit = wrl
+  if (wc !== undefined) params.withdrawalCap = wc
   if (bg !== undefined) params.bequestGoal = bg
   if (cgt !== undefined) params.capitalGainsTaxRate = cgt
   if (itr !== undefined) params.iskTaxRate = itr

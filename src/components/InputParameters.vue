@@ -24,6 +24,7 @@ const {
   bequestGoal,
   ageAdjustedSpending,
   withdrawalRatchetLimit,
+  withdrawalCap,
   iskTaxRate,
   iskTaxRateStdDev,
   inflationRate,
@@ -356,6 +357,15 @@ const getTargetValue = (event: Event) => {
   return parseFloat((event.target as HTMLInputElement)?.value)
 }
 
+// Spending ceiling for the first withdrawal year, in today's money. Both the
+// cap and the balance it is compared against grow with inflation, so the
+// estimate can stay in today's money and ignore cumulative inflation.
+const firstYearWithdrawalCap = computed(() => {
+  if (withdrawalCap.value <= 0) return Infinity
+  const age = startYear.value + depositYears.value
+  return withdrawalCap.value * spendingMultiplier(age, ageAdjustedSpending.value)
+})
+
 const expectedTotalWithdrawalRate = computed(() => {
   if (amortizedWithdrawal.value) {
     // Approximate first-year PMT rate using parametric expected returns.
@@ -379,7 +389,7 @@ const expectedTotalWithdrawalRate = computed(() => {
       amortized = (r * (initialCapital.value - fv * disc)) / (1 - disc)
     }
     const floor = inflationBasedWithdrawal.value
-    const withdrawal = Math.max(floor, amortized)
+    const withdrawal = Math.min(firstYearWithdrawalCap.value, Math.max(floor, amortized))
     return withdrawal / initialCapital.value
   }
 
@@ -419,7 +429,9 @@ const expectedTotalWithdrawalRate = computed(() => {
 
   const inflationComponent = inflationBasedWithdrawal.value / initialCapital.value
 
-  return balanceComponent + profitComponent + inflationComponent
+  const uncapped = balanceComponent + profitComponent + inflationComponent
+  if (initialCapital.value <= 0) return uncapped
+  return Math.min(uncapped, firstYearWithdrawalCap.value / initialCapital.value)
 })
 </script>
 
@@ -575,7 +587,34 @@ const expectedTotalWithdrawalRate = computed(() => {
                   kostnader.
                 </small>
               </div>
-              <div class="col-12 col-md-6" v-if="inflationBasedWithdrawal > 0">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Uttagstak</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="1000"
+                    min="0"
+                    :class="getInputClass('withdrawalCap')"
+                    v-model.number="withdrawalCap"
+                    :disabled="isFieldDisabled('withdrawalCap')"
+                    @click="handleParameterClick('withdrawalCap', $event)"
+                  />
+                  <span class="input-group-text">kr</span>
+                </div>
+                <small class="form-text text-muted">
+                  Maximalt uttag per år i dagens penningvärde, räknas upp med inflation. Det som
+                  inte tas ut ligger kvar investerat och skjuter upp kapitalvinstskatten i VP. 0 =
+                  av.
+                </small>
+                <small
+                  class="form-text text-warning"
+                  v-if="withdrawalCap > 0 && withdrawalCap < inflationBasedWithdrawal"
+                >
+                  Taket ligger under det inflationsbaserade uttaget och kapar därmed nödvändiga
+                  kostnader.
+                </small>
+              </div>
+              <div class="col-12 col-md-6" v-if="inflationBasedWithdrawal > 0 || withdrawalCap > 0">
                 <div class="form-check">
                   <input
                     type="checkbox"
