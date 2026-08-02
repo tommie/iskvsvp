@@ -20,6 +20,12 @@ export interface SingleSimulationResult extends SimulationResult<number> {
 
 const ISK_TAX_RATE_MIN = 0.0125
 
+// Skattereduktion for a net loss in inkomstslaget kapital: the full rate on the
+// first 100 000 kr, 70% of it above (30%/21% at the statutory rate).
+// The threshold is nominal in law and is not inflation-indexed.
+const LOSS_CREDIT_THRESHOLD = 100_000
+const LOSS_CREDIT_UPPER_QUOTA = 0.7
+
 /**
  * Generate a random number from a normal distribution using Box-Muller transform.
  */
@@ -207,7 +213,9 @@ export function runSingleSimulation(
     // Step 2: Handle deposits or withdrawals
     let withdrawn = 0
     let withdrawalRate = 0
-    let withdrawalTax = 0
+    // Signed realized gain, not tax: losses on one asset must be able to offset
+    // gains on another before the rate is applied (Swedish kvittning).
+    let withdrawalGain = 0
 
     if (i < params.depositYears) {
       // Deposit years: add inflation-adjusted deposit to portfolio
@@ -327,6 +335,14 @@ export function runSingleSimulation(
           if (ratchetFloor > cap) ratchetFloor = cap
         }
       }
+
+      // You cannot withdraw money that is not there. Without this the absolute
+      // withdrawal components (inflation-based, ratchet floor) keep paying out
+      // of a depleted portfolio: balances go negative, and when the balance
+      // hits exactly zero the withdrawn/amount fraction becomes Infinity and
+      // poisons every downstream statistic with NaN.
+      withdrawn = Math.max(0, Math.min(withdrawn, amount))
+
       withdrawalRate = amount > 0 ? withdrawn / amount : 0
     }
 
@@ -346,11 +362,7 @@ export function runSingleSimulation(
           const withdrawalFraction = excessAmount / position.value
 
           if (!isISK) {
-            const costBasisWithdrawn = position.costBasis * withdrawalFraction
-            const gainOnWithdrawal = excessAmount - costBasisWithdrawn
-            if (gainOnWithdrawal > 0) {
-              withdrawalTax += gainOnWithdrawal * params.capitalGainsTaxRate
-            }
+            withdrawalGain += excessAmount - position.costBasis * withdrawalFraction
           }
 
           position.value -= excessAmount
@@ -368,11 +380,7 @@ export function runSingleSimulation(
           const withdrawalFraction = proportionalWithdrawal / position.value
 
           if (!isISK) {
-            const costBasisWithdrawn = position.costBasis * withdrawalFraction
-            const gainOnWithdrawal = proportionalWithdrawal - costBasisWithdrawn
-            if (gainOnWithdrawal > 0) {
-              withdrawalTax += gainOnWithdrawal * params.capitalGainsTaxRate
-            }
+            withdrawalGain += proportionalWithdrawal - position.costBasis * withdrawalFraction
           }
 
           position.value -= proportionalWithdrawal
@@ -386,11 +394,7 @@ export function runSingleSimulation(
         const amountWithdrawn = position.value * withdrawalFraction
 
         if (!isISK) {
-          const costBasisWithdrawn = position.costBasis * withdrawalFraction
-          const gainOnWithdrawal = amountWithdrawn - costBasisWithdrawn
-          if (gainOnWithdrawal > 0) {
-            withdrawalTax += gainOnWithdrawal * params.capitalGainsTaxRate
-          }
+          withdrawalGain += amountWithdrawn - position.costBasis * withdrawalFraction
         }
 
         position.value -= amountWithdrawn
@@ -401,7 +405,7 @@ export function runSingleSimulation(
     amount = assetPositions.reduce((sum, pos) => sum + pos.value, 0)
 
     // Step 4: Rebalance remaining portfolio
-    let rebalancingTax = 0
+    let rebalancingGain = 0
     if (params.assetRebalanceFrequency === 'annually' && i > 0 && amount > 0) {
       const targetValues = params.assets.map((asset) => amount * asset.weight)
 
@@ -415,10 +419,7 @@ export function runSingleSimulation(
           const sellFraction = sellValue / position.value
 
           if (!isISK) {
-            const gainOnSale = sellValue - position.costBasis * sellFraction
-            if (gainOnSale > 0) {
-              rebalancingTax += gainOnSale * params.capitalGainsTaxRate
-            }
+            rebalancingGain += sellValue - position.costBasis * sellFraction
           }
 
           position.value = targetValue
@@ -444,19 +445,66 @@ export function runSingleSimulation(
     if (isISK) {
       tax = amount * currentIskTaxRate * params.capitalGainsTaxRate
     } else {
-      const fundTax = amount * params.vpWealthTaxRate * params.capitalGainsTaxRate
-      tax = fundTax + withdrawalTax + rebalancingTax
+      // Schablonintäkt on fund holdings is capital income in the same bucket as
+      // realized gains, so gains, losses and the schablon all net against each
+      // other before the rate is applied (kvittning within inkomstslaget
+      // kapital). Netting matters whenever assets diverge: taxing each position
+      // separately charged the winners and ignored the losers.
+      const schablonIncome = amount * params.vpWealthTaxRate
+      const netCapitalIncome = schablonIncome + withdrawalGain + rebalancingGain
+
+      if (netCapitalIncome >= 0) {
+        tax = netCapitalIncome * params.capitalGainsTaxRate
+      } else {
+        // A remaining net loss gives a skattereduktion of 30% on the first
+        // 100 000 kr and 21% above — i.e. the full rate on the lower tier and
+        // 70% of it above. The threshold is nominal in law and not indexed, so
+        // it is applied as written. Crediting it back into the portfolio
+        // assumes enough other final tax (pension income) to absorb it.
+        const loss = -netCapitalIncome
+        const lowerTier = Math.min(loss, LOSS_CREDIT_THRESHOLD)
+        const upperTier = loss - lowerTier
+        tax = -(
+          lowerTier * params.capitalGainsTaxRate +
+          upperTier * params.capitalGainsTaxRate * LOSS_CREDIT_UPPER_QUOTA
+        )
+      }
     }
 
-    tax = Math.min(Math.max(0, tax), Math.max(0, amount))
+    // Only the payable side is bounded by the portfolio; a loss credit is an
+    // inflow.
+    tax = Math.min(tax, Math.max(0, amount))
+
+    // Raising the cash to pay the bill is itself a sale in a VP account, so it
+    // realizes gain and triggers further tax. Solve for the gross amount G that
+    // nets the tax due: G = tax + G·u·r, hence G = tax / (1 - u·r), where u is
+    // the unrealized gain fraction and r the rate. Closed form rather than
+    // iterating to a fixed point. Sitting at an unrealized loss does not reduce
+    // the cash the bill needs, so u is floored at zero.
+    if (!isISK && tax > 0 && amount > 0) {
+      const totalCostBasis = assetPositions.reduce((sum, pos) => sum + pos.costBasis, 0)
+      const unrealizedFraction = Math.max(0, (amount - totalCostBasis) / amount)
+      const denominator = 1 - unrealizedFraction * params.capitalGainsTaxRate
+      if (denominator > 0) {
+        tax = Math.min(tax / denominator, amount)
+      }
+    }
 
     // Pay tax
     if (tax > 0 && amount > 0) {
+      const taxFraction = tax / amount
       for (const position of assetPositions) {
-        const taxFraction = tax / amount
-        const taxFromAsset = position.value * taxFraction
-        position.value -= taxFromAsset
+        position.value -= position.value * taxFraction
         position.costBasis *= 1 - taxFraction
+      }
+    } else if (tax < 0 && amount > 0) {
+      // The loss credit comes back as new money buying units at the current
+      // price, so it adds to value and cost basis alike.
+      const credit = -tax
+      for (const position of assetPositions) {
+        const share = position.value / amount
+        position.value += credit * share
+        position.costBasis += credit * share
       }
     }
 

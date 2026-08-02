@@ -182,6 +182,9 @@ describe('runSingleSimulation age-adjusted inflation withdrawal', () => {
 
   it('without age adjustment, inflation withdrawal is constant', () => {
     const params = makeParams({
+      // 100k/yr for 36 years needs 3.6M with zero return; a 1M portfolio would
+      // empty at year 10 and the withdrawal would be clamped to the balance.
+      initialCapital: 4_000_000,
       balanceWithdrawalRate: 0,
       inflationBasedWithdrawal: 100_000,
       ageAdjustedSpending: false,
@@ -196,6 +199,9 @@ describe('runSingleSimulation age-adjusted inflation withdrawal', () => {
 
   it('with age adjustment, inflation withdrawal declines with age', () => {
     const params = makeParams({
+      // As above: the portfolio must be able to fund the whole schedule,
+      // otherwise the late-year assertions measure the clamp, not the age curve.
+      initialCapital: 4_000_000,
       startYear: 45,
       yearsLater: 36,
       balanceWithdrawalRate: 0,
@@ -267,6 +273,10 @@ describe('withdrawal ratchet (Kitces)', () => {
     const params = makeParams({
       balanceWithdrawalRate: 0.04,
       withdrawalRatchetLimit: 0.10, // 10% max increase per year
+      // A ratcheted 4% of a zero-return portfolio is a flat 4% of the starting
+      // capital, so it always runs dry in year 25 regardless of capital size.
+      // Stay inside that horizon, as the cumulative-withdrawal test does.
+      yearsLater: 20,
     })
     const result = runSingleSimulation(params, payload)
     const withdrawals = result.periodData.withdrawal
@@ -419,6 +429,165 @@ describe('withdrawal cap', () => {
 
     expect(cumTax(capped)).toBeLessThan(cumTax(uncapped))
     expect(finalCapital(capped)).toBeGreaterThan(finalCapital(uncapped))
+  })
+})
+
+describe('withdrawal clamped to available capital', () => {
+  // 200k/yr fixed out of 1M with zero return: the account is empty in year 5.
+  const depleting = (overrides: Partial<InputParameters> = {}) =>
+    makeParams({
+      balanceWithdrawalRate: 0,
+      inflationBasedWithdrawal: 200_000,
+      capitalGainsTaxRate: 0.3,
+      yearsLater: 10,
+      assets: [{ name: 'A', weight: 1, expectedReturn: 0, volatility: 0 }],
+      ...overrides,
+    })
+
+  it('stops withdrawing once the portfolio is empty', () => {
+    const r = runSingleSimulation(depleting())
+
+    // Five full withdrawals, then nothing — not 200k/yr forever.
+    expect(r.periodData.withdrawal.slice(0, 5).map(Math.round)).toEqual([
+      200_000, 200_000, 200_000, 200_000, 200_000,
+    ])
+    for (const w of r.periodData.withdrawal.slice(5)) {
+      expect(w).toBeCloseTo(0, 2)
+    }
+  })
+
+  it('never reports a negative balance or NaN', () => {
+    for (const rebalance of ['annually', 'never'] as const) {
+      const r = runSingleSimulation(
+        depleting({
+          assetRebalanceFrequency: rebalance,
+          assets: [
+            { name: 'A', weight: 0.5, expectedReturn: 0, volatility: 0 },
+            { name: 'B', weight: 0.5, expectedReturn: 0, volatility: 0 },
+          ],
+          assetCorrelationMatrix: [
+            [1, 0],
+            [0, 1],
+          ],
+        }),
+      )
+      for (const series of [
+        r.periodData.withdrawal,
+        r.periodData.tax,
+        r.snapshots.capital,
+        r.snapshots.liquidValue,
+      ]) {
+        for (const v of series) {
+          expect(Number.isFinite(v)).toBe(true)
+        }
+      }
+      for (const c of r.snapshots.capital) {
+        expect(c).toBeGreaterThanOrEqual(-0.01)
+      }
+    }
+  })
+})
+
+describe('VP capital gains netting', () => {
+  it('offsets a loss on one asset against a gain on another', () => {
+    // A doubles to 1,000,000 (basis 500,000), B halves to 250,000 (basis
+    // 500,000). Withdrawing 10% of 1,250,000 realizes +50,000 on A and
+    // -25,000 on B, so the taxable net is 25,000 → 7,500 before gross-up.
+    // Taxing each position separately would charge 15,000.
+    const r = runSingleSimulation(
+      makeParams({
+        balanceWithdrawalRate: 0.1,
+        capitalGainsTaxRate: 0.3,
+        yearsLater: 1,
+        assetRebalanceFrequency: 'never',
+        assets: [
+          { name: 'A', weight: 0.5, expectedReturn: 1.0, volatility: 0 },
+          { name: 'B', weight: 0.5, expectedReturn: -0.5, volatility: 0 },
+        ],
+        assetCorrelationMatrix: [
+          [1, 0],
+          [0, 1],
+        ],
+      }),
+    )
+    // Post-withdrawal the portfolio is 1,125,000 against a basis of 900,000,
+    // so the gross-up divisor is 1 - 0.2 * 0.3 = 0.94.
+    expect(r.periodData.tax[0]!).toBeCloseTo(7_500 / 0.94, 2)
+  })
+
+  it('credits a net loss at 30% below the threshold', () => {
+    // Asset halves: 500,000 against a 1,000,000 basis. Withdrawing 10% of
+    // 500,000 realizes -50,000, under the 100,000 threshold → 15,000 credit.
+    const r = runSingleSimulation(
+      makeParams({
+        balanceWithdrawalRate: 0.1,
+        capitalGainsTaxRate: 0.3,
+        yearsLater: 1,
+        assets: [{ name: 'A', weight: 1, expectedReturn: -0.5, volatility: 0 }],
+      }),
+    )
+    expect(r.periodData.tax[0]!).toBeCloseTo(-15_000, 2)
+  })
+
+  it('credits the excess above the threshold at 21%', () => {
+    // 4M halves to 2M against a 4M basis; a 10% withdrawal realizes -200,000.
+    // Credit = 100,000 * 30% + 100,000 * 21% = 51,000.
+    const r = runSingleSimulation(
+      makeParams({
+        initialCapital: 4_000_000,
+        balanceWithdrawalRate: 0.1,
+        capitalGainsTaxRate: 0.3,
+        yearsLater: 1,
+        assets: [{ name: 'A', weight: 1, expectedReturn: -0.5, volatility: 0 }],
+      }),
+    )
+    expect(r.periodData.tax[0]!).toBeCloseTo(-51_000, 2)
+  })
+
+  it('leaves ISK untouched by realized gains', () => {
+    const r = runSingleSimulation(
+      makeParams({
+        balanceWithdrawalRate: 0.1,
+        capitalGainsTaxRate: 0.3,
+        iskTaxRate: 0.02,
+        yearsLater: 1,
+        assets: [{ name: 'A', weight: 1, expectedReturn: 1.0, volatility: 0 }],
+      }),
+    )
+    // 2,000,000 grows, 200,000 withdrawn → 1,800,000 * 2% * 30% = 10,800.
+    expect(r.periodData.tax[0]!).toBeCloseTo(10_800, 2)
+  })
+})
+
+describe('tax paid from the portfolio is itself a realization', () => {
+  it('grosses up the sale needed to settle the bill', () => {
+    // 1M doubles to 2M (basis 1M). A 10% withdrawal realizes 100,000 → a
+    // 30,000 bill. Raising that cash sells units that are 50% unrealized gain,
+    // so the gross sale is 30,000 / (1 - 0.5 * 0.3) = 35,294.12.
+    const r = runSingleSimulation(
+      makeParams({
+        balanceWithdrawalRate: 0.1,
+        capitalGainsTaxRate: 0.3,
+        yearsLater: 1,
+        assets: [{ name: 'A', weight: 1, expectedReturn: 1.0, volatility: 0 }],
+      }),
+    )
+    expect(r.periodData.tax[0]!).toBeCloseTo(30_000 / 0.85, 2)
+    expect(r.snapshots.capital[0]!).toBeCloseTo(1_800_000 - 30_000 / 0.85, 2)
+  })
+
+  it('does not gross up an ISK bill', () => {
+    const r = runSingleSimulation(
+      makeParams({
+        balanceWithdrawalRate: 0,
+        capitalGainsTaxRate: 0.3,
+        iskTaxRate: 0.02,
+        yearsLater: 1,
+        assets: [{ name: 'A', weight: 1, expectedReturn: 1.0, volatility: 0 }],
+      }),
+    )
+    // No CGT in an ISK, so the bill is exactly 2,000,000 * 2% * 30%.
+    expect(r.periodData.tax[0]!).toBeCloseTo(12_000, 2)
   })
 })
 
