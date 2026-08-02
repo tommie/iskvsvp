@@ -330,51 +330,75 @@ export function prepareFactorModelPayload(
 
 // --- Random sampling utilities ---
 
-function randomNormal(mean: number, stdDev: number, rng: () => number): number {
-  const u1 = rng() || Number.MIN_VALUE
-  const u2 = rng()
-  const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2)
-  return mean + z0 * stdDev
+/**
+ * Normal variate generator using the Marsaglia polar method with spare
+ * caching. Produces two variates per rejection loop, returns one and
+ * caches the other. Avoids all trig (cos/sin) — uses only sqrt + log,
+ * which are ~2-3x faster than trig on modern CPUs.
+ *
+ * Expected cost: ~1.27 uniform pairs (rejection rate π/4) + 1 log + 1 sqrt
+ * per pair of normals, vs Box-Muller's 1 log + 1 sqrt + 1 cos + 1 sin.
+ */
+export function makeNormalSampler(rng: () => number): (mean: number, stdDev: number) => number {
+  let hasSpare = false
+  let spare = 0
+
+  return (mean: number, stdDev: number): number => {
+    if (hasSpare) {
+      hasSpare = false
+      return mean + spare * stdDev
+    }
+    // Marsaglia polar: sample (u,v) in unit disk, then scale.
+    let u: number, v: number, s: number
+    do {
+      u = 2 * rng() - 1
+      v = 2 * rng() - 1
+      s = u * u + v * v
+    } while (s >= 1 || s === 0)
+    const f = Math.sqrt(-2.0 * Math.log(s) / s)
+    spare = v * f
+    hasSpare = true
+    return mean + u * f * stdDev
+  }
 }
 
 /**
- * Sample from Student's t-distribution using the ratio method.
+ * Sample from Student's t-distribution using Bailey's polar method.
+ * Needs ~1.27 uniform pairs on average (rejection when w > 1) plus
+ * one sqrt and one pow — much cheaper than the previous O(df) normals
+ * for the chi-squared denominator.
+ *
+ * Algorithm: generate (u,v) uniform in the unit disk, w = u² + v², then
+ *   t = u * sqrt(df * (w^(-2/df) - 1) / w)
+ * The /w term normalizes the directional component; without it the
+ * variance is ν/(4(ν-1)) instead of the correct ν/(ν-2).
+ * See Bailey, R.W. (1994) "Polar generation of random variates
+ * with the t-distribution", Mathematics of Computation 62(206).
  * params: [df, loc, scale]
  */
-function sampleT(params: number[], rng: () => number): number {
+export function sampleT(params: number[], rng: () => number): number {
   const df = params[0]!
   const scale = params[2]!
 
-  // Use the polar method for t-distribution
-  // Generate t via ratio of normals: t = Z / sqrt(V/df) where V ~ chi-squared(df)
-  // For efficiency, use Box-Muller for Z and sum of squared normals for chi-squared
-  let t: number
   if (df <= 0) {
-    // Fallback to standard normal
-    t = randomNormal(0, 1, rng)
-  } else {
-    // Generate chi-squared(df) as sum of df standard normals squared
-    // For large df, use the normal approximation
-    if (df > 100) {
-      // Normal approximation: t ≈ N(0, df/(df-2))
-      const z = randomNormal(0, 1, rng)
-      const v = df / (df - 2)
-      t = z * Math.sqrt(v)
-    } else {
-      // Direct: generate df standard normals, sum squares
-      let chiSq = 0
-      for (let i = 0; i < Math.ceil(df); i++) {
-        const z = randomNormal(0, 1, rng)
-        chiSq += z * z
-      }
-      // For non-integer df, scale linearly
-      chiSq *= df / Math.ceil(df)
-      const z = randomNormal(0, 1, rng)
-      t = z / Math.sqrt(chiSq / df)
-    }
+    // Degenerate: fall back to standard normal (Marsaglia polar).
+    let u0: number, v0: number, s0: number
+    do { u0 = 2 * rng() - 1; v0 = 2 * rng() - 1; s0 = u0 * u0 + v0 * v0 } while (s0 >= 1 || s0 === 0)
+    return u0 * Math.sqrt(-2.0 * Math.log(s0) / s0) * scale
   }
 
-  // Subtract loc to center at zero (alpha already has the mean)
+  const negTwoOverDf = -2 / df
+  let u: number, v: number, w: number
+  // Rejection loop: accept when (u,v) falls inside the unit disk.
+  // Expected iterations: 4/π ≈ 1.27.
+  do {
+    u = 2 * rng() - 1
+    v = 2 * rng() - 1
+    w = u * u + v * v
+  } while (w > 1 || w === 0)
+
+  // Bailey's transform with the /w normalization.
+  const t = u * Math.sqrt(df * (Math.pow(w, negTwoOverDf) - 1) / w)
   return t * scale
 }
 
@@ -384,13 +408,16 @@ function sampleT(params: number[], rng: () => number): number {
  * Uses the standard construction: if Z1,Z2 ~ N(0,1) independent,
  * then X = delta*|Z1| + sqrt(1-delta^2)*Z2 where delta = a/sqrt(1+a^2)
  */
-function sampleSkewNorm(params: number[], rng: () => number): number {
+function sampleSkewNorm(
+  params: number[],
+  randomNormal: (mean: number, stdDev: number) => number,
+): number {
   const a = params[0]!
   const scale = params[2]!
 
   const delta = a / Math.sqrt(1 + a * a)
-  const z1 = randomNormal(0, 1, rng)
-  const z2 = randomNormal(0, 1, rng)
+  const z1 = randomNormal(0, 1)
+  const z2 = randomNormal(0, 1)
   const x = delta * Math.abs(z1) + Math.sqrt(1 - delta * delta) * z2
 
   // The skewnorm has a nonzero mean = delta * sqrt(2/pi).
@@ -402,16 +429,20 @@ function sampleSkewNorm(params: number[], rng: () => number): number {
 /**
  * Sample a zero-mean residual innovation from the fund's distribution.
  */
-function sampleResidual(fp: FundFactorParams, rng: () => number): number {
+function sampleResidual(
+  fp: FundFactorParams,
+  rng: () => number,
+  randomNormal: (mean: number, stdDev: number) => number,
+): number {
   switch (fp.residualType) {
     case 't':
       return sampleT(fp.residualParams, rng)
     case 'skewnorm':
-      return sampleSkewNorm(fp.residualParams, rng)
+      return sampleSkewNorm(fp.residualParams, randomNormal)
     case 'norm':
     default:
       // Normal: params are [loc, scale]; use scale, center at zero
-      return randomNormal(0, fp.residualParams[1] ?? fp.residualStd, rng)
+      return randomNormal(0, fp.residualParams[1] ?? fp.residualStd)
   }
 }
 
@@ -426,71 +457,132 @@ export function sampleFactorModelReturns(
   rng: () => number,
   nYears: number,
 ): number[][] {
-  const { nFactors, means, choleskyL, fundParams, factorAr1, innovationCholeskyL } = payload
+  const { nFactors, means, fundParams, factorAr1, innovationCholeskyL, choleskyL } = payload
   const nAssets = fundParams.length
   const results: number[][] = []
+  const randomNormal = makeNormalSampler(rng)
+
+  // --- One-time flattening of jagged arrays into contiguous Float32Arrays ---
+  // Eliminates pointer chasing and non-null assertions in the hot loop.
+
+  // Flatten innovation Cholesky (lower triangular) to row-major 1D.
+  // Access: innovFlat[f * nFactors + k] instead of innovationCholeskyL[f]![k]!
+  const innovFlat = new Float32Array(nFactors * nFactors)
+  for (let f = 0; f < nFactors; f++)
+    for (let k = 0; k <= f; k++)
+      innovFlat[f * nFactors + k] = innovationCholeskyL[f]![k]!
+
+  // Flatten stationary Cholesky for the initial draw.
+  const cholFlat = new Float32Array(nFactors * nFactors)
+  for (let f = 0; f < nFactors; f++)
+    for (let k = 0; k <= f; k++)
+      cholFlat[f * nFactors + k] = choleskyL[f]![k]!
+
+  // Factor means as typed array for consistent access.
+  const meansF = new Float32Array(nFactors)
+  for (let f = 0; f < nFactors; f++) meansF[f] = means[f]!
+
+  // Factor AR(1) coefficients as typed array.
+  const ar1F = new Float32Array(nFactors)
+  for (let f = 0; f < nFactors; f++) ar1F[f] = factorAr1[f]!
+
+  // Flatten all asset betas into a single contiguous array.
+  // Access: allBetas[a * nFactors + f] instead of fundParams[a].betasFull[f]!
+  const allBetas = new Float32Array(nAssets * nFactors)
+  for (let a = 0; a < nAssets; a++)
+    for (let f = 0; f < nFactors; f++)
+      allBetas[a * nFactors + f] = fundParams[a]!.betasFull[f]!
+
+  // Flatten vol betas for assets that have heteroskedastic vol.
+  // For assets without vol betas, the row stays zero (unused).
+  const hasVolBetas = new Uint8Array(nAssets)
+  const allVolBetas = new Float32Array(nAssets * nFactors)
+  for (let a = 0; a < nAssets; a++) {
+    const vb = fundParams[a]!.volBetasFull
+    if (vb) {
+      hasVolBetas[a] = 1
+      for (let f = 0; f < nFactors; f++)
+        allVolBetas[a * nFactors + f] = vb[f]!
+    }
+  }
+
+  // Pre-compute per-asset AR(1) sqrt(1 - phi^2) to avoid recomputing each month.
+  const ar1Sqrt = new Float32Array(nAssets)
+  const ar1Phi = new Float32Array(nAssets)
+  for (let a = 0; a < nAssets; a++) {
+    const phi = fundParams[a]!.ar1Coefficient
+    ar1Phi[a] = phi
+    ar1Sqrt[a] = Math.sqrt(1 - phi * phi)
+  }
+
+  // --- Pre-allocate reusable scratch arrays ---
+  // Avoids ~432,000 array allocations per simulation batch (nYears * 12).
+  const z = new Float32Array(nFactors)
+  const factors = new Float32Array(nFactors)
+  const monthlyProducts = new Float32Array(nAssets)
 
   // AR(1) residual state per asset (carries across months).
   // Initialized to NaN to signal that the first month should not be filtered
   // (matching Python which starts the AR(1) loop at t=1, leaving t=0 as-is).
-  const ar1State = new Array(nAssets).fill(NaN) as number[]
+  const ar1State = new Float32Array(nAssets)
+  for (let a = 0; a < nAssets; a++) ar1State[a] = NaN
 
   // Initialize VAR(1) factor state from stationary distribution N(means, Σ)
   // so the first month doesn't start with a deterministic bias.
-  const prevFactors = new Array(nFactors) as number[]
-  const z0 = new Array(nFactors) as number[]
-  for (let f = 0; f < nFactors; f++) z0[f] = randomNormal(0, 1, rng)
+  const prevFactors = new Float32Array(nFactors)
+  for (let f = 0; f < nFactors; f++) z[f] = randomNormal(0, 1)
   for (let f = 0; f < nFactors; f++) {
     let sum = 0
-    for (let k = 0; k <= f; k++) sum += choleskyL[f]![k]! * z0[k]!
-    prevFactors[f] = means[f]! + sum
+    const fRow = f * nFactors
+    for (let k = 0; k <= f; k++) sum += cholFlat[fRow + k]! * z[k]!
+    prevFactors[f] = meansF[f]! + sum
   }
 
   for (let year = 0; year < nYears; year++) {
-    // Monthly compounding: product of (1 + monthly_return/100) over 12 months
-    const monthlyProducts = new Array(nAssets).fill(1) as number[]
+    // Reset monthly compounding products to 1.
+    for (let a = 0; a < nAssets; a++) monthlyProducts[a] = 1
 
     for (let month = 0; month < 12; month++) {
-      // 1. Draw independent standard normals
-      const z = new Array(nFactors) as number[]
+      // 1. Draw independent standard normals (reuse z).
       for (let f = 0; f < nFactors; f++) {
-        z[f] = randomNormal(0, 1, rng)
+        z[f] = randomNormal(0, 1)
       }
 
-      // 2. Transform to correlated innovations and apply VAR(1)
+      // 2. Transform to correlated innovations and apply VAR(1).
       // factors_t = means + ar1*(prev - means) + L_innov * z
-      const factors = new Array(nFactors) as number[]
       for (let f = 0; f < nFactors; f++) {
         let sum = 0
+        const fRow = f * nFactors
         for (let k = 0; k <= f; k++) {
-          sum += innovationCholeskyL[f]![k]! * z[k]!
+          sum += innovFlat[fRow + k]! * z[k]!
         }
-        factors[f] = means[f]! + factorAr1[f]! * (prevFactors[f]! - means[f]!) + sum
+        factors[f] = meansF[f]! + ar1F[f]! * (prevFactors[f]! - meansF[f]!) + sum
       }
 
-      // Update state for next month
+      // Update state for next month.
       for (let f = 0; f < nFactors; f++) {
         prevFactors[f] = factors[f]!
       }
 
-      // 3. For each asset, compute monthly return
+      // 3. For each asset, compute monthly return.
       for (let a = 0; a < nAssets; a++) {
         const fp = fundParams[a]!
+        const aRow = a * nFactors
 
         // Systematic component: alpha + dot(betas, factors)
         let systematic = fp.alpha
         for (let f = 0; f < nFactors; f++) {
-          systematic += fp.betasFull[f]! * factors[f]!
+          systematic += allBetas[aRow + f]! * factors[f]!
         }
 
         // Sample residual innovation
-        let eta = sampleResidual(fp, rng)
+        let eta = sampleResidual(fp, rng, randomNormal)
 
         // Heteroskedastic vol scaling
-        if (fp.volBetasFull) {
+        if (hasVolBetas[a]) {
           let logVol = fp.volIntercept
           for (let f = 0; f < nFactors; f++) {
-            logVol += fp.volBetasFull[f]! * Math.abs(factors[f]!)
+            logVol += allVolBetas[aRow + f]! * Math.abs(factors[f]!)
           }
           const scaleFactor = Math.min(Math.exp(0.5 * (logVol - fp.volBaseline)), 10.0)
           eta *= scaleFactor
@@ -498,12 +590,11 @@ export function sampleFactorModelReturns(
 
         // AR(1) filtering: ε_t = φ·ε_{t-1} + √(1-φ²)·η_t
         // First month uses raw eta (no prior state to filter from).
-        if (fp.ar1Coefficient !== 0) {
+        if (ar1Phi[a] !== 0) {
           if (Number.isNaN(ar1State[a])) {
             ar1State[a] = eta
           } else {
-            const phi = fp.ar1Coefficient
-            const epsilon = phi * ar1State[a]! + Math.sqrt(1 - phi * phi) * eta
+            const epsilon = ar1Phi[a]! * ar1State[a]! + ar1Sqrt[a]! * eta
             ar1State[a] = epsilon
             eta = epsilon
           }

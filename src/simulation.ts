@@ -550,7 +550,40 @@ export function runSingleSimulation(
 }
 
 /**
+ * Partition-based selection (Hoare's quickselect) to find the k-th smallest
+ * element in O(N) expected time. Mutates arr in-place between lo and hi.
+ */
+export function quickselect(arr: number[], k: number, lo: number, hi: number): number {
+  while (lo < hi) {
+    // Median-of-three pivot to avoid worst-case O(N²) on sorted input.
+    const mid = (lo + hi) >> 1
+    if (arr[mid]! < arr[lo]!) { const t = arr[lo]!; arr[lo] = arr[mid]!; arr[mid] = t }
+    if (arr[hi]! < arr[lo]!) { const t = arr[lo]!; arr[lo] = arr[hi]!; arr[hi] = t }
+    if (arr[hi]! < arr[mid]!) { const t = arr[mid]!; arr[mid] = arr[hi]!; arr[hi] = t }
+    const pivot = arr[mid]!
+
+    let i = lo
+    let j = hi
+    // Hoare partition: elements ≤ pivot go left, ≥ pivot go right.
+    while (i <= j) {
+      while (arr[i]! < pivot) i++
+      while (arr[j]! > pivot) j--
+      if (i <= j) {
+        const t = arr[i]!; arr[i] = arr[j]!; arr[j] = t
+        i++; j--
+      }
+    }
+    // Recurse into the partition containing k.
+    if (k <= j) hi = j
+    else if (k >= i) lo = i
+    else break
+  }
+  return arr[k]!
+}
+
+/**
  * Calculate statistics from an array of values.
+ * Uses quickselect for O(N) percentile computation instead of O(N log N) sort.
  */
 function calculateStats(values: number[]): {
   mean: number
@@ -559,16 +592,35 @@ function calculateStats(values: number[]): {
   median: number
   percentile90: number
 } {
-  const sorted = values.slice().sort((a, b) => a - b)
-  const n = sorted.length
-  const mean = sorted.reduce((a, b) => a + b, 0) / n
+  const n = values.length
+  let sum = 0
+  let sumSq = 0
+  for (let i = 0; i < n; i++) {
+    const v = values[i]!
+    sum += v
+    sumSq += v * v
+  }
+  const mean = sum / n
+
+  // Quickselect mutates in-place, so work on a copy.
+  const work = values.slice()
+  const i10 = Math.floor(n * 0.1)
+  const i50 = Math.floor(n * 0.5)
+  const i90 = Math.floor(n * 0.9)
+
+  // Find percentiles in ascending order of index so each quickselect
+  // narrows the working range for the next one.
+  const p10 = quickselect(work, i10, 0, n - 1)
+  const median = quickselect(work, i50, i10, n - 1)
+  const p90 = quickselect(work, i90, i50, n - 1)
 
   return {
     mean,
-    stdDev: Math.sqrt(sorted.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / n),
-    percentile10: sorted[Math.floor(n * 0.1)] ?? 0,
-    median: sorted[Math.floor(n * 0.5)] ?? 0,
-    percentile90: sorted[Math.floor(n * 0.9)] ?? 0,
+    // Var = E[X²] - E[X]² avoids a second pass over the data.
+    stdDev: Math.sqrt(sumSq / n - mean * mean),
+    percentile10: p10,
+    median,
+    percentile90: p90,
   }
 }
 

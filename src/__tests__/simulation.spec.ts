@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { spendingMultiplier, runSingleSimulation } from '../simulation'
+import { spendingMultiplier, runSingleSimulation, quickselect } from '../simulation'
 import type { InputParameters } from '../types'
 import type { BootstrapPayload } from '../bootstrap'
 
@@ -323,5 +323,98 @@ describe('withdrawal ratchet (Kitces)', () => {
     expect(withRatchet.periodData.withdrawal[5]!).toBeGreaterThan(
       noRatchet.periodData.withdrawal[5]!,
     )
+  })
+})
+
+// --- Quickselect correctness tests ---
+
+describe('quickselect', () => {
+  // Reference: sort-based k-th smallest.
+  function sortedKth(arr: number[], k: number): number {
+    return arr.slice().sort((a, b) => a - b)[k]!
+  }
+
+  it('finds exact median matching sort on random arrays', () => {
+    // Use a seeded PRNG for reproducibility.
+    const rng = (seed: number) => {
+      let s = seed
+      return () => { s = (s * 1664525 + 1013904223) & 0x7fffffff; return s / 0x7fffffff }
+    }
+    for (let trial = 0; trial < 50; trial++) {
+      const r = rng(trial * 137)
+      const n = 100 + trial * 20
+      const arr = Array.from({ length: n }, () => r() * 200 - 100)
+      const k = Math.floor(n / 2)
+      const work = arr.slice()
+      const got = quickselect(work, k, 0, n - 1)
+      expect(got).toBe(sortedKth(arr, k))
+    }
+  })
+
+  it('finds p10, p50, p90 matching sort', () => {
+    const arr = Array.from({ length: 1000 }, (_, i) => Math.sin(i) * 100)
+    for (const pct of [0.1, 0.5, 0.9]) {
+      const k = Math.floor(arr.length * pct)
+      const work = arr.slice()
+      const got = quickselect(work, k, 0, arr.length - 1)
+      expect(got).toBe(sortedKth(arr, k))
+    }
+  })
+
+  it('handles already-sorted input', () => {
+    const arr = Array.from({ length: 500 }, (_, i) => i)
+    const k = 250
+    const work = arr.slice()
+    expect(quickselect(work, k, 0, arr.length - 1)).toBe(250)
+  })
+
+  it('handles reverse-sorted input', () => {
+    const arr = Array.from({ length: 500 }, (_, i) => 499 - i)
+    const k = 250
+    const work = arr.slice()
+    expect(quickselect(work, k, 0, arr.length - 1)).toBe(250)
+  })
+
+  it('handles all-equal values', () => {
+    const arr = new Array(100).fill(42)
+    const work = arr.slice()
+    expect(quickselect(work, 50, 0, 99)).toBe(42)
+  })
+
+  it('handles two-element array', () => {
+    expect(quickselect([5, 3], 0, 0, 1)).toBe(3)
+    expect(quickselect([5, 3], 1, 0, 1)).toBe(5)
+  })
+
+  it('handles single-element array', () => {
+    expect(quickselect([7], 0, 0, 0)).toBe(7)
+  })
+
+  it('works with negative values', () => {
+    const arr = [-10, -5, -1, 0, 1, 5, 10]
+    const work = arr.slice()
+    expect(quickselect(work, 3, 0, 6)).toBe(0)
+  })
+
+  it('chained calls narrow correctly (p10 < p50 < p90)', () => {
+    // Simulate how calculateStats chains quickselect calls with
+    // narrowing ranges.
+    const arr = Array.from({ length: 1000 }, (_, i) => Math.cos(i * 0.1) * 50)
+    const work = arr.slice()
+    const n = work.length
+
+    const i10 = Math.floor(n * 0.1)
+    const i50 = Math.floor(n * 0.5)
+    const i90 = Math.floor(n * 0.9)
+
+    const p10 = quickselect(work, i10, 0, n - 1)
+    const p50 = quickselect(work, i50, i10, n - 1)
+    const p90 = quickselect(work, i90, i50, n - 1)
+
+    expect(p10).toBe(sortedKth(arr, i10))
+    expect(p50).toBe(sortedKth(arr, i50))
+    expect(p90).toBe(sortedKth(arr, i90))
+    expect(p10).toBeLessThanOrEqual(p50)
+    expect(p50).toBeLessThanOrEqual(p90)
   })
 })
