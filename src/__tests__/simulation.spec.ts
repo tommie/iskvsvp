@@ -559,6 +559,50 @@ describe('VP capital gains netting', () => {
   })
 })
 
+describe('cumulative tax includes the deferred liability', () => {
+  const growing = makePayload(Math.pow(1.07, 1 / 12) - 1)
+
+  it('adds the embedded CGT to the VP tax snapshot', () => {
+    const r = runSingleSimulation(
+      makeParams({ capitalGainsTaxRate: 0.3, vpWealthTaxRate: 0.004, yearsLater: 20 }),
+      growing,
+    )
+    const paid = r.periodData.tax.reduce((a, b) => a + b, 0)
+    const last = r.snapshots.tax.length - 1
+    const embedded = r.snapshots.capital[last]! - r.snapshots.liquidValue[last]!
+
+    expect(embedded).toBeGreaterThan(0) // sanity: there is a deferred liability
+    expect(r.snapshots.tax[last]!).toBeCloseTo(paid + embedded, 2)
+  })
+
+  it('leaves ISK unchanged, since it has no deferred CGT', () => {
+    const r = runSingleSimulation(
+      makeParams({ capitalGainsTaxRate: 0.3, iskTaxRate: 0.0296, yearsLater: 20 }),
+      growing,
+    )
+    const paid = r.periodData.tax.reduce((a, b) => a + b, 0)
+    const last = r.snapshots.tax.length - 1
+
+    expect(r.snapshots.capital[last]!).toBeCloseTo(r.snapshots.liquidValue[last]!, 6)
+    expect(r.snapshots.tax[last]!).toBeCloseTo(paid, 2)
+  })
+
+  it('treats an unrealized loss as a deferred tax asset', () => {
+    // Portfolio halves and stays down: liquidating would realize a loss, so the
+    // burden is below what was actually paid.
+    const r = runSingleSimulation(
+      makeParams({
+        balanceWithdrawalRate: 0.01,
+        capitalGainsTaxRate: 0.3,
+        vpWealthTaxRate: 0.004,
+        yearsLater: 1,
+        assets: [{ name: 'A', weight: 1, expectedReturn: -0.5, volatility: 0 }],
+      }),
+    )
+    expect(r.snapshots.tax[0]!).toBeLessThan(r.periodData.tax[0]!)
+  })
+})
+
 describe('tax paid from the portfolio is itself a realization', () => {
   it('grosses up the sale needed to settle the bill', () => {
     // 1M doubles to 2M (basis 1M). A 10% withdrawal realizes 100,000 → a

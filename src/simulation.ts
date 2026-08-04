@@ -448,8 +448,9 @@ export function runSingleSimulation(
       // Schablonintäkt on fund holdings is capital income in the same bucket as
       // realized gains, so gains, losses and the schablon all net against each
       // other before the rate is applied (kvittning within inkomstslaget
-      // kapital). Netting matters whenever assets diverge: taxing each position
-      // separately charged the winners and ignored the losers.
+      // kapital). The netting is what makes a diverging portfolio taxable on
+      // its true result: a rate applied per position would charge the winners
+      // at full rate while the losers went unrecognised.
       const schablonIncome = amount * params.vpWealthTaxRate
       const netCapitalIncome = schablonIncome + withdrawalGain + rebalancingGain
 
@@ -522,7 +523,19 @@ export function runSingleSimulation(
 
     cumulativePaidTax += tax
 
-    const taxationDegree = liquidValue > 0 ? cumulativePaidTax / liquidValue : 0
+    // Cumulative tax counts the capital gains tax still embedded in the
+    // portfolio, not just the cash paid so far. A VP account defers that
+    // liability rather than escaping it — Swedish heirs take over the
+    // acquisition cost, so the tax follows the assets — and liquidValue already
+    // subtracts it from the asset side. Counting it here keeps both sides of
+    // the ISK/VP comparison on one basis: an account that pays little cash tax
+    // while accumulating a large deferred liability is not cheap, it is
+    // postponed. Zero for an ISK, which has no CGT. Signed, so an unrealized
+    // loss reads as a deferred tax asset, matching liquidValue.
+    const deferredTax = amount - liquidValue
+    const totalTaxBurden = cumulativePaidTax + deferredTax
+
+    const taxationDegree = liquidValue > 0 ? totalTaxBurden / liquidValue : 0
     const withdrawnReal = withdrawn / cumulativeInflation
 
     accumulatedRealWithdrawal += withdrawnReal
@@ -563,7 +576,7 @@ export function runSingleSimulation(
     snapshotMaxDrawdownPeriods.push(maxDrawdownPeriod)
     snapshotWithdrawals.push(accumulatedNominalWithdrawal)
     snapshotWithdrawalsReal.push(accumulatedRealWithdrawal)
-    snapshotTaxes.push(cumulativePaidTax)
+    snapshotTaxes.push(totalTaxBurden)
     snapshotTaxationDegrees.push(taxationDegree)
     snapshotIskTaxRates.push(currentIskTaxRate)
 
