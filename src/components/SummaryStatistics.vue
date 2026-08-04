@@ -473,8 +473,14 @@ const dataPeriodText = computed(() => {
             <!-- Paid Tax -->
             <template v-for="(label, idx) in labels" :key="`paidTax-${idx}`">
               <tr>
-                <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
-                  Betald skatt
+                <th
+                  v-if="idx === 0"
+                  :rowspan="labels.length"
+                  class="align-middle"
+                  scope="row"
+                  title="Betald skatt plus latent kapitalvinstskatt som ligger kvar i depån."
+                >
+                  Skatt inkl. latent
                 </th>
                 <th scope="row">{{ label }}</th>
                 <td :style="getCellStyle('percentile10', idx, 'tax', false)">

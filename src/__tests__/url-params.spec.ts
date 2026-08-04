@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { decodeScenarioTableFromUrl } from '../utils/url-params'
+import {
+  decodeParamsFromUrl,
+  decodeScenarioTableFromUrl,
+  encodeParamsToUrl,
+} from '../utils/url-params'
+import type { InputParameters } from '../types'
 
 describe('decodeScenarioTableFromUrl', () => {
   it('decodes scenario table with empty controlled params (asset-weight-only overrides)', () => {
@@ -61,5 +66,50 @@ describe('decodeScenarioTableFromUrl', () => {
   it('returns null when cp is missing entirely', () => {
     const query = { st: '1', sn: ['A', 'B'] }
     expect(decodeScenarioTableFromUrl(query)).toBeNull()
+  })
+})
+
+describe('withdrawalCap round-trip', () => {
+  const params: Omit<InputParameters, 'seed'> = {
+    initialCapital: 1_000_000,
+    startYear: 45,
+    yearsLater: 30,
+    simulationCount: 100,
+    assets: [{ name: 'A', weight: 1, expectedReturn: 0.08, volatility: 0.15 }],
+    assetCorrelationMatrix: [[1]],
+    assetRebalanceFrequency: 'never',
+    depositAmount: 0,
+    depositYears: 0,
+    balanceWithdrawalRate: 0.01,
+    profitWithdrawalRate: 0,
+    profitLookbackYears: 5,
+    inflationBasedWithdrawal: 500_000,
+    amortizedWithdrawal: false,
+    bequestGoal: 0,
+    ageAdjustedSpending: false,
+    withdrawalRatchetLimit: 0,
+    withdrawalCap: 800_000,
+    vpWealthTaxRate: 0.004,
+    capitalGainsTaxRate: 0.3,
+    inflationRate: 0.02,
+    inflationStdDev: 0.009,
+  }
+
+  it('encodes as wc and decodes back', () => {
+    const query = encodeParamsToUrl(params)
+    expect(query.wc).toBe('800000')
+
+    const decoded = decodeParamsFromUrl(query)
+    expect(decoded).not.toBeNull()
+    expect(decoded!.withdrawalCap).toBe(800_000)
+  })
+
+  it('omits wc when the cap is off, and decodes to undefined', () => {
+    const query = encodeParamsToUrl({ ...params, withdrawalCap: 0 })
+    expect(query.wc).toBeUndefined()
+
+    const decoded = decodeParamsFromUrl(query)
+    expect(decoded).not.toBeNull()
+    expect(decoded!.withdrawalCap).toBeUndefined()
   })
 })

@@ -79,6 +79,22 @@ src/
 - Alpha is the raw OLS intercept. `E[r] = alpha + betas @ global_factor_means` reflects the full-history factor environment, not the fund's training window.
 - Changes to the factor model are made in fundcmp and re-exported; iskvsvp consumes the output without modification.
 
+### Tax Model (`simulation.ts`, step 5)
+
+- **ISK**: schablon on the balance, `amount * iskTaxRate * capitalGainsTaxRate`. No CGT on withdrawals or rebalancing.
+- **VP**: schablonintäkt (`amount * vpWealthTaxRate`) and all realized gains/losses are capital income in the same bucket and **net against each other before the rate is applied** (kvittning). Withdrawal and rebalancing sites therefore accumulate *signed gains* (`withdrawalGain`, `rebalancingGain`), never per-position tax.
+- A net loss yields a skattereduktion: full rate on the first `LOSS_CREDIT_THRESHOLD` (100 000 kr, nominal in law and not inflation-indexed), `LOSS_CREDIT_UPPER_QUOTA` of the rate above. Modelled as a credit flowing back into the portfolio as new money (adds to value *and* cost basis), which assumes enough other final tax to absorb it.
+- Paying a VP tax bill is itself a realization, so the sale is grossed up in closed form: `G = tax / (1 - u*r)`, `u` = unrealized gain fraction (floored at 0), `r` = CGT rate. This is the dominant correction over long horizons — it scales as `u` grows.
+- Cost basis follows genomsnittsmetoden: every partial disposal scales `costBasis` by the same fraction as `value`.
+- **Withdrawals are clamped to the balance.** Absolute components (inflation-based, ratchet floor) would otherwise pay out of a depleted portfolio and produce negative balances or NaN.
+
+### Tax Metrics
+
+- `periodData.tax` — cash actually paid that year.
+- `snapshots.tax` — cumulative cash paid **plus the CGT still embedded in the portfolio** (`capital - liquidValue`). Deliberately *not* the running sum of `periodData.tax`: a VP account defers its liability rather than escaping it (Swedish heirs inherit the acquisition cost), so counting only cash would make VP look cheap against ISK. Zero deferred component for ISK.
+- `snapshots.taxationDegree` shares that numerator, over `liquidValue`.
+- `liquidValue` is after-liquidation (VP subtracts embedded CGT); `capital` is the raw balance. For a "never liquidate" strategy `capital` is the relevant metric and the two can rank ISK/VP oppositely.
+
 ### Correlation Matrix
 
 - Stored as symmetric matrix in `assetCorrelationMatrix`

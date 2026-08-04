@@ -53,6 +53,9 @@ export interface SimulationPeriodData<T = number> {
   withdrawal: T
   withdrawalReal: T
   withdrawalRate: T
+  // Per-period: tax actually paid that year. As a snapshot: cumulative tax
+  // paid plus the capital gains tax still embedded in the portfolio, so ISK
+  // and VP are comparable on the same basis.
   tax: T
   taxationDegree: T
   iskTaxRate: T
