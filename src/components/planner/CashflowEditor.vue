@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 
 import { usePlannerStore } from '../../stores/planner'
 import D3Chart from '../D3Chart.vue'
+import { formatCadences } from '../../planner/cadence'
 
 const store = usePlannerStore()
 const { cashflow, startAge } = storeToRefs(store)
@@ -248,6 +249,7 @@ function stopDragging() {
             class="form-control"
             @change="applyToSelection({ floor: editedFloor })"
           />
+          <div class="form-text">{{ formatCadences(editedFloor) }}</div>
         </div>
 
         <div class="col-6 col-md-3">
@@ -261,6 +263,7 @@ function stopDragging() {
             class="form-control"
             @change="applyToSelection({ optional: editedOptional })"
           />
+          <div class="form-text">{{ formatCadences(editedOptional) }}</div>
         </div>
 
         <div class="col-12 col-md-3 d-grid gap-2">

@@ -31,6 +31,7 @@ src/
 │   ├── quadrature.ts            - Discrete normal law for the annual return
 │   ├── propagate.ts             - Density propagation over a wealth grid
 │   ├── density.ts               - Grid mass to plottable density per decade
+│   ├── cadence.ts               - Yearly amounts as monthly/weekly/daily
 │   └── url.ts                   - Compact plan encoding (RLE cashflow)
 ├── components/
 │   ├── planner/
