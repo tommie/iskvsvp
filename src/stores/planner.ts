@@ -34,10 +34,13 @@ export const usePlannerStore = defineStore('planner', () => {
   const iskTaxRate = ref(defaults.iskTaxRate)
   const capitalGainsTaxRate = ref(defaults.capitalGainsTaxRate)
   const iskAllowance = ref(defaults.iskAllowance)
+  const afSchablonRate = ref(defaults.afSchablonRate)
+  const initialCostBasisRatio = ref(defaults.initialCostBasisRatio)
   const inflationRate = ref(defaults.inflationRate)
   const cashflow = ref<CashflowYear[]>(defaults.cashflow)
   const gridNodes = ref(defaults.gridNodes)
   const quadratureNodes = ref(defaults.quadratureNodes)
+  const basisNodes = ref(defaults.basisNodes)
 
   const results = ref<PlannerResults | null>(null)
   const error = ref<string | null>(null)
@@ -59,10 +62,13 @@ export const usePlannerStore = defineStore('planner', () => {
     iskTaxRate: iskTaxRate.value,
     capitalGainsTaxRate: capitalGainsTaxRate.value,
     iskAllowance: iskAllowance.value,
+    afSchablonRate: afSchablonRate.value,
+    initialCostBasisRatio: initialCostBasisRatio.value,
     inflationRate: inflationRate.value,
     cashflow: cashflow.value,
     gridNodes: gridNodes.value,
     quadratureNodes: quadratureNodes.value,
+    basisNodes: basisNodes.value,
   }))
 
   function loadParameters(params: PlannerParameters) {
@@ -75,6 +81,8 @@ export const usePlannerStore = defineStore('planner', () => {
     iskTaxRate.value = params.iskTaxRate
     capitalGainsTaxRate.value = params.capitalGainsTaxRate
     iskAllowance.value = params.iskAllowance
+    afSchablonRate.value = params.afSchablonRate
+    initialCostBasisRatio.value = params.initialCostBasisRatio
     inflationRate.value = params.inflationRate
     cashflow.value = params.cashflow.map((entry) => ({ ...entry }))
   }
@@ -234,10 +242,13 @@ export const usePlannerStore = defineStore('planner', () => {
     iskTaxRate,
     capitalGainsTaxRate,
     iskAllowance,
+    afSchablonRate,
+    initialCostBasisRatio,
     inflationRate,
     cashflow,
     gridNodes,
     quadratureNodes,
+    basisNodes,
     results,
     error,
     // Derived

@@ -17,14 +17,23 @@ const {
   iskTaxRate,
   capitalGainsTaxRate,
   iskAllowance,
+  afSchablonRate,
+  initialCostBasisRatio,
   inflationRate,
   results,
 } = storeToRefs(store)
+
+const isAF = computed(() => accountType.value === 'AF')
 
 const percent = new Intl.NumberFormat('sv-SE', {
   minimumFractionDigits: 1,
   maximumFractionDigits: 2,
 })
+
+const kronor = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 })
+
+/** The cost basis in kronor that the ratio implies, which is what a tax return states. */
+const costBasisAmount = computed(() => initialCapital.value * initialCostBasisRatio.value)
 
 const weightSum = computed(() => assets.value.reduce((sum, asset) => sum + asset.weight, 0))
 
@@ -83,6 +92,7 @@ const portfolioSummary = computed(() => {
     // arithmetic mean overstates and what most withdrawal rules of thumb are
     // implicitly quoting.
     geometric: (Math.exp(moments.logMean) - 1) * 100,
+    turnover: moments.rebalancingTurnover * 100,
   }
 })
 </script>
@@ -109,7 +119,7 @@ const portfolioSummary = computed(() => {
               <label class="form-label" for="planner-account">Kontotyp</label>
               <select id="planner-account" v-model="accountType" class="form-select">
                 <option value="ISK">ISK</option>
-                <option value="VP">Vanlig depå (VP)</option>
+                <option value="AF">Aktie- och fondkonto (AF)</option>
               </select>
             </div>
             <div class="col-6">
@@ -134,6 +144,22 @@ const portfolioSummary = computed(() => {
                 class="form-control"
               />
             </div>
+            <div v-if="isAF" class="col-6">
+              <label class="form-label" for="planner-basis">Omkostnadsbelopp (%)</label>
+              <input
+                id="planner-basis"
+                type="number"
+                step="5"
+                min="0"
+                class="form-control"
+                :value="(initialCostBasisRatio * 100).toFixed(0)"
+                @change="onNumber($event, (v) => (initialCostBasisRatio = v), 100)"
+              />
+              <div class="form-text">
+                {{ kronor.format(costBasisAmount) }} kr av startkapitalet. 100&nbsp;% betyder att
+                inget är orealiserad vinst.
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -154,7 +180,7 @@ const portfolioSummary = computed(() => {
                 @change="onNumber($event, (v) => (inflationRate = v), 100)"
               />
             </div>
-            <div class="col-6">
+            <div v-if="!isAF" class="col-6">
               <label class="form-label" for="planner-isk-rate">ISK schablonränta (%)</label>
               <input
                 id="planner-isk-rate"
@@ -163,6 +189,17 @@ const portfolioSummary = computed(() => {
                 class="form-control"
                 :value="(iskTaxRate * 100).toFixed(2)"
                 @change="onNumber($event, (v) => (iskTaxRate = v), 100)"
+              />
+            </div>
+            <div v-else class="col-6">
+              <label class="form-label" for="planner-vp-rate">Schablonintäkt fonder (%)</label>
+              <input
+                id="planner-vp-rate"
+                type="number"
+                step="0.1"
+                class="form-control"
+                :value="(afSchablonRate * 100).toFixed(2)"
+                @change="onNumber($event, (v) => (afSchablonRate = v), 100)"
               />
             </div>
             <div class="col-6">
@@ -176,7 +213,7 @@ const portfolioSummary = computed(() => {
                 @change="onNumber($event, (v) => (capitalGainsTaxRate = v), 100)"
               />
             </div>
-            <div class="col-6">
+            <div v-if="!isAF" class="col-6">
               <label class="form-label" for="planner-allowance">Fribelopp ISK (kr)</label>
               <input
                 id="planner-allowance"
@@ -291,13 +328,18 @@ const portfolioSummary = computed(() => {
       </div>
 
       <p v-if="portfolioSummary" class="form-text mt-0 mb-2">
-        Portföljen ger {{ percent.format(portfolioSummary.expectedReturn) }} % real aritmetisk
-        avkastning, {{ percent.format(portfolioSummary.geometric) }} % median-CAGR och
-        {{ percent.format(portfolioSummary.volatility) }} % volatilitet.
+        Portföljen ger {{ percent.format(portfolioSummary.expectedReturn) }}&nbsp;% real aritmetisk
+        avkastning, {{ percent.format(portfolioSummary.geometric) }}&nbsp;% median-CAGR och
+        {{ percent.format(portfolioSummary.volatility) }}&nbsp;% volatilitet. Tillgångarna glider
+        isär så pass att ombalanseringen omsätter
+        {{ percent.format(portfolioSummary.turnover) }}&nbsp;% av portföljen per år<template
+          v-if="isAF"
+          >, vilket realiserar vinst i ett AF-konto</template
+        >.
       </p>
 
       <p v-if="Math.abs(weightSum - 1) > 0.005" class="small text-warning mb-3">
-        Vikterna summerar till {{ percent.format(weightSum * 100) }} % och normaliseras innan
+        Vikterna summerar till {{ percent.format(weightSum * 100) }}&nbsp;% och normaliseras innan
         beräkning.
       </p>
 

@@ -14,6 +14,23 @@ const GRID_HEADROOM_SIGMAS = 6
 /** The bottom of the grid, relative to the plan's monetary scale. */
 const GRID_LOW_FRACTION = 1e-6
 
+/**
+ * Widest cost-basis ratio the grid represents. A ratio of 3 means the holding
+ * is worth a third of what was paid for it; deeper losses are pinned to the top
+ * node, which slightly understates the loss credit in a tail that has already
+ * lost two thirds of its money.
+ */
+const BASIS_RATIO_MAX = 3
+
+/**
+ * A net capital loss gives a skattereduktion of the full rate on the first
+ * 100 000 kr and 70% of it above. The threshold is nominal in law and is not
+ * inflation-indexed, so it is deflated to today's money like any other nominal
+ * threshold. Matching `simulation.ts`.
+ */
+const LOSS_CREDIT_THRESHOLD = 100_000
+const LOSS_CREDIT_UPPER_QUOTA = 0.7
+
 interface GridSpec {
   grid: Float64Array
   logLow: number
@@ -21,13 +38,34 @@ interface GridSpec {
   n: number
 }
 
+/**
+ * The cost-basis dimension: basis divided by value, on a uniform grid.
+ *
+ * Uniform rather than geometric because the tax depends on the *unrealised gain
+ * fraction* `1 - ratio`, which is linear in the ratio, so equal absolute
+ * resolution is what keeps the tax error even. An ISK has no cost basis and
+ * collapses this to a single node.
+ */
+interface BasisSpec {
+  grid: Float64Array
+  n: number
+  step: number
+}
+
 interface StepContext {
   spec: GridSpec
+  basis: BasisSpec
   quad: NormalQuadrature
   /** Real gross return at each quadrature node. */
   growth: Float64Array
-  /** Effective annual tax rate on the (post-allowance) balance. */
-  taxRate: number
+  isAF: boolean
+  /** ISK only: proportional annual drag on the balance. */
+  iskRate: number
+  /** AF only: share of the portfolio rebalancing realises each year. */
+  turnover: number
+  /** One plus the annual inflation rate. */
+  inflationFactor: number
+  params: PlannerParameters
 }
 
 interface StepResult {
@@ -63,11 +101,11 @@ function correlationAt(correlations: number[][], i: number, j: number): number {
  * moment match: the portfolio's arithmetic mean and variance are computed
  * exactly from the asset moments and the correlation matrix, then a lognormal
  * is fitted to those two moments. At annual frequency the fit is good, and it
- * is what keeps the state space one-dimensional.
+ * is what keeps the return dimension one-dimensional.
  *
  * This assumes the portfolio is rebalanced to its target weights every year.
  * Letting the weights drift would make the asset split a path-dependent state
- * of its own, which a one-dimensional grid cannot carry.
+ * of its own, which the grid does not carry.
  */
 export function portfolioMoments(
   assets: PlannerAsset[],
@@ -121,7 +159,88 @@ export function portfolioMoments(
     volatility: Math.sqrt(variance),
     logMean,
     logStdDev,
+    rebalancingTurnover: expectedRebalancingTurnover(
+      assets,
+      correlations,
+      weights,
+      expectedReturn,
+      variance,
+    ),
   }
+}
+
+/**
+ * Error function, Abramowitz & Stegun 7.1.26. Absolute error below 1.5e-7,
+ * orders of magnitude finer than the turnover estimate needs.
+ */
+function erf(x: number): number {
+  const sign = x < 0 ? -1 : 1
+  const absolute = Math.abs(x)
+  const t = 1 / (1 + 0.3275911 * absolute)
+  const poly =
+    ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t
+  return sign * (1 - poly * Math.exp(-absolute * absolute))
+}
+
+/** E|X| for X ~ N(mean, sd^2): the mean of the folded normal. */
+function foldedNormalMean(mean: number, sd: number): number {
+  if (!(sd > 0)) return Math.abs(mean)
+  const t = mean / sd
+  const density = Math.exp(-0.5 * t * t) / Math.sqrt(2 * Math.PI)
+  const cdf = 0.5 * (1 + erf(t / Math.SQRT2))
+  return sd * (2 * density + t * (2 * cdf - 1))
+}
+
+/**
+ * Expected share of the portfolio sold each year to restore target weights.
+ *
+ * Rebalancing is not a free parameter: it is forced by the assets drifting
+ * apart, so it follows from the same moments the portfolio return does. After a
+ * year asset i holds weight `x_i·G_i / G_p`, and restoring the targets means
+ * selling everything that ended overweight —
+ *
+ *     turnover = ½ Σ_i |x_i·G_i/G_p − x_i| = ½ Σ_i x_i·|R_i − R_p| / (1 + R_p)
+ *
+ * Each excess return `R_i − R_p` is a linear combination of the asset returns,
+ * so it is approximately normal with variance `σ_i² − 2·Cov(R_i, R_p) + σ_p²`,
+ * and its expected absolute value is a folded normal mean. The denominator is
+ * replaced by its own mean, which varies far less than the numerator.
+ *
+ * Consequences worth knowing: a single-asset portfolio has nothing to
+ * rebalance and turns over nothing, and two perfectly correlated assets with
+ * equal volatility never drift apart. Dispersion is what creates turnover, not
+ * volatility as such.
+ */
+function expectedRebalancingTurnover(
+  assets: PlannerAsset[],
+  correlations: number[][],
+  weights: number[],
+  expectedReturn: number,
+  variance: number,
+): number {
+  if (assets.length < 2) return 0
+
+  let total = 0
+  for (let i = 0; i < assets.length; i++) {
+    let covariance = 0
+    for (let j = 0; j < assets.length; j++) {
+      covariance +=
+        weights[j]! *
+        assets[i]!.volatility *
+        assets[j]!.volatility *
+        correlationAt(correlations, i, j)
+    }
+    const excessVariance = Math.max(
+      0,
+      assets[i]!.volatility * assets[i]!.volatility - 2 * covariance + variance,
+    )
+    total +=
+      weights[i]! *
+      foldedNormalMean(assets[i]!.expectedRealReturn - expectedReturn, Math.sqrt(excessVariance))
+  }
+
+  const gross = 1 + expectedReturn
+  return gross > 0 ? Math.min(1, total / (2 * gross)) : 0
 }
 
 function buildGrid(low: number, high: number, n: number): GridSpec {
@@ -138,6 +257,32 @@ function buildGrid(low: number, high: number, n: number): GridSpec {
   // relative resolution keeps the interpolation error uniform across four
   // orders of magnitude of capital.
   return { grid, logLow, logStep, n }
+}
+
+/**
+ * Builds the cost-basis grid, with a node exactly at a ratio of one.
+ *
+ * That point matters more than any other: it is where a holding switches from
+ * unrealised gain to unrealised loss, so it is the kink in `max(0, 1 - ratio)`
+ * that the tax and the liquidation value both turn on, and it is where freshly
+ * invested money starts. Letting it fall between nodes smears a little
+ * phantom gain across a holding that has none, which shows up as a liquidation
+ * value below par for a portfolio that owes nothing.
+ *
+ * The requested node count is therefore rounded to the nearest whole number of
+ * steps per unit ratio rather than honoured exactly.
+ */
+function buildBasisGrid(requestedNodes: number): BasisSpec {
+  if (requestedNodes <= 1) {
+    // ISK: no cost basis to carry, so the dimension degenerates to one node.
+    return { grid: Float64Array.of(1), n: 1, step: 0 }
+  }
+  const perUnit = Math.max(1, Math.round((requestedNodes - 1) / BASIS_RATIO_MAX))
+  const step = 1 / perUnit
+  const n = perUnit * BASIS_RATIO_MAX + 1
+  const grid = new Float64Array(n)
+  for (let i = 0; i < n; i++) grid[i] = i * step
+  return { grid, n, step }
 }
 
 /**
@@ -170,48 +315,76 @@ function gridBounds(params: PlannerParameters, moments: PortfolioMoments) {
 }
 
 /**
- * Places `mass` at `value` on the grid, splitting it between the two
- * bracketing nodes.
+ * The AF tax bill for one year, as capital income.
  *
- * The bracketing cell is found in O(1) from the geometric spacing. The split
- * is linear in value rather than in log value: value-space weights conserve
- * total mass and the arithmetic mean exactly, so the reported mean capital
- * does not drift over a long horizon. Returns the mass pinned to the top node.
+ * Schablonintäkt and every realised gain and loss land in the same bucket and
+ * net against each other before the rate is applied (kvittning within
+ * inkomstslaget kapital). A rate applied per position would charge the winners
+ * in full while the losers went unrecognised.
+ *
+ * Returns a signed amount: negative is a skattereduktion, which flows back into
+ * the portfolio as new money. That assumes enough other final tax — pension
+ * income, say — to absorb the credit.
  */
-function scatter(target: Float64Array, spec: GridSpec, value: number, mass: number): number {
-  if (mass <= 0) return 0
+function afTax(
+  balance: number,
+  basisRatio: number,
+  realizedGain: number,
+  lossThresholdReal: number,
+  schablonRate: number,
+  capitalGainsTaxRate: number,
+): number {
+  const netCapitalIncome = balance * schablonRate + realizedGain
 
-  if (value <= spec.grid[0]!) {
-    target[0]! += mass
-    return 0
+  let tax: number
+  if (netCapitalIncome >= 0) {
+    tax = netCapitalIncome * capitalGainsTaxRate
+  } else {
+    const loss = -netCapitalIncome
+    const lowerTier = Math.min(loss, lossThresholdReal)
+    const upperTier = loss - lowerTier
+    tax = -(
+      lowerTier * capitalGainsTaxRate +
+      upperTier * capitalGainsTaxRate * LOSS_CREDIT_UPPER_QUOTA
+    )
   }
-  if (value >= spec.grid[spec.n - 1]!) {
-    target[spec.n - 1]! += mass
-    return mass
+
+  // Only the payable side is bounded by the portfolio; a credit is an inflow.
+  tax = Math.min(tax, Math.max(0, balance))
+
+  // Raising the cash to pay the bill is itself a sale, so it realises further
+  // gain and further tax. Solve for the gross amount G that nets the tax due:
+  // G = tax + G·u·r, hence G = tax / (1 - u·r), with u the unrealised gain
+  // fraction and r the rate. Closed form rather than iterating to a fixed
+  // point. Sitting at an unrealised loss does not reduce the cash the bill
+  // needs, so u is floored at zero.
+  if (tax > 0 && balance > 0) {
+    const unrealizedFraction = Math.max(0, 1 - basisRatio)
+    const denominator = 1 - unrealizedFraction * capitalGainsTaxRate
+    if (denominator > 0) tax = Math.min(tax / denominator, balance)
   }
 
-  const u = (Math.log(value) - spec.logLow) / spec.logStep
-  let i = Math.floor(u)
-  if (i < 0) i = 0
-  if (i > spec.n - 2) i = spec.n - 2
-
-  const g0 = spec.grid[i]!
-  const g1 = spec.grid[i + 1]!
-  let f = (value - g0) / (g1 - g0)
-  if (f < 0) f = 0
-  if (f > 1) f = 1
-
-  target[i]! += mass * (1 - f)
-  target[i + 1]! += mass * f
-  return 0
+  return tax
 }
 
 /**
- * Advances one year: apply the real return, take the cash flow, then tax.
+ * Advances one year: apply the real return, take the cash flow, rebalance, then
+ * tax.
  *
- * The ordering mirrors the Monte Carlo simulator (returns, then withdrawal,
- * then the schablon on the resulting balance) so the two engines can be
+ * The ordering mirrors the Monte Carlo simulator so the two engines can be
  * compared directly.
+ *
+ * The cost-basis ratio needs no separate transition rule for most of this.
+ * Genomsnittsmetoden scales the basis by the same fraction as the value on any
+ * partial disposal, so a withdrawal and a tax payment both leave the *ratio*
+ * untouched — only returns, deposits and rebalancing move it.
+ *
+ * The loop nests basis, then return, then wealth, for two reasons. Mass is
+ * stored basis-major so the innermost loop walks contiguous memory. And for a
+ * fixed basis node and return, the post-tax wealth is monotone increasing in
+ * the source wealth, so the target cell can be found by walking a pointer
+ * forward instead of taking a logarithm per node — which at a few hundred
+ * million node-return pairs was the single dominant cost.
  */
 function step(
   ctx: StepContext,
@@ -219,44 +392,167 @@ function step(
   sourceMass: Float64Array,
   flow: number,
   allowanceReal: number,
+  lossThresholdReal: number,
 ): StepResult {
-  const mass = new Float64Array(ctx.spec.n)
-  const { growth, quad, taxRate, spec } = ctx
+  const { spec, basis, quad, growth, isAF, iskRate, turnover, inflationFactor, params } = ctx
+  const nWealth = sourceValues.length
+  const nGrid = spec.n
+  const grid = spec.grid
+  const mass = new Float64Array(nGrid * basis.n)
   const nodes = growth.length
+
+  const capitalGainsTaxRate = params.capitalGainsTaxRate
+  const schablonRate = params.afSchablonRate
+  const top = grid[nGrid - 1]!
+  const isWithdrawal = flow >= 0
 
   let ruin = 0
   let clipped = 0
 
-  for (let j = 0; j < sourceValues.length; j++) {
-    const sourceProbability = sourceMass[j]!
-    if (sourceProbability <= 0) continue
-    const wealth = sourceValues[j]!
+  for (let b = 0; b < basis.n; b++) {
+    const rowOffset = b * nWealth
+    const startRatio = basis.grid[b]!
 
     for (let k = 0; k < nodes; k++) {
-      const probability = quad.weight[k]! * sourceProbability
-      const afterFlow = wealth * growth[k]! - flow
+      const factor = growth[k]!
+      const weight = quad.weight[k]!
+      // The cost basis is a nominal amount fixed at purchase, and Swedish law
+      // does not index it, so what is taxed is the *nominal* gain. The ratio is
+      // unit-free — basis and value deflate alike — so it has to fall with
+      // nominal growth, not the real growth this grid runs on. Dividing by the
+      // real factor alone would silently inflation-index the omkostnadsbelopp
+      // and understate the tax by the whole price level: 2% over forty years
+      // overstates the basis by more than a factor of two.
+      const grownRatio = startRatio / (factor * inflationFactor)
+      // A proportional disposal leaves the ratio alone, so for a withdrawal the
+      // post-flow ratio is known before the wealth loop starts.
+      const flatRatio = isWithdrawal ? grownRatio : 0
+      const flatGain = isWithdrawal ? flow * (1 - grownRatio) : 0
 
-      // Ruin is defined as being unable to fund the floor withdrawal in full.
-      // Paying part of it and continuing would understate the failure, and a
-      // clamped withdrawal is what makes the Monte Carlo simulator's balances
-      // bottom out rather than go negative.
-      if (afterFlow <= 0) {
-        ruin += probability
-        continue
+      let pointer = 0
+
+      for (let j = 0; j < nWealth; j++) {
+        const probability = sourceMass[rowOffset + j]! * weight
+        if (probability <= 0) continue
+
+        const grown = sourceValues[j]! * factor
+        const afterFlow = grown - flow
+
+        // Ruin is defined as being unable to fund the floor withdrawal in
+        // full. Paying part of it and continuing would understate the failure.
+        if (afterFlow <= 0) {
+          ruin += probability
+          continue
+        }
+
+        let tax: number
+        let ratio = 1
+
+        if (isAF) {
+          let realizedGain: number
+          if (isWithdrawal) {
+            ratio = flatRatio
+            realizedGain = flatGain
+          } else {
+            // A deposit buys at market, so it adds equally to value and basis
+            // and pulls the ratio toward one.
+            ratio = (grownRatio * grown - flow) / afterFlow
+            realizedGain = 0
+          }
+
+          if (turnover > 0) {
+            // Selling and rebuying a slice realises its gain and steps that
+            // slice's basis up to market.
+            //
+            // TODO: the slice is charged the portfolio's *average* basis ratio,
+            // but rebalancing sells whatever ended overweight — the winners,
+            // which carry more embedded gain than average. That understates the
+            // realised gain, and so the AF tax. Correcting it needs the basis
+            // per asset, which the aggregated portfolio does not carry.
+            realizedGain += turnover * afterFlow * (1 - ratio)
+            ratio = ratio * (1 - turnover) + turnover
+          }
+
+          tax = afTax(
+            afterFlow,
+            ratio,
+            realizedGain,
+            lossThresholdReal,
+            schablonRate,
+            capitalGainsTaxRate,
+          )
+        } else {
+          const taxable = allowanceReal > 0 ? Math.max(0, afterFlow - allowanceReal) : afterFlow
+          tax = taxable * iskRate
+        }
+
+        const next = afterFlow - tax
+        if (next <= 0) {
+          ruin += probability
+          continue
+        }
+
+        if (isAF && tax < 0) {
+          // The credit comes back as new money buying units at the current
+          // price, so it adds to value and basis alike.
+          ratio = (ratio * afterFlow - tax) / next
+        }
+
+        if (next >= top) clipped += probability
+
+        // `next` is monotone in `j` here, so the bracketing cell is never
+        // behind the pointer.
+        while (pointer < nGrid - 2 && grid[pointer + 1]! < next) pointer++
+        const g0 = grid[pointer]!
+        let fraction = (next - g0) / (grid[pointer + 1]! - g0)
+        if (fraction < 0) fraction = 0
+        else if (fraction > 1) fraction = 1
+
+        const lowMass = probability * (1 - fraction)
+        const highMass = probability * fraction
+
+        if (basis.n === 1) {
+          mass[pointer]! += lowMass
+          mass[pointer + 1]! += highMass
+          continue
+        }
+
+        let bIndex: number
+        let bFraction: number
+        const position = ratio / basis.step
+        if (position <= 0) {
+          bIndex = 0
+          bFraction = 0
+        } else if (position >= basis.n - 1) {
+          bIndex = basis.n - 2
+          bFraction = 1
+        } else {
+          bIndex = position | 0
+          bFraction = position - bIndex
+        }
+
+        const low = bIndex * nGrid + pointer
+        const high = low + nGrid
+        mass[low]! += lowMass * (1 - bFraction)
+        mass[low + 1]! += highMass * (1 - bFraction)
+        mass[high]! += lowMass * bFraction
+        mass[high + 1]! += highMass * bFraction
       }
-
-      const taxable = allowanceReal > 0 ? Math.max(0, afterFlow - allowanceReal) : afterFlow
-      const next = afterFlow - taxable * taxRate
-      if (next <= 0) {
-        ruin += probability
-        continue
-      }
-
-      clipped += scatter(mass, spec, next, probability)
     }
   }
 
   return { mass, ruin, clipped }
+}
+
+/** Sums the joint mass over the cost-basis dimension. */
+function marginalOverBasis(mass: Float64Array, spec: GridSpec, basis: BasisSpec): Float64Array {
+  if (basis.n === 1) return mass
+  const marginal = new Float64Array(spec.n)
+  for (let b = 0; b < basis.n; b++) {
+    const offset = b * spec.n
+    for (let j = 0; j < spec.n; j++) marginal[j]! += mass[offset + j]!
+  }
+  return marginal
 }
 
 function quantileOf(grid: Float64Array, mass: Float64Array, ruin: number, p: number): number {
@@ -299,24 +595,56 @@ function summarize(
   }
 }
 
-function accountTaxRate(params: PlannerParameters): number {
-  if (params.accountType === 'VP') {
-    // A VP account's tax depends on the cost basis, which is a second,
-    // path-dependent state variable. Carrying it needs a two-dimensional grid;
-    // until that exists, refuse rather than quietly charge the wrong tax.
-    //
-    // TODO: support VP. The state becomes (wealth, cost-basis ratio); the ratio
-    // is smooth and bounded to [0, 1], so a 200x40 grid over 60 years stays
-    // affordable. The tax rules to port from simulation.ts are kvittning
-    // between the schablon and realised gains, the loss skattereduktion, the
-    // closed-form gross-up for the sale that funds the tax bill, and
-    // genomsnittsmetoden on partial disposals.
-    throw new Error('planner: VP accounts are not supported yet — cost basis is not tracked')
+/**
+ * The distribution of what the capital is worth after settling the embedded
+ * capital gains tax.
+ *
+ * An AF account defers its liability rather than escaping it — Swedish heirs
+ * take over the acquisition cost, so the tax follows the assets — which means
+ * the balance alone overstates what the plan can actually hand over as cash.
+ *
+ * Settling the tax scales the balance by a factor that depends only on the
+ * basis node, so each basis row is the wealth grid shifted by a constant factor
+ * and lands back on the same grid.
+ */
+function liquidDistribution(
+  mass: Float64Array,
+  spec: GridSpec,
+  basis: BasisSpec,
+  capitalGainsTaxRate: number,
+): Float64Array {
+  const liquid = new Float64Array(spec.n)
+
+  for (let b = 0; b < basis.n; b++) {
+    const unrealizedFraction = Math.max(0, 1 - basis.grid[b]!)
+    const factor = 1 - unrealizedFraction * capitalGainsTaxRate
+    if (!(factor > 0)) continue
+    // A constant multiple is a constant offset along a geometric grid.
+    const shift = Math.log(factor) / spec.logStep
+    const offset = b * spec.n
+
+    for (let j = 0; j < spec.n; j++) {
+      const probability = mass[offset + j]!
+      if (probability <= 0) continue
+      const value = spec.grid[j]! * factor
+
+      const position = j + shift
+      let index: number
+      if (position <= 0) index = 0
+      else if (position >= spec.n - 1) index = spec.n - 2
+      else index = position | 0
+
+      const g0 = spec.grid[index]!
+      let fraction = (value - g0) / (spec.grid[index + 1]! - g0)
+      if (fraction < 0) fraction = 0
+      else if (fraction > 1) fraction = 1
+
+      liquid[index]! += probability * (1 - fraction)
+      liquid[index + 1]! += probability * fraction
+    }
   }
-  // The ISK schablon is levied on the balance, so it is a constant proportional
-  // drag. Being proportional, it is the same rate in real terms as in nominal
-  // terms: the price level divides out of both the base and the tax.
-  return params.iskTaxRate * params.capitalGainsTaxRate
+
+  return liquid
 }
 
 function validate(params: PlannerParameters): void {
@@ -339,6 +667,16 @@ function validate(params: PlannerParameters): void {
   if (params.gridNodes < 50) {
     throw new Error(`planner: gridNodes must be at least 50, got ${params.gridNodes}`)
   }
+  if (params.accountType === 'AF') {
+    if (params.basisNodes < 2) {
+      throw new Error(`planner: AF needs at least 2 basisNodes, got ${params.basisNodes}`)
+    }
+    if (!(params.initialCostBasisRatio >= 0)) {
+      throw new Error(
+        `planner: initialCostBasisRatio must not be negative, got ${params.initialCostBasisRatio}`,
+      )
+    }
+  }
   for (const year of params.cashflow) {
     if (!Number.isFinite(year.floor) || !Number.isFinite(year.optional)) {
       throw new Error('planner: cashflow entries must be finite numbers')
@@ -349,6 +687,7 @@ function validate(params: PlannerParameters): void {
 function propagate(
   params: PlannerParameters,
   spec: GridSpec,
+  basis: BasisSpec,
   quad: NormalQuadrature,
   moments: PortfolioMoments,
   includeOptional: boolean,
@@ -359,45 +698,90 @@ function propagate(
     growth[k] = Math.exp(moments.logMean + moments.logStdDev * quad.z[k]!)
   }
 
-  const ctx: StepContext = { spec, quad, growth, taxRate: accountTaxRate(params) }
+  const isAF = params.accountType === 'AF'
+  const ctx: StepContext = {
+    spec,
+    basis,
+    quad,
+    growth,
+    isAF,
+    // The ISK schablon is levied on the balance, so it is a constant
+    // proportional drag. Being proportional, it is the same rate in real terms
+    // as in nominal terms: the price level divides out of base and tax alike.
+    iskRate: params.iskTaxRate * params.capitalGainsTaxRate,
+    // Rebalancing is forced by the assets drifting apart, so the turnover it
+    // implies comes from the portfolio moments rather than from a setting.
+    turnover: isAF ? moments.rebalancingTurnover : 0,
+    inflationFactor: 1 + params.inflationRate,
+    params,
+  }
 
   // Year 0 is an exact point mass at the starting capital rather than a
   // projection onto the grid. That keeps the first step exact and lets the
   // plan start from zero capital, which no geometric grid can represent.
   let values: Float64Array = Float64Array.of(params.initialCapital)
-  let mass: Float64Array = Float64Array.of(1)
+  // Mass is basis-major, so with a single wealth node the starting row is just
+  // the cost-basis distribution.
+  let mass: Float64Array = new Float64Array(basis.n)
+  if (basis.n === 1) {
+    mass[0] = 1
+  } else {
+    const position = params.initialCostBasisRatio / basis.step
+    let index: number
+    let fraction: number
+    if (position <= 0) {
+      index = 0
+      fraction = 0
+    } else if (position >= basis.n - 1) {
+      index = basis.n - 2
+      fraction = 1
+    } else {
+      index = Math.floor(position)
+      fraction = position - index
+    }
+    mass[index] = 1 - fraction
+    mass[index + 1] = fraction
+  }
   let ruin = 0
   let clipped = 0
 
-  const outcomes: YearOutcome[] = [
-    {
+  const startOutcome = (net: boolean): YearOutcome => {
+    const value = net
+      ? params.initialCapital *
+        (1 - Math.max(0, 1 - params.initialCostBasisRatio) * params.capitalGainsTaxRate)
+      : params.initialCapital
+    return {
       year: 0,
       age: params.startAge,
       ruinProbability: 0,
-      mean: params.initialCapital,
-      percentile5: params.initialCapital,
-      percentile10: params.initialCapital,
-      percentile25: params.initialCapital,
-      median: params.initialCapital,
-      percentile75: params.initialCapital,
-      percentile90: params.initialCapital,
-      percentile95: params.initialCapital,
-    },
-  ]
+      mean: value,
+      percentile5: value,
+      percentile10: value,
+      percentile25: value,
+      median: value,
+      percentile75: value,
+      percentile90: value,
+      percentile95: value,
+    }
+  }
+
+  const outcomes: YearOutcome[] = [startOutcome(false)]
+  const liquidOutcomes: YearOutcome[] = isAF ? [startOutcome(true)] : []
+  let liquidMass: Float64Array | null = null
 
   for (let year = 0; year < params.years; year++) {
     const entry = params.cashflow[year]!
     const flow = entry.floor + (includeOptional ? Math.max(0, entry.optional) : 0)
 
-    // The ISK allowance is written in nominal kronor, so deflate it to today's
-    // money. Year `year` ends at price level (1+pi)^(year+1), matching the
-    // Monte Carlo simulator, which accrues inflation at the top of each year.
-    const allowanceReal =
-      params.iskAllowance > 0
-        ? params.iskAllowance / Math.pow(1 + params.inflationRate, year + 1)
-        : 0
+    // Nominal thresholds are written in kronor of the day, so deflate them to
+    // today's money. Year `year` ends at price level (1+pi)^(year+1), matching
+    // the Monte Carlo simulator, which accrues inflation at the top of each
+    // year.
+    const priceLevel = Math.pow(1 + params.inflationRate, year + 1)
+    const allowanceReal = params.iskAllowance > 0 ? params.iskAllowance / priceLevel : 0
+    const lossThresholdReal = LOSS_CREDIT_THRESHOLD / priceLevel
 
-    const stepped = step(ctx, values, mass, flow, allowanceReal)
+    const stepped = step(ctx, values, mass, flow, allowanceReal, lossThresholdReal)
 
     // Ruin is absorbing. A deposit scheduled after the plan already failed to
     // pay its floor does not undo that failure, so the ruined mass is never
@@ -407,16 +791,34 @@ function propagate(
     values = spec.grid
     mass = stepped.mass
 
-    outcomes.push(summarize(year + 1, params.startAge, spec.grid, mass, ruin))
+    outcomes.push(
+      summarize(year + 1, params.startAge, spec.grid, marginalOverBasis(mass, spec, basis), ruin),
+    )
+
+    if (isAF) {
+      // Cheap next to the propagation itself — one pass over the joint grid —
+      // so the net series is built every year rather than only at the end,
+      // which lets the charts follow the same toggle as the table.
+      liquidMass = liquidDistribution(mass, spec, basis, params.capitalGainsTaxRate)
+      liquidOutcomes.push(summarize(year + 1, params.startAge, spec.grid, liquidMass, ruin))
+    }
   }
 
   const finalDistribution: WealthDistribution = {
     grid: spec.grid,
-    mass,
+    mass: marginalOverBasis(mass, spec, basis),
     ruinProbability: ruin,
   }
 
-  return { label, outcomes, finalDistribution, clippedMass: clipped }
+  return {
+    label,
+    outcomes,
+    finalDistribution,
+    liquidOutcomes: isAF ? liquidOutcomes : undefined,
+    finalLiquidDistribution:
+      isAF && liquidMass ? { grid: spec.grid, mass: liquidMass, ruinProbability: ruin } : undefined,
+    clippedMass: clipped,
+  }
 }
 
 /**
@@ -435,10 +837,13 @@ export function runPlanner(params: PlannerParameters): PlannerResults {
   const quad = normalQuadrature(params.quadratureNodes)
   const { low, high } = gridBounds(params, portfolio)
   const spec = buildGrid(low, high, params.gridNodes)
+  // Only AF carries a cost basis; ISK collapses the dimension to one node and
+  // pays none of its cost.
+  const basis = buildBasisGrid(params.accountType === 'AF' ? params.basisNodes : 1)
 
   return {
-    floorRun: propagate(params, spec, quad, portfolio, false, 'Golv'),
-    optionalRun: propagate(params, spec, quad, portfolio, true, 'Golv + tillval'),
+    floorRun: propagate(params, spec, basis, quad, portfolio, false, 'Golv'),
+    optionalRun: propagate(params, spec, basis, quad, portfolio, true, 'Golv + tillval'),
     portfolio,
   }
 }

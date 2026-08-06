@@ -10,7 +10,9 @@
 // money. Inflation only enters where the tax code is written in nominal
 // kronor; see `iskAllowance`.
 
-export type PlannerAccountType = 'ISK' | 'VP'
+// Skatteverket calls a taxable brokerage account an aktie- och fondkonto (AF),
+// so that is the term used throughout the planner.
+export type PlannerAccountType = 'ISK' | 'AF'
 
 export interface PlannerAsset {
   /** Unique instance key. The same preset may appear twice, so this is not the preset's id. */
@@ -76,6 +78,20 @@ export interface PlannerParameters {
    */
   iskAllowance: number
 
+  /**
+   * Schablonintäkt rate on fund holdings in an AF account, 0.4% in law. Unlike
+   * the ISK schablon this is capital *income*, so it nets against realised
+   * gains and losses before the rate is applied.
+   */
+  afSchablonRate: number
+
+  /**
+   * Cost basis of the starting capital as a fraction of its value. 1 means
+   * freshly invested money with no unrealised gain; 0.4 means 60% of the
+   * balance is untaxed gain. Only used by AF — an ISK has no cost basis.
+   */
+  initialCostBasisRatio: number
+
   /** Deterministic annual inflation, used to deflate nominal tax thresholds. */
   inflationRate: number
 
@@ -86,6 +102,11 @@ export interface PlannerParameters {
   gridNodes: number
   /** Number of quadrature nodes for the annual return integral. */
   quadratureNodes: number
+  /**
+   * Nodes across the cost-basis ratio, the second state dimension an AF account
+   * needs. Ignored for ISK, which collapses to a single node.
+   */
+  basisNodes: number
 }
 
 /** Moment-matched lognormal description of the annually rebalanced portfolio. */
@@ -100,6 +121,12 @@ export interface PortfolioMoments {
   logMean: number
   /** Standard deviation of log(1 + real return). */
   logStdDev: number
+  /**
+   * Expected share of the portfolio sold each year to restore target weights,
+   * implied by how far the assets drift apart. Derived rather than assumed, and
+   * only taxable in an AF account.
+   */
+  rebalancingTurnover: number
 }
 
 /**
@@ -137,6 +164,16 @@ export interface PropagationRun {
   /** Length `years + 1`; index 0 is the deterministic starting position. */
   outcomes: YearOutcome[]
   finalDistribution: WealthDistribution
+  /**
+   * The same series and final distribution, net of the capital gains tax still
+   * embedded in the balance.
+   *
+   * Present only for AF. An ISK carries no deferred liability, so its balance
+   * is already net and there is nothing to report separately — which is also
+   * why the UI's net-of-tax toggle only appears for AF.
+   */
+  liquidOutcomes?: YearOutcome[]
+  finalLiquidDistribution?: WealthDistribution
   /**
    * Mass that reached the top of the grid and was pinned there. Anything above
    * ~1e-6 means the grid was too narrow and the upper percentiles understate.

@@ -366,12 +366,6 @@ describe('runPlanner', () => {
   })
 
   describe('input validation', () => {
-    it('rejects VP rather than charging the wrong tax', () => {
-      expect(() => runPlanner(params({ accountType: 'VP' }))).toThrow(
-        /VP accounts are not supported/,
-      )
-    })
-
     it('rejects a cashflow whose length does not match the horizon', () => {
       expect(() => runPlanner(params({ years: 10, cashflow: buildCashflow(9, 0, 0) }))).toThrow(
         /cashflow has 9 entries/,

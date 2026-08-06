@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { RouterLink } from 'vue-router'
 
@@ -9,16 +9,11 @@ import CashflowEditor from '../components/planner/CashflowEditor.vue'
 import PlannerOutcome from '../components/planner/PlannerOutcome.vue'
 
 const store = usePlannerStore()
-const { error, accountType } = storeToRefs(store)
+const { error } = storeToRefs(store)
 
 onMounted(() => {
   store.initUrlSync()
 })
-
-// The engine refuses VP rather than charging a cost-basis-dependent tax it
-// cannot track on a one-dimensional grid. Say so in the UI instead of showing
-// the raw error.
-const vpNotice = computed(() => accountType.value === 'VP')
 </script>
 
 <template>
@@ -36,11 +31,7 @@ const vpNotice = computed(() => accountType.value === 'VP')
     <PlannerInputs />
     <CashflowEditor />
 
-    <div v-if="vpNotice" class="alert alert-warning">
-      Vanlig depå stöds inte ännu. VP-skatten beror på omkostnadsbeloppet, som är ett andra
-      tillstånd med egen historik — det kräver ett tvådimensionellt rutnät. Välj ISK så länge.
-    </div>
-    <div v-else-if="error" class="alert alert-danger">
+    <div v-if="error" class="alert alert-danger">
       {{ error }}
     </div>
 
@@ -70,12 +61,12 @@ const vpNotice = computed(() => accountType.value === 'VP')
             <p>
               Skatteparametrarna hålls konstanta över hela horisonten och kan ändras av riksdagen.
               Schablonräntan är satt till en långsiktig nivå i stället för det aktuella årets: för
-              inkomstår 2026 är den 3,55 %, men att hålla ett enskilt års ränta i fyrtio år låter
-              kortsiktiga ränterörelser avgöra slutresultatet. Pensionernas prognosstandard undviker
-              samma fälla och fixerar en långsiktig statslåneränta på 2,5 %. Här används 4 %, vilket
-              motsvarar en statslåneränta kring 3 % — en halv procentenhet över standarden, i linje
-              med att styrräntan väntas ligga högre mot 2030 än i dag. Fribeloppet är ett nominellt
-              belopp som inte indexeras; 0 stänger av det.
+              inkomstår 2026 är den 3,55&nbsp;%, men att hålla ett enskilt års ränta i fyrtio år
+              låter kortsiktiga ränterörelser avgöra slutresultatet. Pensionernas prognosstandard
+              undviker samma fälla och fixerar en långsiktig statslåneränta på 2,5&nbsp;%. Här
+              används 4&nbsp;%, vilket motsvarar en statslåneränta kring 3&nbsp;% — en halv
+              procentenhet över standarden, i linje med att styrräntan väntas ligga högre mot 2030
+              än i dag. Fribeloppet är ett nominellt belopp som inte indexeras; 0 stänger av det.
             </p>
             <p>
               Att räkna på hela fördelningen är vad som gör uttagens ordningsberoende synligt. Varje
@@ -91,7 +82,7 @@ const vpNotice = computed(() => accountType.value === 'VP')
               hela golvuttaget, och det tillståndet är absorberande: en senare insättning räddar den
               inte. Percentilerna är ovillkorade, så spruckna utfall ligger kvar som noll kronor i
               fördelningen. Det är därför 10:e percentilen kan vara noll så snart risken att planen
-              spricker överstiger 10 %.
+              spricker överstiger 10&nbsp;%.
             </p>
             <p class="mb-0">
               Modellen förutsätter att portföljen ombalanseras till sina målvikter varje år och att
@@ -100,11 +91,19 @@ const vpNotice = computed(() => accountType.value === 'VP')
               medelvärdena är aritmetiska, eftersom modellen själv beräknar variansdraget. Siffrorna
               per tillgångsslag är redigerbara utgångspunkter, inte skattningar ur fonddatabasen —
               den innehåller enskilda fonder över korta, nominella perioder, medan en
-              planeringshorisont på decennier behöver långsiktiga reala klassavkastningar. Endast
-              ISK stöds: VP:s skatt beror på omkostnadsbeloppet, som är ett andra tillstånd med egen
-              historik. Eftersom ISK:ns schablonskatt tas ut på saldot är den samma andel realt som
-              nominellt, och därför påverkar inflationen inte det reala resultatet annat än genom
-              fribeloppet, som är skrivet i nominella kronor.
+              planeringshorisont på decennier behöver långsiktiga reala klassavkastningar.
+            </p>
+            <p class="mb-0">
+              För ISK tas schablonskatten ut på saldot. Den är därmed samma andel realt som
+              nominellt, så inflationen påverkar inte det reala resultatet annat än genom
+              fribeloppet, som är skrivet i nominella kronor. Ett AF-konto beskattas i stället på
+              omkostnadsbeloppet, som är ett andra tillstånd med egen historik: rutnätet spänner
+              därför både kapital och omkostnadsbelopp, och skatten följer kvittning mellan
+              schablonintäkt och realiserade vinster, skattereduktion för nettoförluster,
+              genomsnittsmetoden vid delavyttring och uppräkning av den försäljning som betalar
+              skatten. Hur mycket den årliga ombalanseringen realiserar är inget antagande utan
+              följer av hur långt tillgångarna glider isär: den förväntade omsättningen räknas fram
+              ur samma medelvärden, volatiliteter och korrelationer som avkastningen.
             </p>
           </div>
           <div class="col-12 col-lg-6">
@@ -144,9 +143,9 @@ const vpNotice = computed(() => accountType.value === 'VP')
                 rel="noopener"
                 >Prognosstandard för pensioner</a
               >, den standard Pensionsmyndigheten och pensionsbolagen enats om och som används i
-              minPension: 6,5 % nominellt för globala aktier, 2,5 % för långa räntor och 2 %
-              inflation, vilket ger 3,5 % realt vid standardens 75/25-fördelning, före skatt och
-              avgifter. Standarden är en deterministisk framskrivning, så dess tal är
+              minPension: 6,5&nbsp;% nominellt för globala aktier, 2,5&nbsp;% för långa räntor och
+              2&nbsp;% inflation, vilket ger 3,5&nbsp;% realt vid standardens 75/25-fördelning, före
+              skatt och avgifter. Standarden är en deterministisk framskrivning, så dess tal är
               <em>ackumulerande</em> avkastning; värdena här är de aritmetiska medelvärden som
               återger samma ackumulerande takt vid respektive volatilitet. Volatiliteterna kommer
               inte från standarden, som inte anger några, utan är av den storleksordning Dimson, E.,
@@ -167,19 +166,19 @@ const vpNotice = computed(() => accountType.value === 'VP')
                 target="_blank"
                 rel="noopener"
                 >Skatteverket, Belopp och procent 2026</a
-              >: statslåneräntan 2,55 % den 30 november 2025 plus en procentenhet ger 3,55 % (lägst
-              1,25 % enligt lag), och den skattefria grundnivån är 300 000 kronor från 1 januari
-              2026. Skatteverket anger ingen årlig indexering av grundnivån, så den modelleras som
-              nominellt fast och urholkas därmed realt av inflationen. Den långsiktiga nivån på
-              schablonräntan utgår från
+              >: statslåneräntan 2,55&nbsp;% den 30 november 2025 plus en procentenhet ger
+              3,55&nbsp;% (lägst 1,25&nbsp;% enligt lag), och den skattefria grundnivån är 300 000
+              kronor från 1 januari 2026. Skatteverket anger ingen årlig indexering av grundnivån,
+              så den modelleras som nominellt fast och urholkas därmed realt av inflationen. Den
+              långsiktiga nivån på schablonräntan utgår från
               <a
                 href="https://www.konj.se/publikationer/konjunkturlaget/"
                 target="_blank"
                 rel="noopener"
                 >Konjunkturinstitutets Konjunkturläget</a
-              >, vars scenario har styrräntan stigande mot 2,5 % fram till 2031, plus den
+              >, vars scenario har styrräntan stigande mot 2,5&nbsp;% fram till 2031, plus den
               terminspremie statslåneräntan i dag ligger över styrräntan. Prognosstandardens eget
-              antagande är 2,5 % statslåneränta.
+              antagande är 2,5&nbsp;% statslåneränta.
             </p>
           </div>
         </div>

@@ -17,7 +17,24 @@ const CHART_HEIGHT = 320
 
 const logScale = ref(true)
 
+/**
+ * Report the final capital net of the capital gains tax still embedded in it.
+ *
+ * On by default, because it is the only basis on which the numbers are
+ * comparable: an ISK owes nothing at the end, so its balance is already net,
+ * and the withdrawals row is money that has actually been handed over. Showing
+ * an AF balance gross alongside those flatters it by the deferred tax.
+ */
+const netOfTax = ref(true)
+
 const kronor = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 })
+
+/**
+ * Svenska skrivregler puts a space before the percent sign, and a non-breaking
+ * one so the number and its unit never split across a line. This matches what
+ * Intl's own sv-SE percent style emits.
+ */
+const NBSP = '\u00a0'
 const percent = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 1 })
 
 function formatKr(value: number): string {
@@ -27,11 +44,28 @@ function formatKr(value: number): string {
   return `${kronor.format(value)} kr`
 }
 
+/**
+ * The two bracketing runs, already resolved to the series the toggle selects.
+ *
+ * Charts and table read `outcomes`/`distribution` from here rather than from
+ * the run, so a single switch keeps every figure on the page on the same basis.
+ */
 const runs = computed(() => {
   if (!results.value) return []
+  const resolve = (run: PropagationRun, color: string, dashed: boolean) => {
+    const net = netOfTax.value ? run.liquidOutcomes : undefined
+    return {
+      run,
+      color,
+      dashed,
+      outcomes: net ?? run.outcomes,
+      distribution:
+        (netOfTax.value ? run.finalLiquidDistribution : undefined) ?? run.finalDistribution,
+    }
+  }
   return [
-    { run: results.value.floorRun, color: FLOOR_COLOR, dashed: false },
-    { run: results.value.optionalRun, color: OPTIONAL_COLOR, dashed: true },
+    resolve(results.value.floorRun, FLOOR_COLOR, false),
+    resolve(results.value.optionalRun, OPTIONAL_COLOR, true),
   ]
 })
 
@@ -45,21 +79,27 @@ function totalWithdrawn(includeOptional: boolean): number {
 
 const summary = computed(() => {
   if (!results.value) return null
-  const build = (run: PropagationRun, includeOptional: boolean) => {
-    const final = run.outcomes[run.outcomes.length - 1]!
+  const build = (entry: (typeof runs.value)[number], includeOptional: boolean) => {
+    const final = entry.outcomes[entry.outcomes.length - 1]!
     return {
-      label: run.label,
+      label: entry.run.label,
       survival: (1 - final.ruinProbability) * 100,
       median: final.median,
       percentile10: final.percentile10,
       percentile90: final.percentile90,
-      mean: final.mean,
       withdrawn: totalWithdrawn(includeOptional),
-      clipped: run.clippedMass,
     }
   }
-  return [build(results.value.floorRun, false), build(results.value.optionalRun, true)]
+  return [build(runs.value[0]!, false), build(runs.value[1]!, true)]
 })
+
+/** Whether any run actually carries deferred tax, i.e. whether the toggle does anything. */
+const hasDeferredTax = computed(
+  () =>
+    !!results.value &&
+    (results.value.floorRun.liquidOutcomes !== undefined ||
+      results.value.optionalRun.liquidOutcomes !== undefined),
+)
 
 /** Warns when the grid could not hold the upper tail; see PropagationRun.clippedMass. */
 const gridWarning = computed(() => {
@@ -88,7 +128,11 @@ function axes(
 
 // --- Fan chart --------------------------------------------------------
 
-const fanData = computed(() => ({ results: results.value, logScale: logScale.value }))
+const chartData = computed(() => ({
+  results: results.value,
+  logScale: logScale.value,
+  netOfTax: netOfTax.value,
+}))
 
 const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   if (!results.value) return
@@ -99,14 +143,13 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     left: 84,
   })
 
-  const outcomes = results.value.floorRun.outcomes
+  const outcomes = runs.value[0]!.outcomes
   const x = d3
     .scaleLinear()
-    .domain([0, outcomes[outcomes.length - 1]!.age])
+    .domain([outcomes[0]!.age, outcomes[outcomes.length - 1]!.age])
     .range([0, innerWidth])
-  x.domain([outcomes[0]!.age, outcomes[outcomes.length - 1]!.age])
 
-  const upper = d3.max(runs.value, ({ run }) => d3.max(run.outcomes, (o) => o.percentile90)) ?? 1
+  const upper = d3.max(runs.value, (entry) => d3.max(entry.outcomes, (o) => o.percentile90)) ?? 1
 
   // A log axis cannot show ruin, which sits at exactly zero. The floor is set
   // to a small fraction of the top of the range so a collapsing plan still
@@ -136,28 +179,23 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   }
   plot.append('g').call(leftAxis)
 
-  for (const { run, color, dashed } of runs.value) {
+  for (const { outcomes: series, color, dashed } of runs.value) {
     const band = d3
-      .area<(typeof run.outcomes)[number]>()
+      .area<(typeof series)[number]>()
       .x((o) => x(o.age))
       .y0((o) => y(Math.max(floor, o.percentile10)))
       .y1((o) => y(Math.max(floor, o.percentile90)))
 
-    plot
-      .append('path')
-      .datum(run.outcomes)
-      .attr('d', band)
-      .attr('fill', color)
-      .attr('fill-opacity', 0.15)
+    plot.append('path').datum(series).attr('d', band).attr('fill', color).attr('fill-opacity', 0.15)
 
     const line = d3
-      .line<(typeof run.outcomes)[number]>()
+      .line<(typeof series)[number]>()
       .x((o) => x(o.age))
       .y((o) => y(Math.max(floor, o.median)))
 
     plot
       .append('path')
-      .datum(run.outcomes)
+      .datum(series)
       .attr('d', line)
       .attr('fill', 'none')
       .attr('stroke', color)
@@ -191,27 +229,32 @@ const renderSurvival = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     .append('g')
     .attr('transform', `translate(0,${innerHeight})`)
     .call(d3.axisBottom(x).ticks(8).tickFormat(d3.format('d')))
-  plot.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')))
+  plot.append('g').call(
+    d3
+      .axisLeft(y)
+      .ticks(5)
+      .tickFormat((value) => `${Math.round(Number(value) * 100)}${NBSP}%`),
+  )
 
   const survival = (outcome: { ruinProbability: number }) => 1 - outcome.ruinProbability
   const endLabels: { y: number; text: string; color: string }[] = []
 
-  for (const { run, color, dashed } of runs.value) {
+  for (const { outcomes: series, color, dashed } of runs.value) {
     const line = d3
-      .line<(typeof run.outcomes)[number]>()
+      .line<(typeof series)[number]>()
       .x((o) => x(o.age))
       .y((o) => y(survival(o)))
     plot
       .append('path')
-      .datum(run.outcomes)
+      .datum(series)
       .attr('d', line)
       .attr('fill', 'none')
       .attr('stroke', color)
       .attr('stroke-width', 2)
       .attr('stroke-dasharray', dashed ? '6 4' : null)
 
-    const final = survival(run.outcomes[run.outcomes.length - 1]!)
-    endLabels.push({ y: y(final), text: `${percent.format(final * 100)} %`, color })
+    const final = survival(series[series.length - 1]!)
+    endLabels.push({ y: y(final), text: `${percent.format(final * 100)}${NBSP}%`, color })
   }
 
   // Two plans that both hold would otherwise print their labels on top of each
@@ -250,10 +293,10 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     left: 60,
   })
 
-  const series = runs.value.map(({ run, color, dashed }) => ({
+  const series = runs.value.map(({ distribution, color, dashed }) => ({
     color,
     dashed,
-    bins: densityBins(run.finalDistribution, 160),
+    bins: densityBins(distribution, 160),
   }))
 
   const all = series.flatMap((s) => s.bins).filter((bin) => bin.density > 0)
@@ -277,7 +320,12 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
         .ticks(6)
         .tickFormat((value) => formatKr(Number(value))),
     )
-  plot.append('g').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')))
+  plot.append('g').call(
+    d3
+      .axisLeft(y)
+      .ticks(5)
+      .tickFormat((value) => `${Math.round(Number(value) * 100)}${NBSP}%`),
+  )
 
   const labels: { y: number; text: string; color: string }[] = []
 
@@ -336,10 +384,45 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
 <template>
   <div v-if="summary">
     <div class="card mb-3">
-      <div class="card-header">Slutkapital</div>
+      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <span>Slutkapital i dagens penningvärde</span>
+        <div class="d-flex gap-3">
+          <div v-if="hasDeferredTax" class="form-check form-switch mb-0">
+            <input
+              id="planner-net-of-tax"
+              v-model="netOfTax"
+              class="form-check-input"
+              type="checkbox"
+              role="switch"
+            />
+            <label class="form-check-label small" for="planner-net-of-tax"
+              >Efter latent skatt</label
+            >
+          </div>
+          <div class="form-check form-switch mb-0">
+            <input
+              id="planner-log-scale"
+              v-model="logScale"
+              class="form-check-input"
+              type="checkbox"
+              role="switch"
+            />
+            <label class="form-check-label small" for="planner-log-scale">Logaritmisk skala</label>
+          </div>
+        </div>
+      </div>
       <div class="card-body">
+        <D3Chart :render-chart="renderFan" :data="chartData" />
+        <div class="d-flex flex-wrap gap-3 small text-muted mt-2 mb-3">
+          <span><span class="line" :style="{ background: FLOOR_COLOR }"></span> Golv</span>
+          <span
+            ><span class="line dashed" :style="{ background: OPTIONAL_COLOR }"></span> Golv +
+            tillval</span
+          >
+        </div>
+
         <div class="table-responsive">
-          <table class="table table-sm align-middle mb-0">
+          <table class="table table-sm table-hover align-middle mb-0 w-auto mx-auto summary-table">
             <thead>
               <tr>
                 <th></th>
@@ -348,15 +431,15 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
             </thead>
             <tbody>
               <tr>
-                <th>Sannolikhet att planen håller</th>
+                <th>Totalt planerat uttag</th>
                 <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ percent.format(row.survival) }} %
+                  {{ formatKr(row.withdrawn) }}
                 </td>
               </tr>
               <tr>
-                <th>Median slutkapital</th>
+                <th>Sannolikhet att planen håller</th>
                 <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ formatKr(row.median) }}
+                  {{ percent.format(row.survival) }}&nbsp;%
                 </td>
               </tr>
               <tr>
@@ -366,57 +449,39 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                 </td>
               </tr>
               <tr>
-                <th>90:e percentilen</th>
+                <th>Median slutkapital</th>
                 <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ formatKr(row.percentile90) }}
+                  {{ formatKr(row.median) }}
                 </td>
               </tr>
               <tr>
-                <th>Totalt uttaget (realt)</th>
+                <th>90:e percentilen</th>
                 <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ formatKr(row.withdrawn) }}
+                  {{ formatKr(row.percentile90) }}
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
         <p class="form-text mb-0">
-          Percentilerna är ovillkorade: en plan som spricker räknas som noll kronor, inte som
-          bortfall. Därför kan 10:e percentilen vara noll när risken att planen spricker överstiger
-          10 %.
+          Det planerade uttaget är vad planen begär över hela horisonten, inte vad en plan som
+          spruckit hann ta ut. Percentilerna är ovillkorade: en plan som spricker räknas som noll
+          kronor, inte som bortfall. Därför kan 10:e percentilen vara noll när risken att planen
+          spricker överstiger 10&nbsp;%.
+          <template v-if="hasDeferredTax">
+            Beloppen är
+            <template v-if="netOfTax">efter</template><template v-else>före</template> den
+            uppskjutna kapitalvinstskatten. Ett AF-konto skjuter upp skatten snarare än slipper den,
+            så först efter avdrag är slutkapitalet jämförbart med uttagen och med ett ISK, som inte
+            är skyldigt något vid horisontens slut.
+          </template>
         </p>
       </div>
     </div>
 
     <div v-if="gridWarning" class="alert alert-warning">
-      {{ percent.format(gridWarning * 100) }} % av sannolikhetsmassan nådde toppen av rutnätet. De
-      övre percentilerna är underskattade — öka horisontens rutnät eller sänk avkastningen.
-    </div>
-
-    <div class="card mb-3">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Realt kapital över tid (median och 10–90 %)</span>
-        <div class="form-check form-switch mb-0">
-          <input
-            id="planner-log-scale"
-            v-model="logScale"
-            class="form-check-input"
-            type="checkbox"
-            role="switch"
-          />
-          <label class="form-check-label small" for="planner-log-scale">Logaritmisk skala</label>
-        </div>
-      </div>
-      <div class="card-body">
-        <D3Chart :render-chart="renderFan" :data="fanData" />
-        <div class="d-flex flex-wrap gap-3 small text-muted mt-2">
-          <span><span class="line" :style="{ background: FLOOR_COLOR }"></span> Golv</span>
-          <span
-            ><span class="line dashed" :style="{ background: OPTIONAL_COLOR }"></span> Golv +
-            tillval</span
-          >
-        </div>
-      </div>
+      {{ percent.format(gridWarning * 100) }}&nbsp;% av sannolikhetsmassan nådde toppen av rutnätet.
+      De övre percentilerna är underskattade — öka horisontens rutnät eller sänk avkastningen.
     </div>
 
     <div class="row g-3">
@@ -424,7 +489,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
         <div class="card h-100">
           <div class="card-header">Sannolikhet att planen håller</div>
           <div class="card-body">
-            <D3Chart :render-chart="renderSurvival" :data="fanData" />
+            <D3Chart :render-chart="renderSurvival" :data="chartData" />
             <p class="form-text mb-0">
               Sannolikheten att portföljen fortfarande klarar hela golvuttaget. Tillståndet är
               absorberande — en senare insättning räddar inte en plan som redan spruckit.
@@ -434,9 +499,9 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       </div>
       <div class="col-12 col-lg-6">
         <div class="card h-100">
-          <div class="card-header">Fördelning av slutkapital</div>
+          <div class="card-header">Fördelning av slutkapital (dagens penningvärde)</div>
           <div class="card-body">
-            <D3Chart :render-chart="renderFinal" :data="fanData" />
+            <D3Chart :render-chart="renderFinal" :data="chartData" />
             <p class="form-text mb-0">
               Y-axeln är sannolikhet per tiopotens kapital: ytan under kurvan över en tiopotens är
               chansen att hamna där. Markeringen visar toppen, det mest sannolika utfallet. Massan
@@ -450,6 +515,16 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
 </template>
 
 <style scoped>
+/* The table is sized to its content now, so the columns would otherwise sit on
+   top of each other. Bootstrap 5.3 hardcodes .table-sm padding rather than
+   exposing a custom property, so this overrides the cells directly; the scoped
+   attribute gives it the specificity to win. */
+.summary-table th,
+.summary-table td {
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+}
+
 .line {
   display: inline-block;
   width: 1.5rem;

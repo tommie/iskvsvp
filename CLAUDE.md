@@ -17,7 +17,7 @@ ISK vs VP Monte Carlo simulator - a Swedish financial comparison tool that uses 
 ### Two independent tools
 
 1. **Fondsimulator** (`/`) — the Monte Carlo simulator described below. Individual funds, full withdrawal-rule machinery, ISK and VP.
-2. **Kapitalplanerare** (`/planerare`) — a deterministic planner. No sampling; see "Capital Planner".
+2. **Kapitalplanerare** (`/planerare`) — a deterministic planner over asset classes. No sampling; ISK and AF; see "Capital Planner".
 
 They share nothing but the D3Chart wrapper and Bootstrap styling. Changes to one do not affect the other.
 
@@ -132,6 +132,8 @@ Answers "what is the distribution of real capital over time" **without drawing s
 
 Propagates the whole probability density year by year over a geometric wealth grid (a discrete Chapman–Kolmogorov / Fokker–Planck step). Sequence risk is captured *exactly* for the assumed return law, and the tails carry no simulation noise.
 
+The state is one-dimensional for ISK and two-dimensional for AF, which adds the **cost-basis ratio** (basis / value). Mass is stored basis-major (`mass[b * gridNodes + j]`), and the inner loop nests basis → return → wealth: that makes the innermost loop contiguous, and lets the target cell be found by walking a monotone pointer instead of a `Math.log` per node. Restoring the logarithm makes AF roughly 3.4x slower for identical output.
+
 Per year, mirroring `simulation.ts`'s ordering: `w' = (w·G − c_t) − tax`.
 
 - `G` is the real gross return, integrated over a discrete normal law (`quadrature.ts`).
@@ -148,15 +150,33 @@ Per year, mirroring `simulation.ts`'s ordering: `w' = (w·G − c_t) − tax`.
 
 ### Deliberate scope limits
 
-- **ISK only.** The schablon is proportional to the balance, so it is a constant drag and stays 1-D. VP's tax depends on cost basis — a second path-dependent state needing a 2-D grid — so `accountTaxRate()` **throws** rather than charging the wrong tax. TODO in `propagate.ts` records what porting VP would take.
+- **Rebalancing turnover is derived, not assumed.** Rebalancing is forced by the assets drifting apart, so `expectedRebalancingTurnover` computes it from the same moments the return uses: turnover = ½ Σ x_i·E|R_i − R_p| / (1+μ_p), where each excess return is approximately normal and E|·| is a folded-normal mean. Consequences: a single asset turns over nothing, and two perfectly correlated equal-volatility assets never drift apart. It is taxable only in an AF account. **Known bias:** the realised gain uses the portfolio-average cost-basis ratio, but rebalancing systematically sells *winners*, which carry more embedded gain than average — so AF tax is understated slightly.
+- **The cost basis is nominal.** Swedish law does not index omkostnadsbeloppet, so what is taxed is the *nominal* gain. The basis ratio is unit-free (basis and value deflate alike), which means it must fall with **nominal** growth even though the grid runs in real terms — `grownRatio = startRatio / (factor * inflationFactor)`. Dividing by the real factor alone silently inflation-indexes the basis and understates AF tax by the whole price level. Regression-tested against a reference that runs entirely in nominal kronor and deflates only at the end.
+- **Basis grid alignment matters.** `buildBasisGrid` rounds the requested node count so a ratio of exactly 1 is always a node. That is the kink in `max(0, 1 - ratio)` and where fresh money starts; letting it fall between nodes smears phantom gain onto a holding that owes nothing, and showed up as a liquidation value below par for an untaxed portfolio.
 - **Optional withdrawals are two bracketing runs**, not a feedback rule. The lower run takes the floor, the upper takes floor+optional; the band between them is the answer. No balance-dependent spending, which would need a guardrail rule justified on its own terms.
 - **Inflation is deterministic.** Because returns are real and the ISK schablon is proportional, inflation cancels out of the real result *except* through `iskAllowance` (fribelopp), which is nominal and un-indexed. That is the only place it bites. The allowance default tracks current law (300 000 kr from 2026). The schablon rate defaults to **4%**, a long-run level rather than the 2026 spot of 3.55% — holding one year's rate for four decades lets short-term rate moves drive the answer, which is why the pension standard fixes a long-run SLR too (it uses 2.5%, i.e. a 3.5% schablon; 4% implies ~3% SLR, from KI's policy-rate path plus the observed term premium) — unlike the Monte Carlo simulator, which models no allowance. Test helpers set `iskAllowance: 0` so the closed-form checks see a flat proportional tax.
 - Asset-class returns follow the Swedish **Prognosstandard för pensioner** (Pensionsmyndigheten + Svensk Försäkring, used by minPension), not the fund database — that database is nominal, short-window, per-fund. Standard: 6.5% nominal globala aktier, 2.5% långa räntor, 2% inflation, 3.5% real at its 75/25 reference. **The standard is deterministic, so its figures are compound rates**; `expectedRealReturn` holds the arithmetic mean that reproduces each compound rate at that volatility. Copying the standard's number straight in would understate growth by ~σ²/2 a year. Volatilities are *not* in the standard (it states none) and stay DMS-order. Tests pin the round trip.
 - Where the standard is silent the extrapolation is documented and conservative: it has one equity figure (globala aktier) so Swedish equity gets the same compound return with more volatility, and its rate figure is for *long* bonds so short rates are set below it.
 
+### AF tax model
+
+Ported from `simulation.ts` (see "Tax Model" above): kvittning between schablonintäkt and realised gains, the tiered loss skattereduktion on a **nominal** 100 000 kr threshold (deflated like the ISK allowance), the closed-form gross-up for the sale that funds the tax bill, and genomsnittsmetoden on partial disposals.
+
+The ratio transition is simpler than it looks, and worth knowing before editing `step()`: because genomsnittsmetoden scales basis by the same fraction as value, **a withdrawal and a tax payment both leave the ratio unchanged**. Only returns (`ratio /= growth`), deposits and rebalancing move it. `finalLiquidValue` reads the after-tax value off the joint distribution; it is `undefined` for ISK, which defers nothing. The Slutkapital table shows figures **net of that deferred tax by default** (toggleable), because only then are they comparable with the withdrawals row and with an ISK, which owes nothing at the horizon.
+
+Terminology: Skatteverket calls a taxable brokerage account an *aktie- och fondkonto* (AF), so the planner uses `AF` throughout. The Monte Carlo simulator still says `VP` in its own parameters, URL keys and stored history. **TODO:** rename the simulator to match; it needs a migration for saved URLs and localStorage history, which is why the two currently disagree.
+
+### Accuracy and cost
+
+AF resolution is dominated by `basisNodes`, not the wealth grid or the quadrature. Against a 1200x96x121 reference: 32 nodes leaves ruin 0.27pp high (~450 ms for a 40-year plan, both runs), 24 doubles that, 48 halves it at 1.5x the time. `quadratureNodes` is converged at 41 — 81 moves nothing at the fifth decimal. Median *percentile* differences of a few percent between resolutions are usually grid quantisation, not error: a quantile can only land on a grid node.
+
 ### Validation
 
-`planner-propagate.spec.ts` cross-checks the engine against a 200k-path Monte Carlo of the identical law (agrees on ruin to ~5e-4, percentiles to ~1%), plus closed-form checks: mean preservation, deterministic recursion at zero volatility, lognormal median, annuity accumulation. Keep the Monte Carlo check — it is what catches ordering and tax-base mistakes.
+`planner-propagate.spec.ts` and `planner-af.spec.ts` each cross-check against a Monte Carlo of the identical law (ISK: 200k paths, ruin to ~5e-4, percentiles ~1%. AF: 150k paths, run in absolute value/basis terms so agreement is not a restatement of the same ratio algebra). Plus closed-form checks: mean preservation, deterministic recursions, lognormal median, annuity accumulation, and for AF the liquidation value at par and the loss credit. Keep both Monte Carlo checks — they are what catch ordering and tax-base mistakes.
+
+The AF cross-check runs with **non-zero inflation** and in nominal terms on purpose: every earlier AF test pinned inflation to zero, which is how the nominal-basis bug survived. Do not "simplify" it back to real terms.
+
+Two AF tolerances are deliberately loose and should not be tightened without understanding why. The zero-volatility AF recursion is ~0.5% off at default resolution because there is no averaging over returns to smooth the basis interpolation; the test asserts convergence under refinement instead. And a Monte Carlo median is meaningless when ruin approaches 50%, since the median is then the smallest surviving outcome — compare quantiles well clear of the ruin mass.
 
 ## State Management
 

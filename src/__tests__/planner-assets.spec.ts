@@ -138,3 +138,80 @@ describe('alignment with Prognosstandard för pensioner', () => {
     expect(compound).toBeLessThan(0.039)
   })
 })
+
+describe('expected rebalancing turnover', () => {
+  const moments = (
+    assets: { volatility: number; expectedRealReturn: number; weight: number }[],
+    correlations: number[][],
+  ) =>
+    portfolioMoments(
+      assets.map((a, i) => ({ id: `a${i}`, name: `A${i}`, ...a })),
+      correlations,
+    ).rebalancingTurnover
+
+  it('is zero for a single asset, which has nothing to rebalance against', () => {
+    expect(moments([{ weight: 1, expectedRealReturn: 0.06, volatility: 0.2 }], [[1]])).toBe(0)
+  })
+
+  it('is zero for assets that never drift apart', () => {
+    // Equal volatility and perfect correlation: the weights are unchanged by
+    // any return, so the targets never need restoring.
+    expect(
+      moments(
+        [
+          { weight: 0.5, expectedRealReturn: 0.06, volatility: 0.2 },
+          { weight: 0.5, expectedRealReturn: 0.06, volatility: 0.2 },
+        ],
+        [
+          [1, 1],
+          [1, 1],
+        ],
+      ),
+    ).toBeCloseTo(0, 10)
+  })
+
+  it('matches the exact answer for a deterministic split', () => {
+    // No volatility, so the year is fully determined: 0.5 grows to 0.55 and 0.5
+    // stays at 0.5, giving weights 0.5238/0.4762 out of 1.05. Restoring the
+    // targets sells 0.0238 of the portfolio.
+    const turnover = moments(
+      [
+        { weight: 0.5, expectedRealReturn: 0.1, volatility: 0 },
+        { weight: 0.5, expectedRealReturn: 0, volatility: 0 },
+      ],
+      [
+        [1, 0],
+        [0, 1],
+      ],
+    )
+    expect(turnover).toBeCloseTo(0.05 / 2.1, 6)
+  })
+
+  it('rises as the assets decouple', () => {
+    const at = (correlation: number) =>
+      moments(
+        [
+          { weight: 0.5, expectedRealReturn: 0.06, volatility: 0.2 },
+          { weight: 0.5, expectedRealReturn: 0.06, volatility: 0.2 },
+        ],
+        [
+          [1, correlation],
+          [correlation, 1],
+        ],
+      )
+    expect(at(0.9)).toBeLessThan(at(0.5))
+    expect(at(0.5)).toBeLessThan(at(0))
+    expect(at(0)).toBeLessThan(at(-0.5))
+  })
+
+  it('gives the default portfolio a plausible annual turnover', () => {
+    const turnover = portfolioMoments(
+      DEFAULT_ASSET_CLASSES,
+      DEFAULT_CORRELATIONS,
+    ).rebalancingTurnover
+    // A few percent a year for a 70/20/10 mix — small, but not nothing, and it
+    // is taxable in an AF account.
+    expect(turnover).toBeGreaterThan(0.005)
+    expect(turnover).toBeLessThan(0.06)
+  })
+})

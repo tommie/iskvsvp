@@ -112,6 +112,8 @@ export function encodePlan(params: PlannerParameters): string {
   query.set('it', String(params.iskTaxRate))
   query.set('cg', String(params.capitalGainsTaxRate))
   query.set('ia', String(params.iskAllowance))
+  query.set('sr', String(params.afSchablonRate))
+  query.set('cb', String(params.initialCostBasisRatio))
   query.set('i', String(params.inflationRate))
   return query.toString()
 }
@@ -169,7 +171,7 @@ export function decodePlan(search: string): PlannerParameters {
   const encodedCashflow = query.get('f')
   const cashflow = encodedCashflow ? decodeCashflow(encodedCashflow, years) : null
 
-  const accountType = query.get('t') === 'VP' ? 'VP' : 'ISK'
+  const accountType = query.get('t') === 'AF' ? 'AF' : 'ISK'
 
   return {
     ...defaults,
@@ -197,6 +199,8 @@ export function decodePlan(search: string): PlannerParameters {
     iskTaxRate: parsePositive(query.get('it'), defaults.iskTaxRate),
     capitalGainsTaxRate: parsePositive(query.get('cg'), defaults.capitalGainsTaxRate),
     iskAllowance: parsePositive(query.get('ia'), defaults.iskAllowance),
+    afSchablonRate: parsePositive(query.get('sr'), defaults.afSchablonRate),
+    initialCostBasisRatio: parsePositive(query.get('cb'), defaults.initialCostBasisRatio),
     inflationRate: parsePositive(query.get('i'), defaults.inflationRate),
   }
 }

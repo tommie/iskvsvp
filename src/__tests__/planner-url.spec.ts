@@ -103,3 +103,17 @@ describe('planner URL preset ids', () => {
     expect(restored.correlations).toEqual(original.correlations)
   })
 })
+
+describe('planner URL AF parameters', () => {
+  it('round-trips the AF-only parameters', () => {
+    const original = defaultPlannerParameters()
+    original.accountType = 'AF'
+    original.afSchablonRate = 0.004
+    original.initialCostBasisRatio = 0.55
+
+    const restored = decodePlan(encodePlan(original))
+    expect(restored.accountType).toBe('AF')
+    expect(restored.afSchablonRate).toBe(0.004)
+    expect(restored.initialCostBasisRatio).toBe(0.55)
+  })
+})
