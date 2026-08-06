@@ -33,6 +33,7 @@ src/
 │   ├── density.ts               - Grid mass to plottable density per decade
 │   ├── cadence.ts               - Yearly amounts as monthly/weekly/daily
 │   ├── format.ts                - Two-significant-digit kronor and percent
+│   ├── solve.ts                 - Optional multiplier for a survival target
 │   └── url.ts                   - Compact plan encoding (RLE cashflow)
 ├── components/
 │   ├── planner/
@@ -192,6 +193,16 @@ AF resolution is dominated by `basisNodes`, not the wealth grid or the quadratur
 The AF cross-check runs with **non-zero inflation** and in nominal terms on purpose: every earlier AF test pinned inflation to zero, which is how the nominal-basis bug survived. Do not "simplify" it back to real terms.
 
 Two AF tolerances are deliberately loose and should not be tightened without understanding why. The zero-volatility AF recursion is ~0.5% off at default resolution because there is no averaging over returns to smooth the basis interpolation; the test asserts convergence under refinement instead. And a Monte Carlo median is meaningless when ruin approaches 50%, since the median is then the smallest surviving outcome — compare quantiles well clear of the ruin mass.
+
+### The optional-scale solver (`solve.ts`, `OptionalSolver.vue`)
+
+Bisects for the multiple of the drawn optional curve that meets a survival target. Solving for a *multiplier* rather than an amount is what preserves the spending shape the household designed — only the level is negotiable.
+
+- Survival is monotone in the multiplier, so plain bisection suffices; ~13 evaluations. `adaptiveSurvival` exists so each step runs one propagation rather than three.
+- The slider is bounded above by the **floor run's own survival**, which is the best the plan can reach with no optional at all. That makes an unreachable target structurally impossible rather than an error to report. Default 85%, clamped down when the floor cannot reach it — the practitioner band is 80–90% (Blanchett, Vanguard, Schwab, Kitces, J.P. Morgan), and it applies here to the floor, which is the part that must not fail.
+- The whole card is hidden when the floor cannot clear the slider's 50% lower bound. There is no target worth offering then; the floor is what fails and discretionary restraint cannot fix it.
+- **Applying is a plain `<a href>`** to the rescaled plan, not a store mutation. The whole plan lives in the query string, so this is an ordinary navigation and the browser's back button is the undo — no history bookkeeping of our own.
+- Scaled amounts are floored to two significant digits (`floorToSignificant`). Rounding *down* can only underspend the target, keeping the result on the safe side of what was solved for. It does mean a multi-phase shape is not preserved exactly: the flooring bites unevenly across magnitudes, up to ~5% on a year that sits just under a boundary.
 
 ### Output precision
 

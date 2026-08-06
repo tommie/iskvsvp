@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 
-import { SIGNIFICANT_DIGITS, formatKr, formatPercent, toSignificant } from '../planner/format'
+import {
+  SIGNIFICANT_DIGITS,
+  floorToSignificant,
+  formatKr,
+  formatPercent,
+  toSignificant,
+} from '../planner/format'
 
 const readable = (s: string) => s.replace(/ /g, ' ')
 
@@ -46,5 +52,30 @@ describe('formatPercent', () => {
 
   it('uses a non-breaking space before the sign', () => {
     expect(formatPercent(69.43)).toContain(' %')
+  })
+})
+
+describe('floorToSignificant', () => {
+  it('rounds down rather than to nearest', () => {
+    // 28 320 would round to 28 000 either way; 28 900 is where they differ.
+    expect(floorToSignificant(28_320)).toBe(28_000)
+    expect(floorToSignificant(28_900)).toBe(28_000)
+    expect(toSignificant(28_900)).toBe(29_000)
+  })
+
+  it('never returns more than it was given', () => {
+    for (const value of [1, 7, 47, 99, 101, 999, 1234, 98_765, 1_234_567]) {
+      expect(floorToSignificant(value)).toBeLessThanOrEqual(value)
+    }
+  })
+
+  it('leaves an exact two-digit value alone', () => {
+    expect(floorToSignificant(28_000)).toBe(28_000)
+    expect(floorToSignificant(50)).toBe(50)
+  })
+
+  it('leaves zero and non-finite values alone', () => {
+    expect(floorToSignificant(0)).toBe(0)
+    expect(floorToSignificant(Number.NaN)).toBeNaN()
   })
 })

@@ -159,11 +159,13 @@ export function resizeCashflow(cashflow: CashflowYear[], years: number): Cashflo
 export function defaultPlannerParameters(): PlannerParameters {
   const years = 40
   return {
-    // A 3.3% floor and a 5% ceiling on a 40-year horizon: the floor run is
-    // comfortable and the optional run is marginal, so the page opens on a plan
-    // where the bracketing band actually says something rather than on two
-    // curves that both collapse to zero.
-    initialCapital: 6_000_000,
+    // A 2.2% floor and a 3.3% ceiling over forty years. The floor alone survives
+    // about 90%, which puts it inside the band practitioners target for a fixed
+    // spending plan — and a sound floor is the premise the adaptive rule and the
+    // scale solver are both built on, so the page should open on one. It also
+    // separates the three runs enough that each says something: roughly 90%,
+    // 81% and 69%.
+    initialCapital: 9_000_000,
     startAge: 60,
     years,
     assets: DEFAULT_ASSET_CLASSES.map((asset) => ({ ...asset })),

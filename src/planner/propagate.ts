@@ -961,7 +961,8 @@ function propagate(
  * what is spent, which is what keeps the model free of a feedback rule that
  * would need to be justified separately.
  */
-export function runPlanner(params: PlannerParameters): PlannerResults {
+/** Everything a propagation needs that does not depend on which run it is. */
+function setup(params: PlannerParameters) {
   validate(params)
 
   const portfolio = portfolioMoments(params.assets, params.correlations)
@@ -973,7 +974,31 @@ export function runPlanner(params: PlannerParameters): PlannerResults {
   const basis = buildBasisGrid(params.accountType === 'AF' ? params.basisNodes : 1)
 
   const reserveReturn = reserveReturnFor(params, portfolio)
-  const schedule = reserveSchedule(params, reserveReturn)
+  return {
+    portfolio,
+    quad,
+    spec,
+    basis,
+    reserveReturn,
+    schedule: reserveSchedule(params, reserveReturn),
+  }
+}
+
+/**
+ * Survival probability of the adaptive run alone.
+ *
+ * The scale solver evaluates this many times over, and the other two runs would
+ * be pure waste there — the floor run does not depend on the optional at all,
+ * and the unconditional run is not what is being solved for.
+ */
+export function adaptiveSurvival(params: PlannerParameters): number {
+  const { portfolio, quad, spec, basis, schedule } = setup(params)
+  const run = propagate(params, spec, basis, quad, portfolio, 'adaptive', '', schedule)
+  return 1 - run.finalDistribution.ruinProbability
+}
+
+export function runPlanner(params: PlannerParameters): PlannerResults {
+  const { portfolio, quad, spec, basis, reserveReturn, schedule } = setup(params)
 
   return {
     floorRun: propagate(params, spec, basis, quad, portfolio, 'floor', 'Golv', schedule),

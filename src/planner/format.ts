@@ -22,6 +22,22 @@ export function toSignificant(value: number, digits = SIGNIFICANT_DIGITS): numbe
   return Number(value.toPrecision(digits))
 }
 
+/**
+ * Rounds *down* to `digits` significant digits.
+ *
+ * For amounts written back into a plan rather than merely displayed: rounding
+ * down can only spend less than was solved for, so the result stays on the safe
+ * side of whatever target produced it, and it leaves a round number the
+ * household can reason about.
+ */
+export function floorToSignificant(value: number, digits = SIGNIFICANT_DIGITS): number {
+  if (!Number.isFinite(value) || value === 0) return value
+  const factor = Math.pow(10, Math.floor(Math.log10(Math.abs(value))) - digits + 1)
+  // toPrecision clears the residue that dividing by a sub-unit factor leaves
+  // behind for amounts below ten.
+  return Number((Math.floor(value / factor) * factor).toPrecision(15))
+}
+
 // maximumFractionDigits is generous because the value has already been rounded;
 // it only needs to be enough to render what is left without adding noise.
 const decimal = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 6 })

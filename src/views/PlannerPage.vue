@@ -7,6 +7,7 @@ import { usePlannerStore } from '../stores/planner'
 import PlannerInputs from '../components/planner/PlannerInputs.vue'
 import CashflowEditor from '../components/planner/CashflowEditor.vue'
 import PlannerOutcome from '../components/planner/PlannerOutcome.vue'
+import OptionalSolver from '../components/planner/OptionalSolver.vue'
 
 const store = usePlannerStore()
 const { error } = storeToRefs(store)
@@ -35,7 +36,10 @@ onMounted(() => {
       {{ error }}
     </div>
 
-    <PlannerOutcome v-else />
+    <template v-else>
+      <OptionalSolver />
+      <PlannerOutcome />
+    </template>
 
     <div class="card mt-4 mb-3">
       <div class="card-header">Om metoden</div>
