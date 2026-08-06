@@ -75,14 +75,24 @@ onMounted(() => {
               snitt eller en enkel framskrivning på förväntad avkastning inte kan visa.
             </p>
             <p>
-              Planen räknas två gånger: en gång med enbart golvuttaget och en gång med golv plus
-              tillval. Bandet mellan körningarna visar vad det extra uttaget kostar i slutkapital
-              och risk. Ingen av dem låter saldot styra uttaget — det skulle kräva en uttagsregel
-              som måste motiveras för sig. En plan räknas som sprucken det år portföljen inte klarar
-              hela golvuttaget, och det tillståndet är absorberande: en senare insättning räddar den
-              inte. Percentilerna är ovillkorade, så spruckna utfall ligger kvar som noll kronor i
-              fördelningen. Det är därför 10:e percentilen kan vara noll så snart risken att planen
-              spricker överstiger 10&nbsp;%.
+              Planen räknas tre gånger: med enbart golvuttaget, med golv plus hela tillvalet, och
+              med golv plus så mycket av tillvalet som går att bära. Bandet mellan de två fasta
+              körningarna visar vad det extra uttaget kostar i slutkapital och risk. En plan räknas
+              som sprucken det år portföljen inte klarar hela golvuttaget, och det tillståndet är
+              absorberande: en senare insättning räddar den inte. Percentilerna är ovillkorade, så
+              spruckna utfall ligger kvar som noll kronor i fördelningen. Det är därför 10:e
+              percentilen kan vara noll så snart risken att planen spricker överstiger 10&nbsp;%.
+            </p>
+            <p>
+              Den anpassade körningen rör aldrig golvet och tar aldrig mer än det tillval hushållet
+              angett — uttagen styrs alltså fortfarande av vad man faktiskt behöver, och saldot
+              verkar bara som broms på den valfria delen. Varje år beräknas vad de återstående
+              golvuttagen kräver i reserv, och överskottet däröver fördelas jämnt över de år som
+              återstår; det beloppet, begränsat till tillvalet, är vad som tas. Reserven diskonteras
+              inte till förväntad avkastning utan till 25:e percentilen av den ackumulerade
+              avkastningen över horisonten, eftersom en median­ränta bara innebär att golvet är
+              finansierat i hälften av utfallen. Regeln behöver inget minne av tidigare år, till
+              skillnad från intervallregler av Guyton–Klinger-typ, vars hysteres är just ett minne.
             </p>
             <p class="mb-0">
               Modellen förutsätter att portföljen ombalanseras till sina målvikter varje år och att
@@ -124,6 +134,26 @@ onMounted(() => {
               >, Scandinavian Actuarial Journal — den exakta fördelningen för det diskonterade
               uttagsflödet. Suarez, Suarez &amp; Walz (2015), <q>The Perfect Withdrawal Amount</q>,
               Financial Services Review.
+            </p>
+            <p class="mb-2">
+              <em>Uttagsregler som anpassar sig.</em> Waring, M. B. &amp; Siegel, L. B. (2015),
+              <a
+                href="https://rpc.cfainstitute.org/research/financial-analysts-journal/2015/the-only-spending-rule-article-you-will-ever-need"
+                target="_blank"
+                rel="noopener"
+                >The Only Spending Rule Article You Will Ever Need</a
+              >, Financial Analysts Journal 71(1) — årligen omräknad virtuell annuitet, som inte kan
+              ta slut eftersom uttaget alltid är en andel av det som är kvar. Guyton, J. &amp;
+              Klinger, W. (2006), <q>Decision Rules and Maximum Initial Withdrawal Rates</q>,
+              Journal of Financial Planning — intervallregler. Pfau, W. och Zwecher, M., om
+              <a
+                href="https://retirementresearcher.com/what-is-a-safety-first-retirement-plan/"
+                target="_blank"
+                rel="noopener"
+                >safety-first</a
+              >: säkra golvet först, betrakta resten som valfritt. Regeln här tillämpar
+              annuitetstanken enbart på överskottet, vilket ger både ett garanterat golv och en del
+              som inte kan ta slut.
             </p>
             <p class="mb-2">
               <em>Numerik.</em> Fördelningen förs framåt med en diskretiserad Chapman–Kolmogorov-

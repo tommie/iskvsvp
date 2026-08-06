@@ -13,6 +13,7 @@ const { results, cashflow } = storeToRefs(store)
 
 const FLOOR_COLOR = '#0d6efd'
 const OPTIONAL_COLOR = '#fd7e14'
+const ADAPTIVE_COLOR = '#6f42c1'
 const CHART_HEIGHT = 320
 
 const logScale = ref(true)
@@ -65,6 +66,7 @@ const runs = computed(() => {
   }
   return [
     resolve(results.value.floorRun, FLOOR_COLOR, false),
+    resolve(results.value.adaptiveRun, ADAPTIVE_COLOR, false),
     resolve(results.value.optionalRun, OPTIONAL_COLOR, true),
   ]
 })
@@ -88,9 +90,10 @@ const summary = computed(() => {
       percentile10: final.percentile10,
       percentile90: final.percentile90,
       withdrawn: totalWithdrawn(includeOptional),
+      actualWithdrawn: entry.run.expectedWithdrawn,
     }
   }
-  return [build(runs.value[0]!, false), build(runs.value[1]!, true)]
+  return [build(runs.value[0]!, false), build(runs.value[1]!, true), build(runs.value[2]!, true)]
 })
 
 /** Whether any run actually carries deferred tax, i.e. whether the toggle does anything. */
@@ -416,6 +419,10 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
         <div class="d-flex flex-wrap gap-3 small text-muted mt-2 mb-3">
           <span><span class="line" :style="{ background: FLOOR_COLOR }"></span> Golv</span>
           <span
+            ><span class="line" :style="{ background: ADAPTIVE_COLOR }"></span> Golv + anpassat
+            tillval</span
+          >
+          <span
             ><span class="line dashed" :style="{ background: OPTIONAL_COLOR }"></span> Golv +
             tillval</span
           >
@@ -434,6 +441,12 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                 <th>Totalt planerat uttag</th>
                 <td v-for="row in summary" :key="row.label" class="text-end">
                   {{ formatKr(row.withdrawn) }}
+                </td>
+              </tr>
+              <tr>
+                <th>Förväntat faktiskt uttag</th>
+                <td v-for="row in summary" :key="row.label" class="text-end">
+                  {{ formatKr(row.actualWithdrawn) }}
                 </td>
               </tr>
               <tr>
@@ -465,9 +478,12 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
         </div>
         <p class="form-text mb-0">
           Det planerade uttaget är vad planen begär över hela horisonten, inte vad en plan som
-          spruckit hann ta ut. Percentilerna är ovillkorade: en plan som spricker räknas som noll
-          kronor, inte som bortfall. Därför kan 10:e percentilen vara noll när risken att planen
-          spricker överstiger 10&nbsp;%.
+          spruckit hann ta ut. För den anpassade körningen är det dessutom bara ett tak: tillvalet
+          tas i den mån överskottet över golvets reserv räcker till. Det förväntade faktiska uttaget
+          väger in båda sakerna — uteblivna tillval och år som aldrig inträffar för att planen
+          sprack — och är därför måttet som går att jämföra mellan kolumnerna. Percentilerna är
+          ovillkorade: en plan som spricker räknas som noll kronor, inte som bortfall. Därför kan
+          10:e percentilen vara noll när risken att planen spricker överstiger 10&nbsp;%.
           <template v-if="hasDeferredTax">
             Beloppen är
             <template v-if="netOfTax">efter</template><template v-else>före</template> den

@@ -68,8 +68,100 @@ interface StepContext {
   params: PlannerParameters
 }
 
+/**
+ * What a year's cash flow is, at one grid node.
+ *
+ * A fixed policy pays `baseFlow` whatever the balance. An adaptive one pays the
+ * floor plus as much of the optional as the surplus over the reserve supports —
+ * so the amounts still come from what the household needs, and the balance only
+ * decides how much of the discretionary part is affordable.
+ */
+interface YearPolicy {
+  /** The whole flow when fixed; the floor alone when adaptive. */
+  baseFlow: number
+  adaptive: boolean
+  /** Adaptive only: the most that may be added on top of the floor. */
+  optional: number
+  /** Adaptive only: capital to hold back for the remaining floor commitments. */
+  reserve: number
+  /** Adaptive only: the payment count the surplus is spread over. */
+  annuityFactor: number
+}
+
+/**
+ * Reserve and annuity factor for every year, by backward recursion.
+ *
+ * `reserve[t]` is what the remaining floor commitments are worth at the start
+ * of year t, discounted at `rate`; `annuity[t]` is the number of payments the
+ * surplus has to stretch over, so `surplus / annuity[t]` is the level real
+ * amount it supports for the rest of the plan.
+ *
+ * The reserve is floored at zero. A schedule whose future deposits outweigh its
+ * withdrawals would otherwise produce a negative requirement, manufacturing
+ * surplus out of money not yet paid in.
+ */
+function reserveSchedule(params: PlannerParameters, rate: number) {
+  const years = params.years
+  const discount = 1 / (1 + rate)
+  const reserve = new Float64Array(years + 1)
+  const annuity = new Float64Array(years + 1)
+
+  for (let t = years - 1; t >= 0; t--) {
+    reserve[t] = params.cashflow[t]!.floor + reserve[t + 1]! * discount
+    annuity[t] = 1 + annuity[t + 1]! * discount
+  }
+  for (let t = 0; t <= years; t++) {
+    if (reserve[t]! < 0) reserve[t] = 0
+  }
+
+  return { reserve, annuity }
+}
+
+/**
+ * Quantile of the compound return used to size the reserve, and its z score.
+ *
+ * Not the median. Discounting the floor at the return the plan expects on
+ * average makes the reserve a coin-flip hurdle: clearing it only means the
+ * floor is funded on the median path, and half of all paths are worse. A plan
+ * would then pass the test for years while spending the whole optional, and
+ * only start cutting once the damage was done. A lower quantile asks the
+ * question that matters — is the floor funded even if the portfolio does
+ * poorly — which is the flooring logic the safety-first literature applies to
+ * essential spending.
+ */
+const RESERVE_QUANTILE_Z = -0.6744897501960817 // 25th percentile
+
+/**
+ * The real return the reserve is discounted at.
+ *
+ * Derived from the plan's own return law rather than asked for, so the adaptive
+ * rule introduces no forecast the plan was not already making: it is the 25th
+ * percentile of the annualised compound return over the horizon, less the
+ * proportional tax drag. Compounding narrows that distribution as the horizon
+ * lengthens, so a long plan is allowed to discount at nearly its median while a
+ * short one must be markedly more cautious.
+ *
+ * For AF only the schablonintäkt is subtracted; tax on realised gains depends
+ * on the cost basis, so the reserve is very slightly optimistic there.
+ */
+function reserveReturnFor(params: PlannerParameters, moments: PortfolioMoments): number {
+  const taxDrag =
+    params.accountType === 'AF'
+      ? params.afSchablonRate * params.capitalGainsTaxRate
+      : params.iskTaxRate * params.capitalGainsTaxRate
+  const annualised =
+    Math.exp(moments.logMean + (RESERVE_QUANTILE_Z * moments.logStdDev) / Math.sqrt(params.years)) -
+    1
+  return Math.max(-0.99, annualised - taxDrag)
+}
+
+/** Which of the three bracketing runs a propagation represents. */
+type SpendingMode = 'floor' | 'optional' | 'adaptive'
+
 interface StepResult {
   mass: Float64Array
+  /** Probability-weighted cash actually taken this year. */
+  withdrawn: number
   /** Mass that failed to fund its floor withdrawal in this step. */
   ruin: number
   /** Mass pinned to the top grid node. */
@@ -390,7 +482,7 @@ function step(
   ctx: StepContext,
   sourceValues: Float64Array,
   sourceMass: Float64Array,
-  flow: number,
+  policy: YearPolicy,
   allowanceReal: number,
   lossThresholdReal: number,
 ): StepResult {
@@ -404,10 +496,15 @@ function step(
   const capitalGainsTaxRate = params.capitalGainsTaxRate
   const schablonRate = params.afSchablonRate
   const top = grid[nGrid - 1]!
-  const isWithdrawal = flow >= 0
+  const { adaptive, baseFlow, optional, reserve, annuityFactor } = policy
+  // With a fixed flow the sign is known before the loops, which lets the AF
+  // path hoist the post-flow basis ratio out of the wealth loop. An adaptive
+  // flow varies per node, so those have to be computed inside.
+  const isWithdrawal = baseFlow >= 0
 
   let ruin = 0
   let clipped = 0
+  let withdrawn = 0
 
   for (let b = 0; b < basis.n; b++) {
     const rowOffset = b * nWealth
@@ -424,10 +521,10 @@ function step(
       // and understate the tax by the whole price level: 2% over forty years
       // overstates the basis by more than a factor of two.
       const grownRatio = startRatio / (factor * inflationFactor)
-      // A proportional disposal leaves the ratio alone, so for a withdrawal the
-      // post-flow ratio is known before the wealth loop starts.
-      const flatRatio = isWithdrawal ? grownRatio : 0
-      const flatGain = isWithdrawal ? flow * (1 - grownRatio) : 0
+      // A proportional disposal leaves the ratio alone, so the post-flow ratio
+      // is just grownRatio. With a fixed flow the realised gain is known here
+      // too, before the wealth loop starts.
+      const flatGain = !adaptive && isWithdrawal ? baseFlow * (1 - grownRatio) : 0
 
       let pointer = 0
 
@@ -436,6 +533,16 @@ function step(
         if (probability <= 0) continue
 
         const grown = sourceValues[j]! * factor
+
+        let flow = baseFlow
+        if (adaptive) {
+          // Spend the floor, then whatever level amount the surplus over the
+          // reserve would support for the rest of the plan — never more than
+          // the optional the household actually asked for.
+          const surplus = grown - reserve
+          if (surplus > 0) flow += Math.min(optional, surplus / annuityFactor)
+        }
+
         const afterFlow = grown - flow
 
         // Ruin is defined as being unable to fund the floor withdrawal in
@@ -445,14 +552,18 @@ function step(
           continue
         }
 
+        // The flow was funded in full, so it counts even if tax later empties
+        // the account: the household did receive the money this year.
+        withdrawn += probability * flow
+
         let tax: number
         let ratio = 1
 
         if (isAF) {
           let realizedGain: number
-          if (isWithdrawal) {
-            ratio = flatRatio
-            realizedGain = flatGain
+          if (flow >= 0) {
+            ratio = grownRatio
+            realizedGain = adaptive ? flow * (1 - grownRatio) : flatGain
           } else {
             // A deposit buys at market, so it adds equally to value and basis
             // and pulls the ratio toward one.
@@ -541,7 +652,7 @@ function step(
     }
   }
 
-  return { mass, ruin, clipped }
+  return { mass, ruin, clipped, withdrawn }
 }
 
 /** Sums the joint mass over the cost-basis dimension. */
@@ -690,8 +801,9 @@ function propagate(
   basis: BasisSpec,
   quad: NormalQuadrature,
   moments: PortfolioMoments,
-  includeOptional: boolean,
+  mode: SpendingMode,
   label: string,
+  schedule: ReturnType<typeof reserveSchedule>,
 ): PropagationRun {
   const growth = new Float64Array(quad.z.length)
   for (let k = 0; k < growth.length; k++) {
@@ -744,6 +856,7 @@ function propagate(
   }
   let ruin = 0
   let clipped = 0
+  let expectedWithdrawn = 0
 
   const startOutcome = (net: boolean): YearOutcome => {
     const value = net
@@ -771,7 +884,23 @@ function propagate(
 
   for (let year = 0; year < params.years; year++) {
     const entry = params.cashflow[year]!
-    const flow = entry.floor + (includeOptional ? Math.max(0, entry.optional) : 0)
+    const optional = Math.max(0, entry.optional)
+    const policy: YearPolicy =
+      mode === 'adaptive'
+        ? {
+            baseFlow: entry.floor,
+            adaptive: true,
+            optional,
+            reserve: schedule.reserve[year]!,
+            annuityFactor: schedule.annuity[year]!,
+          }
+        : {
+            baseFlow: entry.floor + (mode === 'optional' ? optional : 0),
+            adaptive: false,
+            optional: 0,
+            reserve: 0,
+            annuityFactor: 1,
+          }
 
     // Nominal thresholds are written in kronor of the day, so deflate them to
     // today's money. Year `year` ends at price level (1+pi)^(year+1), matching
@@ -781,13 +910,14 @@ function propagate(
     const allowanceReal = params.iskAllowance > 0 ? params.iskAllowance / priceLevel : 0
     const lossThresholdReal = LOSS_CREDIT_THRESHOLD / priceLevel
 
-    const stepped = step(ctx, values, mass, flow, allowanceReal, lossThresholdReal)
+    const stepped = step(ctx, values, mass, policy, allowanceReal, lossThresholdReal)
 
     // Ruin is absorbing. A deposit scheduled after the plan already failed to
     // pay its floor does not undo that failure, so the ruined mass is never
     // returned to the grid.
     ruin += stepped.ruin
     clipped += stepped.clipped
+    expectedWithdrawn += stepped.withdrawn
     values = spec.grid
     mass = stepped.mass
 
@@ -814,6 +944,7 @@ function propagate(
     label,
     outcomes,
     finalDistribution,
+    expectedWithdrawn,
     liquidOutcomes: isAF ? liquidOutcomes : undefined,
     finalLiquidDistribution:
       isAF && liquidMass ? { grid: spec.grid, mass: liquidMass, ruinProbability: ruin } : undefined,
@@ -841,9 +972,32 @@ export function runPlanner(params: PlannerParameters): PlannerResults {
   // pays none of its cost.
   const basis = buildBasisGrid(params.accountType === 'AF' ? params.basisNodes : 1)
 
+  const reserveReturn = reserveReturnFor(params, portfolio)
+  const schedule = reserveSchedule(params, reserveReturn)
+
   return {
-    floorRun: propagate(params, spec, basis, quad, portfolio, false, 'Golv'),
-    optionalRun: propagate(params, spec, basis, quad, portfolio, true, 'Golv + tillval'),
+    floorRun: propagate(params, spec, basis, quad, portfolio, 'floor', 'Golv', schedule),
+    optionalRun: propagate(
+      params,
+      spec,
+      basis,
+      quad,
+      portfolio,
+      'optional',
+      'Golv + tillval',
+      schedule,
+    ),
+    adaptiveRun: propagate(
+      params,
+      spec,
+      basis,
+      quad,
+      portfolio,
+      'adaptive',
+      'Golv + anpassat tillval',
+      schedule,
+    ),
     portfolio,
+    reserveReturn,
   }
 }
