@@ -14,11 +14,29 @@ ISK vs VP Monte Carlo simulator - a Swedish financial comparison tool that uses 
 - **Bootstrap 5** - Styling framework
 - **D3.js** - Data visualization
 
+### Two independent tools
+
+1. **Fondsimulator** (`/`) — the Monte Carlo simulator described below. Individual funds, full withdrawal-rule machinery, ISK and VP.
+2. **Kapitalplanerare** (`/planerare`) — a deterministic planner. No sampling; see "Capital Planner".
+
+They share nothing but the D3Chart wrapper and Bootstrap styling. Changes to one do not affect the other.
+
 ### Project Structure
 
 ```
 src/
+├── planner/                     - Deterministic planner engine (no Vue)
+│   ├── types.ts                 - Planner parameter/result types
+│   ├── assets.ts                - Asset-class preset catalogue and correlations
+│   ├── quadrature.ts            - Discrete normal law for the annual return
+│   ├── propagate.ts             - Density propagation over a wealth grid
+│   ├── density.ts               - Grid mass to plottable density per decade
+│   └── url.ts                   - Compact plan encoding (RLE cashflow)
 ├── components/
+│   ├── planner/
+│   │   ├── PlannerInputs.vue    - Capital, taxes, portfolio, correlations
+│   │   ├── CashflowEditor.vue   - Click/drag-editable cashflow bar chart
+│   │   └── PlannerOutcome.vue   - Fan chart, survival curve, final distribution
 │   ├── InputParameters.vue      - Input form with fund presets
 │   ├── FundPresetSelector.vue   - Fund database selector with correlations
 │   ├── SummaryStatistics.vue    - Statistical results table
@@ -27,7 +45,11 @@ src/
 │   └── SimulationHistory.vue    - History with load/delete
 ├── stores/
 │   ├── calculator.ts            - Main simulation state and parameters
+│   ├── planner.ts               - Planner parameters, debounced run, URL sync
 │   └── history.ts               - Simulation history with localStorage
+├── views/
+│   ├── HomePage.vue             - Fondsimulator
+│   └── PlannerPage.vue          - Kapitalplanerare
 ├── bootstrap.ts                 - Block bootstrap with profile-weighted period sampling
 ├── simulation.ts                - Monte Carlo simulation logic
 ├── types.ts                     - TypeScript interfaces
@@ -102,6 +124,40 @@ src/
 - If both found, uses database correlation; otherwise defaults to 0.5
 - Diagonal always 1.0
 
+## Capital Planner (`src/planner/`, route `/planerare`)
+
+Answers "what is the distribution of real capital over time" **without drawing sample paths**. Motivated by the fact that a single average-return projection cannot say anything about survival probability or bequest, because it ignores sequence-of-returns risk.
+
+### Method
+
+Propagates the whole probability density year by year over a geometric wealth grid (a discrete Chapman–Kolmogorov / Fokker–Planck step). Sequence risk is captured *exactly* for the assumed return law, and the tails carry no simulation noise.
+
+Per year, mirroring `simulation.ts`'s ordering: `w' = (w·G − c_t) − tax`.
+
+- `G` is the real gross return, integrated over a discrete normal law (`quadrature.ts`).
+- `c_t` is the year's real cash flow; negative means a deposit.
+- Mass is scattered onto the two bracketing grid nodes, **linearly in value space**. That conserves total mass *and* the arithmetic mean exactly; log-space weights would preserve the geometric mean instead and let the reported mean drift over a long horizon.
+
+### Invariants worth preserving
+
+- **Ruin is absorbing**, and is defined as failing to fund the *floor* withdrawal in full. A later deposit does not revive a failed plan.
+- **Percentiles are unconditional** — ruined outcomes sit at zero in the ordering. This is why p10 can be 0 whenever ruin exceeds 10%. Reporting survivor-conditional percentiles would hide the failure.
+- **The quadrature is moment-corrected**: abscissae are rescaled so the discrete law has exactly unit variance. Without it, a fraction-of-a-percent under-dispersion per year visibly narrows the distribution over 40 years.
+- **Annual rebalancing is assumed.** The portfolio is collapsed to one moment-matched lognormal; letting weights drift would make the asset split a path-dependent state a 1-D grid cannot carry.
+- `clippedMass` above ~1e-6 means the grid was too narrow and upper percentiles understate. Surfaced in the UI.
+
+### Deliberate scope limits
+
+- **ISK only.** The schablon is proportional to the balance, so it is a constant drag and stays 1-D. VP's tax depends on cost basis — a second path-dependent state needing a 2-D grid — so `accountTaxRate()` **throws** rather than charging the wrong tax. TODO in `propagate.ts` records what porting VP would take.
+- **Optional withdrawals are two bracketing runs**, not a feedback rule. The lower run takes the floor, the upper takes floor+optional; the band between them is the answer. No balance-dependent spending, which would need a guardrail rule justified on its own terms.
+- **Inflation is deterministic.** Because returns are real and the ISK schablon is proportional, inflation cancels out of the real result *except* through `iskAllowance` (fribelopp), which is nominal and un-indexed. That is the only place it bites. The allowance default tracks current law (300 000 kr from 2026). The schablon rate defaults to **4%**, a long-run level rather than the 2026 spot of 3.55% — holding one year's rate for four decades lets short-term rate moves drive the answer, which is why the pension standard fixes a long-run SLR too (it uses 2.5%, i.e. a 3.5% schablon; 4% implies ~3% SLR, from KI's policy-rate path plus the observed term premium) — unlike the Monte Carlo simulator, which models no allowance. Test helpers set `iskAllowance: 0` so the closed-form checks see a flat proportional tax.
+- Asset-class returns follow the Swedish **Prognosstandard för pensioner** (Pensionsmyndigheten + Svensk Försäkring, used by minPension), not the fund database — that database is nominal, short-window, per-fund. Standard: 6.5% nominal globala aktier, 2.5% långa räntor, 2% inflation, 3.5% real at its 75/25 reference. **The standard is deterministic, so its figures are compound rates**; `expectedRealReturn` holds the arithmetic mean that reproduces each compound rate at that volatility. Copying the standard's number straight in would understate growth by ~σ²/2 a year. Volatilities are *not* in the standard (it states none) and stay DMS-order. Tests pin the round trip.
+- Where the standard is silent the extrapolation is documented and conservative: it has one equity figure (globala aktier) so Swedish equity gets the same compound return with more volatility, and its rate figure is for *long* bonds so short rates are set below it.
+
+### Validation
+
+`planner-propagate.spec.ts` cross-checks the engine against a 200k-path Monte Carlo of the identical law (agrees on ruin to ~5e-4, percentiles to ~1%), plus closed-form checks: mean preservation, deterministic recursion at zero volatility, lognormal median, annuity accumulation. Keep the Monte Carlo check — it is what catches ordering and tax-base mistakes.
+
 ## State Management
 
 **calculator.ts**:
@@ -114,6 +170,12 @@ src/
 - Past simulations with timestamp
 - Persisted to localStorage
 - Actions: addRecord(), deleteRecord(), clearHistory()
+
+**planner.ts**:
+- Planner parameters as refs, debounced recompute (runs on the main thread; a 40-year plan is ~50 ms)
+- URL sync via `src/planner/url.ts`; the cashflow is run-length encoded so a multi-phase plan stays short
+- `years` and `cashflow.length` are kept equal by a watcher, since the engine throws if they disagree
+- Actions: run(), setCashflowRange(), setFlatCashflow(), addAsset(), removeAsset(), setCorrelation(), initUrlSync()
 
 ## Localization
 

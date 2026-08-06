@@ -2,6 +2,7 @@
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
 import { ref, watch, onMounted } from 'vue'
+import { RouterLink } from 'vue-router'
 import InputParameters from '../components/InputParameters.vue'
 import ScenarioTable from '../components/ScenarioTable.vue'
 import SummaryStatistics from '../components/SummaryStatistics.vue'
@@ -34,11 +35,18 @@ watch(simulationResults, (newResults) => {
 <template>
   <div class="container my-4">
     <header class="mb-4">
-      <h1 class="display-4">Fondsimulator</h1>
-      <p class="lead text-muted">
-        Monte Carlo-simulering för svenska investeringskonton. Jämför scenarion med olika
-        portföljer, kontotyper och uttagsstrategier.
-      </p>
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+          <h1 class="display-4">Fondsimulator</h1>
+          <p class="lead text-muted mb-0">
+            Monte Carlo-simulering för svenska investeringskonton. Jämför scenarion med olika
+            portföljer, kontotyper och uttagsstrategier.
+          </p>
+        </div>
+        <RouterLink class="btn btn-outline-secondary" to="/planerare">
+          Till kapitalplaneraren
+        </RouterLink>
+      </div>
     </header>
 
     <InputParameters>
