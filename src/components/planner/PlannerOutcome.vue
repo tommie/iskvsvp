@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { usePlannerStore } from '../../stores/planner'
 import type { PropagationRun } from '../../planner/types'
 import { densityBins } from '../../planner/density'
+import { formatKr, formatPercent } from '../../planner/format'
 import D3Chart from '../D3Chart.vue'
 
 const store = usePlannerStore()
@@ -28,29 +29,13 @@ const logScale = ref(true)
  */
 const netOfTax = ref(true)
 
-const kronor = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 })
-
 /**
  * Svenska skrivregler puts a space before the percent sign, and a non-breaking
  * one so the number and its unit never split across a line. This matches what
  * Intl's own sv-SE percent style emits.
  */
 const NBSP = '\u00a0'
-const percent = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 1 })
 
-function formatKr(value: number): string {
-  if (!Number.isFinite(value)) return '–'
-  if (value >= 1e6)
-    return `${new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 2 }).format(value / 1e6)} mkr`
-  return `${kronor.format(value)} kr`
-}
-
-/**
- * The two bracketing runs, already resolved to the series the toggle selects.
- *
- * Charts and table read `outcomes`/`distribution` from here rather than from
- * the run, so a single switch keeps every figure on the page on the same basis.
- */
 const runs = computed(() => {
   if (!results.value) return []
   const resolve = (run: PropagationRun, color: string, dashed: boolean) => {
@@ -257,7 +242,7 @@ const renderSurvival = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       .attr('stroke-dasharray', dashed ? '6 4' : null)
 
     const final = survival(series[series.length - 1]!)
-    endLabels.push({ y: y(final), text: `${percent.format(final * 100)}${NBSP}%`, color })
+    endLabels.push({ y: y(final), text: formatPercent(final * 100), color })
   }
 
   // Two plans that both hold would otherwise print their labels on top of each
@@ -452,7 +437,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
               <tr>
                 <th>Sannolikhet att planen håller</th>
                 <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ percent.format(row.survival) }}&nbsp;%
+                  {{ formatPercent(row.survival) }}
                 </td>
               </tr>
               <tr>
@@ -496,8 +481,8 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     </div>
 
     <div v-if="gridWarning" class="alert alert-warning">
-      {{ percent.format(gridWarning * 100) }}&nbsp;% av sannolikhetsmassan nådde toppen av rutnätet.
-      De övre percentilerna är underskattade — öka horisontens rutnät eller sänk avkastningen.
+      {{ formatPercent(gridWarning * 100) }} av sannolikhetsmassan nådde toppen av rutnätet. De övre
+      percentilerna är underskattade — öka horisontens rutnät eller sänk avkastningen.
     </div>
 
     <div class="row g-3">

@@ -1,3 +1,5 @@
+import { formatKrExact } from './format'
+
 /** Mean year length including leap days, which a decades-long plan contains. */
 export const DAYS_PER_YEAR = 365.25
 export const WEEKS_PER_YEAR = DAYS_PER_YEAR / 7
@@ -27,19 +29,17 @@ export function cadences(annual: number): Cadences {
   }
 }
 
-const kronor = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 })
-
 /**
- * The cadences as a single line for display. Empty for a non-finite amount,
- * which is what a cleared number input yields — rendering "NaN kr/mån" under
- * a field the user is in the middle of editing helps nobody.
+ * The cadences as a single line for display, to the whole krona.
+ *
+ * Deliberately exempt from the two-significant-digit rounding the model outputs
+ * use: these are an exact restatement of an amount the user entered, not a
+ * result carrying discretisation error. Empty for a non-finite amount, which is
+ * what a cleared number input yields — rendering "NaN kr/mån" under a field the
+ * user is in the middle of editing helps nobody.
  */
 export function formatCadences(annual: number): string {
   if (!Number.isFinite(annual)) return ''
   const { month, week, day } = cadences(annual)
-  return (
-    `${kronor.format(month)} kr/mån` +
-    ` · ${kronor.format(week)} kr/vecka` +
-    ` · ${kronor.format(day)} kr/dag`
-  )
+  return `${formatKrExact(month)}/mån · ${formatKrExact(week)}/vecka · ${formatKrExact(day)}/dag`
 }

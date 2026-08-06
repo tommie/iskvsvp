@@ -5,6 +5,7 @@ import { storeToRefs } from 'pinia'
 import { usePlannerStore } from '../../stores/planner'
 import type { PlannerAsset } from '../../planner/types'
 import { ASSET_CLASS_PRESETS } from '../../planner/assets'
+import { formatKr, formatPercent } from '../../planner/format'
 
 const store = usePlannerStore()
 const {
@@ -24,13 +25,6 @@ const {
 } = storeToRefs(store)
 
 const isAF = computed(() => accountType.value === 'AF')
-
-const percent = new Intl.NumberFormat('sv-SE', {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 2,
-})
-
-const kronor = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 })
 
 /** The cost basis in kronor that the ratio implies, which is what a tax return states. */
 const costBasisAmount = computed(() => initialCapital.value * initialCostBasisRatio.value)
@@ -156,8 +150,8 @@ const portfolioSummary = computed(() => {
                 @change="onNumber($event, (v) => (initialCostBasisRatio = v), 100)"
               />
               <div class="form-text">
-                {{ kronor.format(costBasisAmount) }} kr av startkapitalet. 100&nbsp;% betyder att
-                inget är orealiserad vinst.
+                {{ formatKr(costBasisAmount) }} av startkapitalet. 100&nbsp;% betyder att inget är
+                orealiserad vinst.
               </div>
             </div>
           </div>
@@ -328,18 +322,15 @@ const portfolioSummary = computed(() => {
       </div>
 
       <p v-if="portfolioSummary" class="form-text mt-0 mb-2">
-        Portföljen ger {{ percent.format(portfolioSummary.expectedReturn) }}&nbsp;% real aritmetisk
-        avkastning, {{ percent.format(portfolioSummary.geometric) }}&nbsp;% median-CAGR och
-        {{ percent.format(portfolioSummary.volatility) }}&nbsp;% volatilitet. Tillgångarna glider
-        isär så pass att ombalanseringen omsätter
-        {{ percent.format(portfolioSummary.turnover) }}&nbsp;% av portföljen per år<template
-          v-if="isAF"
-          >, vilket realiserar vinst i ett AF-konto</template
-        >.
+        Portföljen ger {{ formatPercent(portfolioSummary.expectedReturn) }} real aritmetisk
+        avkastning, {{ formatPercent(portfolioSummary.geometric) }} median-CAGR och
+        {{ formatPercent(portfolioSummary.volatility) }} volatilitet. Tillgångarna glider isär så
+        pass att ombalanseringen omsätter {{ formatPercent(portfolioSummary.turnover) }} av
+        portföljen per år<template v-if="isAF">, vilket realiserar vinst i ett AF-konto</template>.
       </p>
 
       <p v-if="Math.abs(weightSum - 1) > 0.005" class="small text-warning mb-3">
-        Vikterna summerar till {{ percent.format(weightSum * 100) }}&nbsp;% och normaliseras innan
+        Vikterna summerar till {{ formatPercent(weightSum * 100) }} och normaliseras innan
         beräkning.
       </p>
 

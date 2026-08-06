@@ -32,6 +32,7 @@ src/
 │   ├── propagate.ts             - Density propagation over a wealth grid
 │   ├── density.ts               - Grid mass to plottable density per decade
 │   ├── cadence.ts               - Yearly amounts as monthly/weekly/daily
+│   ├── format.ts                - Two-significant-digit kronor and percent
 │   └── url.ts                   - Compact plan encoding (RLE cashflow)
 ├── components/
 │   ├── planner/
@@ -191,6 +192,14 @@ AF resolution is dominated by `basisNodes`, not the wealth grid or the quadratur
 The AF cross-check runs with **non-zero inflation** and in nominal terms on purpose: every earlier AF test pinned inflation to zero, which is how the nominal-basis bug survived. Do not "simplify" it back to real terms.
 
 Two AF tolerances are deliberately loose and should not be tightened without understanding why. The zero-volatility AF recursion is ~0.5% off at default resolution because there is no averaging over returns to smooth the basis interpolation; the test asserts convergence under refinement instead. And a Monte Carlo median is meaningless when ruin approaches 50%, since the median is then the smallest surviving outcome — compare quantiles well clear of the ruin mass.
+
+### Output precision
+
+Every *computed* figure goes through `src/planner/format.ts` and is rounded to **two significant digits**. The grid leaves the ruin probability a few tenths of a percentage point out and the return assumptions are round numbers, so a balance printed to the krona claims precision the model does not have. Values the user typed are echoed back as entered — the rounding is for outputs only.
+
+The cadence line under each cash flow field is the one exemption (`formatKrExact`): it restates an exact input in another unit rather than reporting a result, so 200 000 a year is shown as 16 667 a month. Rounding it would make it worse at the only thing it is for, which is comparison against a household budget.
+
+`toSignificant` uses `toPrecision`, not scaling by a power of ten: dividing by a small float leaves residue (4 031 234 became 4000000.0000000005) and printed an extra digit at exactly the magnitudes the rounding exists to tidy.
 
 ## State Management
 

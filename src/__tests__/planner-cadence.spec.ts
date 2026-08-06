@@ -33,6 +33,8 @@ describe('cadences', () => {
   const readable = (value: number) => formatCadences(value).replace(/\u00a0/g, ' ')
 
   it('formats a yearly amount for display', () => {
+    // To the whole krona: unlike the model's outputs these only restate an
+    // exact input in another unit, so there is no uncertainty to round away.
     expect(readable(200_000)).toBe('16 667 kr/mån · 3 833 kr/vecka · 548 kr/dag')
   })
 
