@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest'
 
-import { solveOptionalScale } from '../planner/solve'
+import { isNegligibleScale, solveOptionalScale, NEGLIGIBLE_SCALE_CHANGE } from '../planner/solve'
 import { adaptiveSurvival } from '../planner/propagate'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
+import { floorToSignificant } from '../planner/format'
 import type { PlannerParameters } from '../planner/types'
 
 function plan(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
@@ -91,5 +92,29 @@ describe('solveOptionalScale', () => {
     // Bisection over [0, 20] to 0.005 is about thirteen steps; anything much
     // larger means the bracket logic has gone wrong.
     expect(solveOptionalScale(plan(), 0.6).evaluations).toBeLessThan(20)
+  })
+})
+
+describe('isNegligibleScale', () => {
+  it('treats a small move in either direction as nothing', () => {
+    expect(isNegligibleScale(1)).toBe(true)
+    expect(isNegligibleScale(1 + NEGLIGIBLE_SCALE_CHANGE / 2)).toBe(true)
+    expect(isNegligibleScale(1 - NEGLIGIBLE_SCALE_CHANGE / 2)).toBe(true)
+  })
+
+  it('is symmetric about 1 and lets real moves through', () => {
+    expect(isNegligibleScale(1 + NEGLIGIBLE_SCALE_CHANGE)).toBe(false)
+    expect(isNegligibleScale(1 - NEGLIGIBLE_SCALE_CHANGE)).toBe(false)
+    expect(isNegligibleScale(0.5)).toBe(false)
+    expect(isNegligibleScale(2)).toBe(false)
+  })
+
+  it('holds back a rescale that two-significant-digit flooring would swallow', () => {
+    // The reason for the threshold: below it the written-back schedule is
+    // frequently the schedule the household already has.
+    const optional = 100_000
+    const scale = 1 + NEGLIGIBLE_SCALE_CHANGE / 2
+    expect(isNegligibleScale(scale)).toBe(true)
+    expect(floorToSignificant(optional * scale)).toBe(optional)
   })
 })

@@ -2,8 +2,14 @@
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 
+import { useDebounced } from '../../composables/useDebounced'
 import { usePlannerStore } from '../../stores/planner'
-import { solveOptionalScale, type OptionalScaleSolution } from '../../planner/solve'
+import {
+  isNegligibleScale,
+  solveOptionalScale,
+  NEGLIGIBLE_SCALE_CHANGE,
+  type OptionalScaleSolution,
+} from '../../planner/solve'
 import { floorToSignificant, formatPercent } from '../../planner/format'
 import { encodePlan } from '../../planner/url'
 
@@ -56,10 +62,17 @@ watch(
   { immediate: true },
 )
 
-const multiplier = new Intl.NumberFormat('sv-SE', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-})
+/**
+ * The multiplier as the change it makes, "+11 %" rather than "1,11×".
+ *
+ * It is the same number, but the household reads its own spending in the
+ * schedule above; what it needs from the solver is how much that has to move.
+ * Two significant digits, like every other computed figure.
+ */
+function formatChange(scale: number): string {
+  const percent = (scale - 1) * 100
+  return `${percent > 0 ? '+' : ''}${formatPercent(percent)}`
+}
 
 function solve() {
   solving.value = true
@@ -78,9 +91,47 @@ function solve() {
   }, 0)
 }
 
+/**
+ * Long enough that dragging the slider across its range solves once, at the end,
+ * rather than at every step. Deliberately slower than the store's own recompute:
+ * a search is ~13 propagations, so on an AF plan it costs seconds of main
+ * thread, and paying that mid-drag would make the control feel stuck.
+ */
+const SOLVE_DELAY = 400
+
+const { schedule: scheduleSolve, pending: solveQueued } = useDebounced(solve, SOLVE_DELAY)
+
+/**
+ * Runs the search after the slider settles.
+ *
+ * Driven from the slider's own input event rather than from a watcher on the
+ * value, so a programmatic clamp against a new ceiling never starts a search the
+ * user did not ask for — notably on load, where it would freeze the page before
+ * anyone has touched anything. `solve` reads the target when it finally runs, so
+ * it does not matter whether v-model has updated it yet.
+ */
+function onTargetInput() {
+  // Drop the previous answer immediately: it was solved for a target the slider
+  // no longer shows, and leaving it up next to the new one reads as current.
+  solution.value = null
+  scheduleSolve()
+}
+
+// Busy from the moment the slider moves, not from the moment the search starts:
+// the wait and the work look the same from outside, and only covering the second
+// makes letting go of the slider look like nothing happened.
+const busy = computed(() => solveQueued.value || solving.value)
+
 const applicable = computed(
   () => solution.value?.status === 'solved' || solution.value?.status === 'capped',
 )
+
+/** The plan is already at the level the target asks for; see the threshold. */
+const nearTarget = computed(() => {
+  const scale = solution.value?.scale
+  if (!applicable.value || scale === undefined) return false
+  return isNegligibleScale(scale)
+})
 
 /**
  * The rescaled plan as an ordinary link.
@@ -92,7 +143,7 @@ const applicable = computed(
  */
 const scaledHref = computed(() => {
   const scale = solution.value?.scale
-  if (!applicable.value || scale === undefined) return null
+  if (!applicable.value || nearTarget.value || scale === undefined) return null
   const rescaled = {
     ...parameters.value,
     cashflow: parameters.value.cashflow.map((year) => ({
@@ -119,7 +170,11 @@ const scaledHref = computed(() => {
   <div v-if="usable" class="card mb-3">
     <div class="card-header">Skala tillvalet till en önskad sannolikhet</div>
     <div class="card-body">
-      <div class="row g-3 align-items-end">
+      <!-- Centred: the slider column is taller than the others because of its
+           label and its two end markers, and aligning on the bottom edge leaves
+           the buttons and the figure sitting level with that stray text rather
+           than with the control they belong to. -->
+      <div class="row g-3 align-items-center">
         <div class="col-12 col-md-5">
           <label class="form-label d-flex justify-content-between" for="solver-target">
             <span>Sannolikhet att planen håller</span>
@@ -133,6 +188,7 @@ const scaledHref = computed(() => {
             :max="ceiling!"
             step="1"
             class="form-range"
+            @input="onTargetInput"
           />
           <div class="d-flex justify-content-between form-text mt-0">
             <span>{{ formatPercent(MIN_TARGET) }}</span>
@@ -140,21 +196,27 @@ const scaledHref = computed(() => {
           </div>
         </div>
 
+        <!--
+          The slider solves itself, so this is only for the other way the answer
+          goes stale: an edit to the plan. Those are not solved automatically
+          because the search is seconds of main thread on an AF plan, and every
+          drag in the cash flow editor would pay it.
+        -->
         <div class="col-6 col-md-2">
           <button
             type="button"
             class="btn btn-outline-primary w-100"
-            :disabled="solving"
+            :disabled="busy"
             @click="solve"
           >
-            {{ solving ? 'Räknar…' : 'Beräkna' }}
+            {{ busy ? 'Räknar…' : 'Beräkna' }}
           </button>
         </div>
 
         <div class="col-6 col-md-2">
           <div v-if="solution?.status === 'solved' || solution?.status === 'capped'">
-            <div class="form-label mb-1">Multiplikator</div>
-            <div class="fs-4 lh-1">{{ multiplier.format(solution.scale) }}×</div>
+            <div class="form-label mb-1">Ändring av tillvalet</div>
+            <div class="fs-4 lh-1">{{ formatChange(solution.scale) }}</div>
           </div>
         </div>
 
@@ -168,10 +230,27 @@ const scaledHref = computed(() => {
         </div>
       </div>
 
+      <!-- What the card always does comes first, so it stays in the same place
+           whether or not there is anything to say about the current answer; the
+           situational notes below it are what move. -->
+      <p class="form-text mb-0 mt-2">
+        Söker hur mycket hela tillvalskurvan behöver ändras. Formen du ritat behålls — bara nivån
+        ändras. Länken går till den omskalade planen, så bakåtknappen tar dig tillbaka till den här.
+      </p>
+
       <p v-if="error" class="form-text text-danger mb-0 mt-2">{{ error }}</p>
 
       <p v-else-if="solution?.status === 'nothing-to-scale'" class="form-text mb-0 mt-2">
         Planen har inget tillval att skala. Ange ett tillval i diagrammet ovan först.
+      </p>
+
+      <!-- Takes precedence over the 'capped' and 'unreachable' branches below: a
+           multiplier this close to 1 means the plan already sits at the target,
+           which is the useful thing to say, not how the search ended. -->
+      <p v-else-if="nearTarget" class="form-text mb-0 mt-2">
+        Planen ligger redan på den nivån. Tillvalet skulle ändras med mindre än
+        {{ formatPercent(NEGLIGIBLE_SCALE_CHANGE * 100) }}, vilket är mindre än modellens egen
+        osäkerhet — det är inte värt att skala om.
       </p>
 
       <p v-else-if="solution?.status === 'capped'" class="form-text mb-0 mt-2">
@@ -185,12 +264,6 @@ const scaledHref = computed(() => {
       <p v-else-if="solution?.status === 'unreachable'" class="form-text text-warning mb-0 mt-2">
         Målet ligger över vad golvet ensamt klarar ({{ formatPercent(solution.ceiling * 100) }}), så
         det är golvet som inte bär. Att avstå tillvalet hjälper inte.
-      </p>
-
-      <p class="form-text mb-0 mt-2">
-        Söker den faktor som hela tillvalskurvan ska multipliceras med. Formen du ritat behålls —
-        bara nivån ändras. Länken går till den omskalade planen, så bakåtknappen tar dig tillbaka
-        till den här.
       </p>
     </div>
   </div>

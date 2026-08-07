@@ -40,6 +40,22 @@ export interface OptionalScaleSolution {
   evaluations: number
 }
 
+/**
+ * How far from 1 a multiplier has to be before applying it is worth anything.
+ *
+ * Below this the plan already is the answer. Amounts written back into a plan
+ * are floored to two significant digits, so a few percent frequently produces
+ * the very same schedule; and where it does move something, it moves it by less
+ * than the grid's own error in the survival probability it was solved for.
+ * Acting on a difference that small claims a precision the model does not have.
+ */
+export const NEGLIGIBLE_SCALE_CHANGE = 0.05
+
+/** Whether a multiplier is so close to 1 that applying it says nothing. */
+export function isNegligibleScale(scale: number): boolean {
+  return Math.abs(scale - 1) < NEGLIGIBLE_SCALE_CHANGE
+}
+
 function withScale(params: PlannerParameters, scale: number): PlannerParameters {
   return {
     ...params,

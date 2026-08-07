@@ -35,10 +35,13 @@ src/
 │   ├── format.ts                - Two-significant-digit kronor and percent
 │   ├── solve.ts                 - Optional multiplier for a survival target
 │   └── url.ts                   - Compact plan encoding (RLE cashflow)
+├── composables/
+│   └── useDebounced.ts          - Collapse a burst of calls into one, with a pending flag
 ├── components/
 │   ├── planner/
 │   │   ├── PlannerInputs.vue    - Capital, taxes, portfolio, correlations
 │   │   ├── CashflowEditor.vue   - Click/drag-editable cashflow bar chart
+│   │   ├── OptionalSolver.vue   - Scales the optional to a survival target
 │   │   └── PlannerOutcome.vue   - Fan chart, survival curve, final distribution
 │   ├── InputParameters.vue      - Input form with fund presets
 │   ├── FundPresetSelector.vue   - Fund database selector with correlations
@@ -204,6 +207,9 @@ Bisects for the multiple of the drawn optional curve that meets a survival targe
 - The whole card is hidden when the floor cannot clear the slider's 50% lower bound. There is no target worth offering then; the floor is what fails and discretionary restraint cannot fix it.
 - **Applying is a plain `<a href>`** to the rescaled plan, not a store mutation. The whole plan lives in the query string, so this is an ordinary navigation and the browser's back button is the undo — no history bookkeeping of our own.
 - Scaled amounts are floored to two significant digits (`floorToSignificant`). Rounding *down* can only underspend the target, keeping the result on the safe side of what was solved for. It does mean a multi-phase shape is not preserved exactly: the flooring bites unevenly across magnitudes, up to ~5% on a year that sits just under a boundary.
+- **A multiplier within `NEGLIGIBLE_SCALE_CHANGE` (5%) of 1 is not offered** — the link is disabled and the card says the plan is already there. That flooring to two significant digits often writes back the identical schedule, and what does move, moves by less than the grid's error in the survival probability it was solved for. The predicate lives in `solve.ts` rather than the component because the justification is the model's precision, not the layout.
+- The multiplier is shown as the change it makes (`+11 %`, `−9 %`), not as `1,11×`: the household reads its own amounts in the cash flow editor above, so what it needs from the solver is how far they have to move.
+- **The slider solves itself**, debounced 400 ms via `useDebounced` (`src/composables/`), and clears the previous answer the moment it moves so a multiplier is never shown against a target it was not solved for. Driven from the input event, not a watcher on the value: the ceiling watcher clamps the target programmatically when results arrive, and a watcher would start a search on load. Plan edits deliberately do *not* auto-solve — ~13 propagations is seconds of main thread on an AF plan, and every drag in the cash flow editor would pay it — so the button remains for that case.
 
 ### Output precision
 
