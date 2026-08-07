@@ -4,7 +4,6 @@ import { computed, ref, watch } from 'vue'
 import {
   ASSET_CLASS_PRESETS,
   assetFromPreset,
-  buildCashflow,
   defaultPlannerParameters,
   presetCorrelation,
   resizeCashflow,
@@ -133,10 +132,6 @@ export const usePlannerStore = defineStore('planner', () => {
     cashflow.value = next
   }
 
-  function setFlatCashflow(floor: number, optional: number) {
-    cashflow.value = buildCashflow(years.value, floor, Math.max(0, optional))
-  }
-
   // --- Portfolio editing ------------------------------------------------
 
   /** Instance ids must stay unique even when the same preset is added twice. */
@@ -256,7 +251,6 @@ export const usePlannerStore = defineStore('planner', () => {
     // Actions
     run,
     setCashflowRange,
-    setFlatCashflow,
     addAsset,
     removeAsset,
     setCorrelation,

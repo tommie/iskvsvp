@@ -530,8 +530,8 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                 </tbody>
               </table>
             </div>
-            <p class="form-text mb-0">
-              Det planerade uttaget är vad planen begär över hela horisonten, inte vad en plan som
+            <p class="form-text mt-3 mb-0">
+              Det planerade uttaget är vad planen begär över hela tidsperioden, inte vad en plan som
               spruckit hann ta ut. För den anpassade körningen är det dessutom bara ett tak:
               tillvalet tas i den mån överskottet över golvets reserv räcker till. Det förväntade
               faktiska uttaget väger in båda sakerna — uteblivna tillval och år som aldrig inträffar
@@ -550,7 +550,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                 <template v-if="netOfTax">efter</template><template v-else>före</template> den
                 uppskjutna kapitalvinstskatten. Ett AF-konto skjuter upp skatten snarare än slipper
                 den, så först efter avdrag är slutkapitalet jämförbart med uttagen och med ett ISK,
-                som inte är skyldigt något vid horisontens slut.
+                som inte är skyldigt något vid tidsperiodens slut.
               </template>
             </p>
           </div>
@@ -560,7 +560,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
 
     <div v-if="gridWarning" class="alert alert-warning">
       {{ formatPercent(gridWarning * 100) }} av sannolikhetsmassan nådde toppen av rutnätet. De övre
-      percentilerna är underskattade — öka horisontens rutnät eller sänk avkastningen.
+      percentilerna är underskattade — öka rutnätet eller sänk avkastningen.
     </div>
 
     <!-- Every block on the page carries its own bottom margin rather than
@@ -572,7 +572,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
           <div class="card-header">Sannolikhet att planen håller</div>
           <div class="card-body">
             <D3Chart :render-chart="renderSurvival" :data="chartData" />
-            <p class="form-text mb-0">
+            <p class="form-text mt-3 mb-0">
               Sannolikheten att portföljen fortfarande klarar hela golvuttaget. Tillståndet är
               absorberande — en senare insättning räddar inte en plan som redan spruckit.
             </p>
@@ -584,7 +584,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
           <div class="card-header">Fördelning av slutkapital (dagens penningvärde)</div>
           <div class="card-body">
             <D3Chart :render-chart="renderFinal" :data="chartData" />
-            <p class="form-text mb-0">
+            <p class="form-text mt-3 mb-0">
               Y-axeln är sannolikhet per tiopotens kapital: ytan under kurvan över en tiopotens är
               chansen att hamna där. Markeringen visar toppen, det mest sannolika utfallet. Massan
               som hamnat i ruin ritas inte ut.

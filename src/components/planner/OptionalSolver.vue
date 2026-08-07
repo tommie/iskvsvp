@@ -233,27 +233,27 @@ const scaledHref = computed(() => {
       <!-- What the card always does comes first, so it stays in the same place
            whether or not there is anything to say about the current answer; the
            situational notes below it are what move. -->
-      <p class="form-text mb-0 mt-2">
+      <p class="form-text mb-0 mt-3">
         Söker hur mycket hela tillvalskurvan behöver ändras. Formen du ritat behålls — bara nivån
         ändras. Länken går till den omskalade planen, så bakåtknappen tar dig tillbaka till den här.
       </p>
 
-      <p v-if="error" class="form-text text-danger mb-0 mt-2">{{ error }}</p>
+      <p v-if="error" class="form-text text-danger mb-0 mt-3">{{ error }}</p>
 
-      <p v-else-if="solution?.status === 'nothing-to-scale'" class="form-text mb-0 mt-2">
+      <p v-else-if="solution?.status === 'nothing-to-scale'" class="form-text mb-0 mt-3">
         Planen har inget tillval att skala. Ange ett tillval i diagrammet ovan först.
       </p>
 
       <!-- Takes precedence over the 'capped' and 'unreachable' branches below: a
            multiplier this close to 1 means the plan already sits at the target,
            which is the useful thing to say, not how the search ended. -->
-      <p v-else-if="nearTarget" class="form-text mb-0 mt-2">
+      <p v-else-if="nearTarget" class="form-text mb-0 mt-3">
         Planen ligger redan på den nivån. Tillvalet skulle ändras med mindre än
         {{ formatPercent(NEGLIGIBLE_SCALE_CHANGE * 100) }}, vilket är mindre än modellens egen
         osäkerhet — det är inte värt att skala om.
       </p>
 
-      <p v-else-if="solution?.status === 'capped'" class="form-text mb-0 mt-2">
+      <p v-else-if="solution?.status === 'capped'" class="form-text mb-0 mt-3">
         Målet nås med marginal. Multiplikatorn är begränsad till sökområdets tak; tillvalet skulle
         kunna vara ännu större.
       </p>
@@ -261,7 +261,7 @@ const scaledHref = computed(() => {
       <!-- The slider cannot ask for more than the floor delivers, so this should
            not occur. It is here so the card explains itself rather than falling
            silent if the bound and the solver ever disagree. -->
-      <p v-else-if="solution?.status === 'unreachable'" class="form-text text-warning mb-0 mt-2">
+      <p v-else-if="solution?.status === 'unreachable'" class="form-text text-warning mb-0 mt-3">
         Målet ligger över vad golvet ensamt klarar ({{ formatPercent(solution.ceiling * 100) }}), så
         det är golvet som inte bär. Att avstå tillvalet hjälper inte.
       </p>

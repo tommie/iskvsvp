@@ -215,7 +215,7 @@ Bisects for the multiple of the drawn optional curve that meets a survival targe
 
 Every *computed* figure goes through `src/planner/format.ts` and is rounded to **two significant digits**. The grid leaves the ruin probability a few tenths of a percentage point out and the return assumptions are round numbers, so a balance printed to the krona claims precision the model does not have. Values the user typed are echoed back as entered — the rounding is for outputs only.
 
-The cadence line under each cash flow field is the one exemption (`formatKrExact`): it restates an exact input in another unit rather than reporting a result, so 200 000 a year is shown as 16 667 a month. Rounding it would make it worse at the only thing it is for, which is comparison against a household budget.
+The cash flow editor is the one exemption (`formatKrExact`): its cadence lines restate an exact input in another unit rather than reporting a result, so 200 000 a year is shown as 16 667 a month, and its total column is just floor plus optional. Rounding either would make it worse at the only thing it is for, which is comparison against a household budget.
 
 The Slutkapital table can restate its figures as changes rather than amounts (`formatRelative`, "Förändring från start"). The comparison is **column-wise**, each figure against the thing it is a change *from*: final capital against `initialCapital`, expected withdrawal against that column's planned total. Both sides are real, so the change is too. The planned total itself stays in kronor — it is an input echoed back and the reference the row below is measured against, so turning it into "0 %" would delete the anchor. A reference of zero prints the same dash as any unstatable figure; a *value* of zero against a real reference is −100%, which is a ruined plan and worth printing.
 
@@ -238,7 +238,7 @@ The Slutkapital table can restate its figures as changes rather than amounts (`f
 - Planner parameters as refs, debounced recompute (runs on the main thread; a 40-year plan is ~50 ms)
 - URL sync via `src/planner/url.ts`; the cashflow is run-length encoded so a multi-phase plan stays short
 - `years` and `cashflow.length` are kept equal by a watcher, since the engine throws if they disagree
-- Actions: run(), setCashflowRange(), setFlatCashflow(), addAsset(), removeAsset(), setCorrelation(), initUrlSync()
+- Actions: run(), setCashflowRange(), addAsset(), removeAsset(), setCorrelation(), initUrlSync()
 
 ## Localization
 

@@ -71,7 +71,7 @@ onMounted(() => {
               under år då kapitalet minskar.
             </p>
             <p>
-              Skatteparametrarna hålls konstanta över hela horisonten och kan ändras av riksdagen.
+              Skatteparametrarna hålls konstanta över hela tidsperioden och kan ändras av riksdagen.
               Schablonräntan är satt till en långsiktig nivå i stället för det aktuella årets: för
               inkomstår 2026 är den 3,55&nbsp;%, men att hålla ett enskilt års ränta i fyrtio år
               låter kortsiktiga ränterörelser avgöra slutresultatet. Pensionernas prognosstandard
@@ -102,7 +102,7 @@ onMounted(() => {
               golvuttagen kräver i reserv, och överskottet däröver fördelas jämnt över de år som
               återstår; det beloppet, begränsat till tillvalet, är vad som tas. Reserven diskonteras
               inte till förväntad avkastning utan till 25:e percentilen av den ackumulerade
-              avkastningen över horisonten, eftersom en median­ränta bara innebär att golvet är
+              avkastningen över tidsperioden, eftersom en median­ränta bara innebär att golvet är
               finansierat i hälften av utfallen. Regeln behöver inget minne av tidigare år, till
               skillnad från intervallregler av Guyton–Klinger-typ, vars hysteres är just ett minne.
             </p>
@@ -113,7 +113,7 @@ onMounted(() => {
               medelvärdena är aritmetiska, eftersom modellen själv beräknar variansdraget. Siffrorna
               per tillgångsslag är redigerbara utgångspunkter, inte skattningar ur fonddatabasen —
               den innehåller enskilda fonder över korta, nominella perioder, medan en
-              planeringshorisont på decennier behöver långsiktiga reala klassavkastningar.
+              planeringsperiod på decennier behöver långsiktiga reala klassavkastningar.
             </p>
             <p class="mb-0">
               För ISK tas schablonskatten ut på saldot. Den är därmed samma andel realt som

@@ -128,7 +128,7 @@ const portfolioSummary = computed(() => {
               />
             </div>
             <div class="col-6">
-              <label class="form-label" for="planner-years">Horisont (år)</label>
+              <label class="form-label" for="planner-years">Tidsperiod (år)</label>
               <input
                 id="planner-years"
                 v-model.number="years"
@@ -366,7 +366,7 @@ const portfolioSummary = computed(() => {
           </tbody>
         </table>
       </div>
-      <p class="form-text mb-0">
+      <p class="form-text mt-3 mb-0">
         Reala korrelationer. Avkastningarna ovan är aritmetiska medelvärden — variansdraget beräknas
         av modellen, så mata inte in geometriska medelvärden.
       </p>

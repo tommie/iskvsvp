@@ -6,6 +6,7 @@ import { storeToRefs } from 'pinia'
 import { usePlannerStore } from '../../stores/planner'
 import D3Chart from '../D3Chart.vue'
 import { formatCadences } from '../../planner/cadence'
+import { formatKrExact } from '../../planner/format'
 
 const store = usePlannerStore()
 const { cashflow, startAge } = storeToRefs(store)
@@ -16,8 +17,8 @@ const DEPOSIT_COLOR = '#198754'
 const CHART_HEIGHT = 260
 
 // The selection always covers at least one year. It stays put when focus moves
-// elsewhere: the Golv and Tillval fields act on it, so clearing it on blur
-// would disable the very inputs needed to drive the apply buttons.
+// elsewhere: the Golv and Tillval fields write to whatever it covers, so
+// clearing it on blur would leave those fields with nothing to act on.
 const selection = ref({ from: 0, to: 0 })
 const dragging = ref(false)
 
@@ -54,10 +55,25 @@ function applyToSelection(values: { floor?: number; optional?: number }) {
   store.setCashflowRange(selection.value.from, selection.value.to, values)
 }
 
-function applyToEnd(values: { floor?: number; optional?: number }) {
-  const from = Math.min(selection.value.from, selection.value.to)
-  store.setCashflowRange(from, cashflow.value.length - 1, values)
+/**
+ * Selects every year in the schedule.
+ *
+ * With the fields writing to whatever is selected, this is what "set every year
+ * at once" means: select all, then type an amount. It sits by the chart because
+ * it is a selection like any other, just one that is tedious to drag.
+ */
+function selectAll() {
+  selection.value = { from: 0, to: cashflow.value.length - 1 }
 }
+
+/**
+ * What the selected years actually pay out: floor plus optional.
+ *
+ * The two fields are entered separately because the plan treats them
+ * differently, but nobody budgets in two halves — the figure to hold against a
+ * household's outgoings is their sum, in the same cadences.
+ */
+const editedTotal = computed(() => editedFloor.value + editedOptional.value)
 
 const chartData = computed(() => ({
   cashflow: cashflow.value,
@@ -213,81 +229,112 @@ function stopDragging() {
 
 <template>
   <div class="card mb-3">
-    <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
       <span>Uttag och insättningar per år (dagens penningvärde)</span>
-      <small class="text-muted">Klicka eller dra i diagrammet för att välja år</small>
+      <div class="d-flex align-items-center gap-3">
+        <small class="text-muted"
+          >Klicka, dra eller skift-klicka i diagrammet för att välja år</small
+        >
+        <button type="button" class="btn btn-outline-secondary btn-sm" @click="selectAll">
+          Välj alla år
+        </button>
+      </div>
     </div>
     <div class="card-body">
-      <div @mouseup="stopDragging" @mouseleave="stopDragging">
-        <D3Chart :render-chart="renderChart" :data="chartData" />
+      <!--
+        The fields sit beside the chart, in one column, because they read as a
+        panel for whatever the chart has selected: click a span, then work down
+        Golv, Tillval, Totalt. Below lg the column drops under the chart and
+        keeps its stacking — the chart needs the full width more than the fields
+        need to be adjacent, and a narrow screen cannot give both.
+
+        Centred, because the field column is the taller of the two: aligned to
+        the top, the chart would hang from the first label with its baseline
+        floating above nothing.
+      -->
+      <div class="row g-3 align-items-center">
+        <div class="col-12 col-lg-9">
+          <div @mouseup="stopDragging" @mouseleave="stopDragging">
+            <D3Chart :render-chart="renderChart" :data="chartData" />
+          </div>
+
+          <div class="d-flex flex-wrap gap-3 align-items-center small text-muted mt-2">
+            <span
+              ><span class="swatch" :style="{ background: FLOOR_COLOR }"></span> Golv (uttag)</span
+            >
+            <span
+              ><span class="swatch" :style="{ background: OPTIONAL_COLOR }"></span> Tillval</span
+            >
+            <span
+              ><span class="swatch" :style="{ background: DEPOSIT_COLOR }"></span> Insättning</span
+            >
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-3 d-flex flex-column gap-3">
+          <div>
+            <label class="form-label mb-1">Markering</label>
+            <div class="form-control-plaintext field-aligned py-0">{{ selectionLabel }}</div>
+          </div>
+
+          <div>
+            <label class="form-label" for="cashflow-floor">Golv (kr/år)</label>
+            <input
+              id="cashflow-floor"
+              v-model.number="editedFloor"
+              type="number"
+              step="10000"
+              class="form-control"
+              @change="applyToSelection({ floor: editedFloor })"
+            />
+            <div class="form-text">{{ formatCadences(editedFloor) }}</div>
+          </div>
+
+          <div>
+            <label class="form-label" for="cashflow-optional">Tillval (kr/år)</label>
+            <input
+              id="cashflow-optional"
+              v-model.number="editedOptional"
+              type="number"
+              step="10000"
+              min="0"
+              class="form-control"
+              @change="applyToSelection({ optional: editedOptional })"
+            />
+            <div class="form-text">{{ formatCadences(editedOptional) }}</div>
+          </div>
+
+          <div>
+            <label class="form-label">Totalt uttag (kr/år)</label>
+            <div class="form-control-plaintext field-aligned">
+              {{ formatKrExact(editedTotal) }}
+            </div>
+            <div class="form-text">{{ formatCadences(editedTotal) }}</div>
+          </div>
+        </div>
       </div>
 
-      <div class="d-flex flex-wrap gap-3 align-items-center small text-muted mb-3">
-        <span><span class="swatch" :style="{ background: FLOOR_COLOR }"></span> Golv (uttag)</span>
-        <span><span class="swatch" :style="{ background: OPTIONAL_COLOR }"></span> Tillval</span>
-        <span><span class="swatch" :style="{ background: DEPOSIT_COLOR }"></span> Insättning</span>
-      </div>
-
-      <p class="form-text mt-0 mb-3">
-        Beloppen är disponibla — det är detta du får ut. Schablonskatten dras separat ur portföljen
-        och minskar inte uttaget.
+      <p class="form-text mt-3 mb-0">
+        Beloppen är disponibla — det är detta du får ut. Skatten dras separat ur portföljen och
+        minskar inte uttaget.
       </p>
-
-      <div class="row g-3 align-items-end">
-        <div class="col-12 col-md-3">
-          <label class="form-label fw-semibold mb-1">Markering</label>
-          <div class="form-control-plaintext py-0">{{ selectionLabel }}</div>
-        </div>
-
-        <div class="col-6 col-md-3">
-          <label class="form-label" for="cashflow-floor">Golv (kr/år)</label>
-          <input
-            id="cashflow-floor"
-            v-model.number="editedFloor"
-            type="number"
-            step="10000"
-            class="form-control"
-            @change="applyToSelection({ floor: editedFloor })"
-          />
-          <div class="form-text">{{ formatCadences(editedFloor) }}</div>
-        </div>
-
-        <div class="col-6 col-md-3">
-          <label class="form-label" for="cashflow-optional">Tillval (kr/år)</label>
-          <input
-            id="cashflow-optional"
-            v-model.number="editedOptional"
-            type="number"
-            step="10000"
-            min="0"
-            class="form-control"
-            @change="applyToSelection({ optional: editedOptional })"
-          />
-          <div class="form-text">{{ formatCadences(editedOptional) }}</div>
-        </div>
-
-        <div class="col-12 col-md-3 d-grid gap-2">
-          <button
-            type="button"
-            class="btn btn-outline-primary btn-sm"
-            @click="applyToEnd({ floor: editedFloor, optional: editedOptional })"
-          >
-            Applicera till horisontens slut
-          </button>
-          <button
-            type="button"
-            class="btn btn-outline-secondary btn-sm"
-            @click="store.setFlatCashflow(editedFloor, editedOptional)"
-          >
-            Sätt alla år
-          </button>
-        </div>
-      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* Read-only values in the field column start on the same left edge as the text
+   inside the inputs above them, so the column reads as one list of figures.
+   Bootstrap's plaintext control drops both the horizontal padding and the side
+   borders that a .form-control has, so it needs the sum of the two back.
+
+   0.75rem is $input-padding-x restated: Bootstrap 5.3 converted components like
+   buttons and cards to custom properties but not forms, so .form-control still
+   compiles that padding to a literal and there is no variable to read. */
+.field-aligned {
+  padding-left: calc(0.75rem + var(--bs-border-width));
+}
+
 .swatch {
   display: inline-block;
   width: 0.85rem;
