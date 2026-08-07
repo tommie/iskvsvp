@@ -1037,7 +1037,9 @@ export function runPlanner(params: PlannerParameters): PlannerResults {
       quad,
       portfolio,
       'adaptive',
-      'Golv + anpassat tillval',
+      // Short because it is a column header in a table that shares its row with
+      // the fan chart; the chart legend carries the full description.
+      'Golv + anpassat',
       schedule,
     ),
     portfolio,

@@ -59,6 +59,22 @@ async function toggleRelative(wrapper: ReturnType<typeof mountOutcome>['wrapper'
   await wrapper.get('#planner-relative').setValue(true)
 }
 
+describe('PlannerOutcome layout', () => {
+  it('names the curves exactly as it names the columns', () => {
+    const { wrapper } = mountOutcome()
+    const legend = wrapper
+      .findAll('.line')
+      .map((swatch) => swatch.element.parentElement!.textContent!.trim())
+    // The header row leads with an empty corner cell for the row labels.
+    const columns = wrapper
+      .findAll('.summary-table thead th')
+      .map((th) => th.text())
+      .filter((text) => text !== '')
+
+    expect(legend).toEqual(columns)
+  })
+})
+
 describe('PlannerOutcome relative view', () => {
   it('shows amounts in kronor until it is turned on', () => {
     const { wrapper } = mountOutcome()

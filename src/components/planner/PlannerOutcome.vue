@@ -389,135 +389,172 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
 
 <template>
   <div v-if="summary">
-    <div class="card mb-3">
-      <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-3">
-        <span>Slutkapital i dagens penningvärde</span>
-        <div class="d-flex gap-3">
-          <div v-if="hasDeferredTax" class="form-check form-switch mb-0">
-            <input
-              id="planner-net-of-tax"
-              v-model="netOfTax"
-              class="form-check-input"
-              type="checkbox"
-              role="switch"
-            />
-            <label class="form-check-label small" for="planner-net-of-tax"
-              >Efter latent skatt</label
-            >
+    <!--
+      Chart and table are one subject in two cards, side by side from lg up and
+      stacked below it. Equal halves, matching the pair of cards further down, so
+      the page reads as a grid rather than as four differently sized panels.
+      Chart first: it is what the plan looks like, and the table is the reading
+      of it.
+    -->
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-lg-6">
+        <div class="card h-100">
+          <div
+            class="card-header d-flex justify-content-between align-items-center flex-wrap gap-3"
+          >
+            <span>Kapital över tid i dagens penningvärde</span>
+            <div class="form-check form-switch mb-0">
+              <input
+                id="planner-log-scale"
+                v-model="logScale"
+                class="form-check-input"
+                type="checkbox"
+                role="switch"
+              />
+              <label class="form-check-label small" for="planner-log-scale"
+                >Logaritmisk skala</label
+              >
+            </div>
           </div>
-          <div class="form-check form-switch mb-0">
-            <input
-              id="planner-relative"
-              v-model="relative"
-              class="form-check-input"
-              type="checkbox"
-              role="switch"
-            />
-            <label class="form-check-label small" for="planner-relative"
-              >Förändring från start</label
-            >
-          </div>
-          <div class="form-check form-switch mb-0">
-            <input
-              id="planner-log-scale"
-              v-model="logScale"
-              class="form-check-input"
-              type="checkbox"
-              role="switch"
-            />
-            <label class="form-check-label small" for="planner-log-scale">Logaritmisk skala</label>
+          <div class="card-body">
+            <D3Chart :render-chart="renderFan" :data="chartData" />
+            <!-- Named, coloured and dashed from the runs themselves, so a curve
+                 here and a column in the table beside it can never end up with
+                 different names for the same run. -->
+            <div class="d-flex flex-wrap gap-3 small text-muted mt-2">
+              <span v-for="entry in runs" :key="entry.run.label">
+                <span
+                  class="line"
+                  :class="{ dashed: entry.dashed }"
+                  :style="{ '--line-color': entry.color }"
+                ></span>
+                {{ entry.run.label }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
-      <div class="card-body">
-        <D3Chart :render-chart="renderFan" :data="chartData" />
-        <div class="d-flex flex-wrap gap-3 small text-muted mt-2 mb-3">
-          <span><span class="line" :style="{ background: FLOOR_COLOR }"></span> Golv</span>
-          <span
-            ><span class="line" :style="{ background: ADAPTIVE_COLOR }"></span> Golv + anpassat
-            tillval</span
-          >
-          <span
-            ><span class="line dashed" :style="{ background: OPTIONAL_COLOR }"></span> Golv +
-            tillval</span
-          >
-        </div>
 
-        <div class="table-responsive">
-          <table class="table table-sm table-hover align-middle mb-0 w-auto mx-auto summary-table">
-            <thead>
-              <tr>
-                <th></th>
-                <th v-for="row in summary" :key="row.label" class="text-end">{{ row.label }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th>Totalt planerat uttag</th>
-                <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ formatKr(row.withdrawn) }}
-                </td>
-              </tr>
-              <!-- Against the planned total in the row above: the plan is what
+      <div class="col-12 col-lg-6">
+        <div class="card h-100">
+          <div
+            class="card-header d-flex justify-content-between align-items-center flex-wrap gap-3"
+          >
+            <span>Slutkapital och uttag</span>
+            <div class="d-flex gap-3">
+              <!-- Both switches change how this table reads, and the deferred-tax
+                   one is explained in its footnote; the fan chart follows the
+                   same basis because the two must not disagree. -->
+              <div v-if="hasDeferredTax" class="form-check form-switch mb-0">
+                <input
+                  id="planner-net-of-tax"
+                  v-model="netOfTax"
+                  class="form-check-input"
+                  type="checkbox"
+                  role="switch"
+                />
+                <label class="form-check-label small" for="planner-net-of-tax"
+                  >Efter latent skatt</label
+                >
+              </div>
+              <div class="form-check form-switch mb-0">
+                <input
+                  id="planner-relative"
+                  v-model="relative"
+                  class="form-check-input"
+                  type="checkbox"
+                  role="switch"
+                />
+                <label class="form-check-label small" for="planner-relative"
+                  >Förändring från start</label
+                >
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <!-- Full width of its card rather than sized to content: in half a row
+               the columns would otherwise want more than they can have, and a
+               wrapped row header beats a table that scrolls sideways. -->
+              <table class="table table-sm table-hover align-middle mb-0 summary-table">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th v-for="row in summary" :key="row.label" class="text-end">
+                      {{ row.label }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th>Totalt planerat uttag</th>
+                    <td v-for="row in summary" :key="row.label" class="text-end">
+                      {{ formatKr(row.withdrawn) }}
+                    </td>
+                  </tr>
+                  <!-- Against the planned total in the row above: the plan is what
                    the column set out to hand over, so falling short of it is
                    what the expected figure has to say. -->
-              <tr>
-                <th>Förväntat faktiskt uttag</th>
-                <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ amount(row.actualWithdrawn, row.withdrawn) }}
-                </td>
-              </tr>
-              <tr>
-                <th>Sannolikhet att planen håller</th>
-                <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ formatPercent(row.survival) }}
-                </td>
-              </tr>
-              <!-- Against the capital paid in. Both are in today's money, so the
+                  <tr>
+                    <th>Förväntat faktiskt uttag</th>
+                    <td v-for="row in summary" :key="row.label" class="text-end">
+                      {{ amount(row.actualWithdrawn, row.withdrawn) }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Sannolikhet att planen håller</th>
+                    <td v-for="row in summary" :key="row.label" class="text-end">
+                      {{ formatPercent(row.survival) }}
+                    </td>
+                  </tr>
+                  <!-- Against the capital paid in. Both are in today's money, so the
                    change is real growth net of everything the plan withdrew. -->
-              <tr>
-                <th>10:e percentilen</th>
-                <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ amount(row.percentile10, initialCapital) }}
-                </td>
-              </tr>
-              <tr>
-                <th>Median slutkapital</th>
-                <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ amount(row.median, initialCapital) }}
-                </td>
-              </tr>
-              <tr>
-                <th>90:e percentilen</th>
-                <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ amount(row.percentile90, initialCapital) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  <tr>
+                    <th>10:e percentilen</th>
+                    <td v-for="row in summary" :key="row.label" class="text-end">
+                      {{ amount(row.percentile10, initialCapital) }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>Median slutkapital</th>
+                    <td v-for="row in summary" :key="row.label" class="text-end">
+                      {{ amount(row.median, initialCapital) }}
+                    </td>
+                  </tr>
+                  <tr>
+                    <th>90:e percentilen</th>
+                    <td v-for="row in summary" :key="row.label" class="text-end">
+                      {{ amount(row.percentile90, initialCapital) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="form-text mb-0">
+              Det planerade uttaget är vad planen begär över hela horisonten, inte vad en plan som
+              spruckit hann ta ut. För den anpassade körningen är det dessutom bara ett tak:
+              tillvalet tas i den mån överskottet över golvets reserv räcker till. Det förväntade
+              faktiska uttaget väger in båda sakerna — uteblivna tillval och år som aldrig inträffar
+              för att planen sprack — och är därför måttet som går att jämföra mellan kolumnerna.
+              Percentilerna är ovillkorade: en plan som spricker räknas som noll kronor, inte som
+              bortfall. Därför kan 10:e percentilen vara noll när risken att planen spricker
+              överstiger 10&nbsp;%.
+              <template v-if="relative">
+                Uttaget visas som förändring mot kolumnens planerade uttag, kapitalet som förändring
+                mot startkapitalet ({{ formatKr(initialCapital) }}) — båda i dagens penningvärde, så
+                förändringen är real. Det planerade uttaget står kvar i kronor: det är vad du själv
+                angett, och det de andra räknas mot.
+              </template>
+              <template v-if="hasDeferredTax">
+                Beloppen är
+                <template v-if="netOfTax">efter</template><template v-else>före</template> den
+                uppskjutna kapitalvinstskatten. Ett AF-konto skjuter upp skatten snarare än slipper
+                den, så först efter avdrag är slutkapitalet jämförbart med uttagen och med ett ISK,
+                som inte är skyldigt något vid horisontens slut.
+              </template>
+            </p>
+          </div>
         </div>
-        <p class="form-text mb-0">
-          Det planerade uttaget är vad planen begär över hela horisonten, inte vad en plan som
-          spruckit hann ta ut. För den anpassade körningen är det dessutom bara ett tak: tillvalet
-          tas i den mån överskottet över golvets reserv räcker till. Det förväntade faktiska uttaget
-          väger in båda sakerna — uteblivna tillval och år som aldrig inträffar för att planen
-          sprack — och är därför måttet som går att jämföra mellan kolumnerna. Percentilerna är
-          ovillkorade: en plan som spricker räknas som noll kronor, inte som bortfall. Därför kan
-          10:e percentilen vara noll när risken att planen spricker överstiger 10&nbsp;%.
-          <template v-if="relative">
-            Uttaget visas som förändring mot kolumnens planerade uttag, kapitalet som förändring mot
-            startkapitalet ({{ formatKr(initialCapital) }}) — båda i dagens penningvärde, så
-            förändringen är real. Det planerade uttaget står kvar i kronor: det är vad du själv
-            angett, och det de andra räknas mot.
-          </template>
-          <template v-if="hasDeferredTax">
-            Beloppen är
-            <template v-if="netOfTax">efter</template><template v-else>före</template> den
-            uppskjutna kapitalvinstskatten. Ett AF-konto skjuter upp skatten snarare än slipper den,
-            så först efter avdrag är slutkapitalet jämförbart med uttagen och med ett ISK, som inte
-            är skyldigt något vid horisontens slut.
-          </template>
-        </p>
       </div>
     </div>
 
@@ -557,25 +594,44 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
 </template>
 
 <style scoped>
-/* The table is sized to its content now, so the columns would otherwise sit on
-   top of each other. Bootstrap 5.3 hardcodes .table-sm padding rather than
-   exposing a custom property, so this overrides the cells directly; the scoped
-   attribute gives it the specificity to win. */
+/* The figures are the point of the table, so the columns give them room and the
+   row header gives up what it needs to. Bootstrap 5.3 hardcodes .table-sm
+   padding rather than exposing a custom property, so this overrides the cells
+   directly; the scoped attribute gives it the specificity to win. */
 .summary-table th,
 .summary-table td {
-  padding-left: 1.25rem;
-  padding-right: 1.25rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
 }
 
+/* The row header and the column headers wrap; the figures never do. Breaking
+   "7,8 mkr" across two lines costs a reader more than a two-line label does, and
+   the labels are the only cells with slack to give. */
+.summary-table tbody th {
+  font-weight: 500;
+  padding-left: 0;
+}
+
+.summary-table td {
+  white-space: nowrap;
+}
+
+/* The series colour arrives as a custom property rather than as an inline
+   background, so the dashed variant can paint with it too: an inline background
+   shorthand would win over any stylesheet rule and flatten the dashes back to a
+   solid bar. */
 .line {
   display: inline-block;
   width: 1.5rem;
   height: 3px;
   vertical-align: 3px;
   margin-right: 0.25rem;
+  background-color: var(--line-color);
 }
 
+/* Same 6-on, 4-off rhythm as the stroke-dasharray the chart draws with. */
 .line.dashed {
-  background-image: linear-gradient(90deg, currentColor 60%, transparent 0);
+  background-color: transparent;
+  background-image: repeating-linear-gradient(90deg, var(--line-color) 0 6px, transparent 6px 10px);
 }
 </style>
