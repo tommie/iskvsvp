@@ -10,7 +10,7 @@ import {
   NEGLIGIBLE_SCALE_CHANGE,
   type OptionalScaleSolution,
 } from '../../planner/solve'
-import { floorToSignificant, formatPercent } from '../../planner/format'
+import { floorToSignificant, formatPercent, formatRelative } from '../../planner/format'
 import { encodePlan } from '../../planner/url'
 
 const { parameters, results } = storeToRefs(usePlannerStore())
@@ -67,11 +67,11 @@ watch(
  *
  * It is the same number, but the household reads its own spending in the
  * schedule above; what it needs from the solver is how much that has to move.
- * Two significant digits, like every other computed figure.
+ * A multiplier is a value against a reference of 1, which is exactly what
+ * formatRelative states.
  */
 function formatChange(scale: number): string {
-  const percent = (scale - 1) * 100
-  return `${percent > 0 ? '+' : ''}${formatPercent(percent)}`
+  return formatRelative(scale, 1)
 }
 
 function solve() {

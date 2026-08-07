@@ -6,11 +6,11 @@ import { storeToRefs } from 'pinia'
 import { usePlannerStore } from '../../stores/planner'
 import type { PropagationRun } from '../../planner/types'
 import { densityBins } from '../../planner/density'
-import { formatKr, formatPercent } from '../../planner/format'
+import { formatKr, formatPercent, formatRelative } from '../../planner/format'
 import D3Chart from '../D3Chart.vue'
 
 const store = usePlannerStore()
-const { results, cashflow } = storeToRefs(store)
+const { results, cashflow, initialCapital } = storeToRefs(store)
 
 const FLOOR_COLOR = '#0d6efd'
 const OPTIONAL_COLOR = '#fd7e14'
@@ -28,6 +28,24 @@ const logScale = ref(true)
  * an AF balance gross alongside those flatters it by the deferred tax.
  */
 const netOfTax = ref(true)
+
+/**
+ * Show each figure as its change from where that column started, rather than as
+ * an amount.
+ *
+ * Read down a column, every figure has an obvious thing it is a change *from*:
+ * the final capital from the capital paid in, and what the plan expects to hand
+ * over from what it set out to. Both comparisons are otherwise a division the
+ * reader has to do, and the answer to "did this preserve capital" is a
+ * percentage, not two balances. Off by default, because kronor are what a
+ * household budgets against.
+ */
+const relative = ref(false)
+
+/** A figure as an amount, or as its change from the column's own reference. */
+function amount(value: number, reference: number): string {
+  return relative.value ? formatRelative(value, reference) : formatKr(value)
+}
 
 /**
  * Svenska skrivregler puts a space before the percent sign, and a non-breaking
@@ -389,6 +407,18 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
           </div>
           <div class="form-check form-switch mb-0">
             <input
+              id="planner-relative"
+              v-model="relative"
+              class="form-check-input"
+              type="checkbox"
+              role="switch"
+            />
+            <label class="form-check-label small" for="planner-relative"
+              >Förändring från start</label
+            >
+          </div>
+          <div class="form-check form-switch mb-0">
+            <input
               id="planner-log-scale"
               v-model="logScale"
               class="form-check-input"
@@ -428,10 +458,13 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                   {{ formatKr(row.withdrawn) }}
                 </td>
               </tr>
+              <!-- Against the planned total in the row above: the plan is what
+                   the column set out to hand over, so falling short of it is
+                   what the expected figure has to say. -->
               <tr>
                 <th>Förväntat faktiskt uttag</th>
                 <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ formatKr(row.actualWithdrawn) }}
+                  {{ amount(row.actualWithdrawn, row.withdrawn) }}
                 </td>
               </tr>
               <tr>
@@ -440,22 +473,24 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                   {{ formatPercent(row.survival) }}
                 </td>
               </tr>
+              <!-- Against the capital paid in. Both are in today's money, so the
+                   change is real growth net of everything the plan withdrew. -->
               <tr>
                 <th>10:e percentilen</th>
                 <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ formatKr(row.percentile10) }}
+                  {{ amount(row.percentile10, initialCapital) }}
                 </td>
               </tr>
               <tr>
                 <th>Median slutkapital</th>
                 <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ formatKr(row.median) }}
+                  {{ amount(row.median, initialCapital) }}
                 </td>
               </tr>
               <tr>
                 <th>90:e percentilen</th>
                 <td v-for="row in summary" :key="row.label" class="text-end">
-                  {{ formatKr(row.percentile90) }}
+                  {{ amount(row.percentile90, initialCapital) }}
                 </td>
               </tr>
             </tbody>
@@ -469,6 +504,12 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
           sprack — och är därför måttet som går att jämföra mellan kolumnerna. Percentilerna är
           ovillkorade: en plan som spricker räknas som noll kronor, inte som bortfall. Därför kan
           10:e percentilen vara noll när risken att planen spricker överstiger 10&nbsp;%.
+          <template v-if="relative">
+            Uttaget visas som förändring mot kolumnens planerade uttag, kapitalet som förändring mot
+            startkapitalet ({{ formatKr(initialCapital) }}) — båda i dagens penningvärde, så
+            förändringen är real. Det planerade uttaget står kvar i kronor: det är vad du själv
+            angett, och det de andra räknas mot.
+          </template>
           <template v-if="hasDeferredTax">
             Beloppen är
             <template v-if="netOfTax">efter</template><template v-else>före</template> den

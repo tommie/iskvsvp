@@ -68,6 +68,22 @@ export function formatKrExact(value: number): string {
   return `${whole.format(value)} kr`
 }
 
+/**
+ * A figure as its change against a reference, signed: `+11 %`, `−9 %`.
+ *
+ * Reported rather than the two amounts because the difference is often the only
+ * thing being asked of a comparison, and a percentage says it in one number
+ * where two balances make the reader do the division. A reference of zero has no
+ * change to express — every non-zero value is infinitely more than nothing — so
+ * it gives the same dash as any other figure the model cannot state.
+ */
+export function formatRelative(value: number, reference: number): string {
+  if (!Number.isFinite(value) || !Number.isFinite(reference) || reference === 0) return '–'
+  const percent = (value / reference - 1) * 100
+  // Only the plus needs adding; the locale supplies its own minus sign.
+  return `${percent > 0 ? '+' : ''}${formatPercent(percent)}`
+}
+
 /** A percentage, given a value already expressed in percent (0-100). */
 export function formatPercent(value: number): string {
   if (!Number.isFinite(value)) return '–'

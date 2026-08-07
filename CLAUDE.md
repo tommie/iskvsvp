@@ -217,6 +217,8 @@ Every *computed* figure goes through `src/planner/format.ts` and is rounded to *
 
 The cadence line under each cash flow field is the one exemption (`formatKrExact`): it restates an exact input in another unit rather than reporting a result, so 200 000 a year is shown as 16 667 a month. Rounding it would make it worse at the only thing it is for, which is comparison against a household budget.
 
+The Slutkapital table can restate its figures as changes rather than amounts (`formatRelative`, "Förändring från start"). The comparison is **column-wise**, each figure against the thing it is a change *from*: final capital against `initialCapital`, expected withdrawal against that column's planned total. Both sides are real, so the change is too. The planned total itself stays in kronor — it is an input echoed back and the reference the row below is measured against, so turning it into "0 %" would delete the anchor. A reference of zero prints the same dash as any unstatable figure; a *value* of zero against a real reference is −100%, which is a ruined plan and worth printing.
+
 `toSignificant` uses `toPrecision`, not scaling by a power of ten: dividing by a small float leaves residue (4 031 234 became 4000000.0000000005) and printed an extra digit at exactly the magnitudes the rounding exists to tidy.
 
 ## State Management

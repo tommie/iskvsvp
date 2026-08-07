@@ -5,6 +5,7 @@ import {
   floorToSignificant,
   formatKr,
   formatPercent,
+  formatRelative,
   toSignificant,
 } from '../planner/format'
 
@@ -52,6 +53,32 @@ describe('formatPercent', () => {
 
   it('uses a non-breaking space before the sign', () => {
     expect(formatPercent(69.43)).toContain(' %')
+  })
+})
+
+describe('formatRelative', () => {
+  it('signs a change in both directions', () => {
+    expect(readable(formatRelative(111, 100))).toBe('+11 %')
+    // The locale's minus sign, not a hyphen.
+    expect(readable(formatRelative(91, 100))).toBe('−9 %')
+    expect(readable(formatRelative(100, 100))).toBe('0 %')
+  })
+
+  it('rounds like every other computed figure', () => {
+    expect(readable(formatRelative(1.3456, 1))).toBe('+35 %')
+    expect(readable(formatRelative(6_432_100, 6_000_000))).toBe('+7,2 %')
+  })
+
+  it('has nothing to say about a change from zero', () => {
+    expect(formatRelative(1000, 0)).toBe('–')
+    expect(formatRelative(0, 0)).toBe('–')
+    expect(formatRelative(Number.NaN, 100)).toBe('–')
+    expect(formatRelative(100, Number.POSITIVE_INFINITY)).toBe('–')
+  })
+
+  it('reports a drop to nothing as a total loss rather than a dash', () => {
+    // A ruined plan really is −100%, and it is a figure worth printing.
+    expect(readable(formatRelative(0, 6_000_000))).toBe('−100 %')
   })
 })
 
