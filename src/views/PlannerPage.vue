@@ -37,8 +37,16 @@ onMounted(() => {
     </div>
 
     <template v-else>
-      <OptionalSolver />
+      <!-- Everything above is what the household enters; everything below is
+           what the model makes of it. The rule marks that break, which a run of
+           otherwise unlabelled cards leaves the reader to infer. -->
+      <h2 class="section-title">Resultat</h2>
       <PlannerOutcome />
+      <!-- Last, because it answers a question the outcome raises: you read what
+           the plan does, then ask what it would take to make it hold. It also
+           takes its own upper bound from the floor run's survival, so it has
+           nothing to offer until those results exist. -->
+      <OptionalSolver />
     </template>
 
     <div class="card mt-4 mb-3">
@@ -229,6 +237,20 @@ header {
 
 .display-4 {
   font-weight: 300;
+}
+
+/* The page header one step down: same light weight and the same 2px rule, at a
+   size that carries across a screen of cards. It divides the page, so it needs
+   more air above it than the cards keep between themselves — otherwise it reads
+   as a caption belonging to the card below rather than as a heading over all of
+   them. */
+.section-title {
+  font-size: 1.75rem;
+  font-weight: 300;
+  border-bottom: 2px solid var(--bs-border-color);
+  padding-bottom: 0.75rem;
+  margin-top: 2.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .method {

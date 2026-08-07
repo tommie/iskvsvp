@@ -563,7 +563,10 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       percentilerna är underskattade — öka horisontens rutnät eller sänk avkastningen.
     </div>
 
-    <div class="row g-3">
+    <!-- Every block on the page carries its own bottom margin rather than
+         relying on what follows it, so the sections keep an even rhythm whatever
+         order they are in. -->
+    <div class="row g-3 mb-3">
       <div class="col-12 col-lg-6">
         <div class="card h-100">
           <div class="card-header">Sannolikhet att planen håller</div>
