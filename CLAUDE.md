@@ -33,7 +33,7 @@ src/
 │   ├── density.ts               - Grid mass to plottable density per decade
 │   ├── cadence.ts               - Yearly amounts as monthly/weekly/daily
 │   ├── format.ts                - Two-significant-digit kronor and percent
-│   ├── solve.ts                 - Optional multiplier for a survival target
+│   ├── solve.ts                 - Extra-spending multiplier for a survival target
 │   └── url.ts                   - Compact plan encoding (RLE cashflow)
 ├── composables/
 │   └── useDebounced.ts          - Collapse a burst of calls into one, with a pending flag
@@ -41,7 +41,7 @@ src/
 │   ├── planner/
 │   │   ├── PlannerInputs.vue    - Capital, taxes, portfolio, correlations
 │   │   ├── CashflowEditor.vue   - Click/drag-editable cashflow bar chart
-│   │   ├── OptionalSolver.vue   - Scales the optional to a survival target
+│   │   ├── ExtraSolver.vue      - Scales the extra to a survival target
 │   │   └── PlannerOutcome.vue   - Fan chart, survival curve, final distribution
 │   ├── InputParameters.vue      - Input form with fund presets
 │   ├── FundPresetSelector.vue   - Fund database selector with correlations
@@ -148,7 +148,7 @@ Per year, mirroring `simulation.ts`'s ordering: `w' = (w·G − c_t) − tax`.
 
 ### Invariants worth preserving
 
-- **Ruin is absorbing**, and is defined as failing to fund the *floor* withdrawal in full. A later deposit does not revive a failed plan.
+- **Ruin is absorbing**, and is defined as failing to fund the *need* withdrawal in full. A later deposit does not revive a failed plan.
 - **Percentiles are unconditional** — ruined outcomes sit at zero in the ordering. This is why p10 can be 0 whenever ruin exceeds 10%. Reporting survivor-conditional percentiles would hide the failure.
 - **The quadrature is moment-corrected**: abscissae are rescaled so the discrete law has exactly unit variance. Without it, a fraction-of-a-percent under-dispersion per year visibly narrows the distribution over 40 years.
 - **Annual rebalancing is assumed.** The portfolio is collapsed to one moment-matched lognormal; letting weights drift would make the asset split a path-dependent state a 1-D grid cannot carry.
@@ -159,20 +159,20 @@ Per year, mirroring `simulation.ts`'s ordering: `w' = (w·G − c_t) − tax`.
 - **Rebalancing turnover is derived, not assumed.** Rebalancing is forced by the assets drifting apart, so `expectedRebalancingTurnover` computes it from the same moments the return uses: turnover = ½ Σ x_i·E|R_i − R_p| / (1+μ_p), where each excess return is approximately normal and E|·| is a folded-normal mean. Consequences: a single asset turns over nothing, and two perfectly correlated equal-volatility assets never drift apart. It is taxable only in an AF account. **Known bias:** the realised gain uses the portfolio-average cost-basis ratio, but rebalancing systematically sells *winners*, which carry more embedded gain than average — so AF tax is understated slightly.
 - **The cost basis is nominal.** Swedish law does not index omkostnadsbeloppet, so what is taxed is the *nominal* gain. The basis ratio is unit-free (basis and value deflate alike), which means it must fall with **nominal** growth even though the grid runs in real terms — `grownRatio = startRatio / (factor * inflationFactor)`. Dividing by the real factor alone silently inflation-indexes the basis and understates AF tax by the whole price level. Regression-tested against a reference that runs entirely in nominal kronor and deflates only at the end.
 - **Basis grid alignment matters.** `buildBasisGrid` rounds the requested node count so a ratio of exactly 1 is always a node. That is the kink in `max(0, 1 - ratio)` and where fresh money starts; letting it fall between nodes smears phantom gain onto a holding that owes nothing, and showed up as a liquidation value below par for an untaxed portfolio.
-- **Three runs.** `floorRun` and `optionalRun` bracket the plan with fixed schedules; `adaptiveRun` takes the floor plus as much of the optional as a surplus test allows.
+- **Three runs.** `needRun` and `extraRun` bracket the plan with fixed schedules; `adaptiveRun` takes the need plus as much of the extra as a surplus test allows.
 
 ### The adaptive rule (`reserveSchedule`, `reserveReturnFor`)
 
-Spending stays driven by the amounts the household entered — the floor is never touched and the optional is never exceeded — so the balance acts only as a brake on the discretionary part, never as the driver. Each year: reserve the discounted remaining floor commitments, spread any surplus over the remaining payments, and pay `floor + clamp(surplus/annuity, 0, optional)`. It is Waring & Siegel's ARVA applied to the surplus alone, which is what gives both a guaranteed floor (plain ARVA has none) and a discretionary part that cannot run dry.
+Spending stays driven by the amounts the household entered — the need is never touched and the extra is never exceeded — so the balance acts only as a brake on the discretionary part, never as the driver. Each year: reserve the discounted remaining need commitments, spread any surplus over the remaining payments, and pay `need + clamp(surplus/annuity, 0, extra)`. It is Waring & Siegel's ARVA applied to the surplus alone, which is what gives both a guaranteed need (plain ARVA has none) and a discretionary part that cannot run dry.
 
-On the default plan the rule is **not** a trade of money for safety: it hands over *more* expected cash than spending the optional regardless (9,2 vs 8,9 mkr) at far lower failure risk (58% vs 36% survival). Spending unconditionally ruins plans early, and a failed plan stops withdrawing altogether, so the restraint buys back more years than it gives up. `expectedWithdrawn` on each run reports this; it is an expectation rather than a median, because the total taken depends on the whole spending path and its distribution would need cumulative withdrawals as a state variable.
+On the default plan the rule is **not** a trade of money for safety: it hands over *more* expected cash than spending the extra regardless (9,2 vs 8,9 mkr) at far lower failure risk (58% vs 36% survival). Spending unconditionally ruins plans early, and a failed plan stops withdrawing altogether, so the restraint buys back more years than it gives up. `expectedWithdrawn` on each run reports this; it is an expectation rather than a median, because the total taken depends on the whole spending path and its distribution would need cumulative withdrawals as a state variable.
 
 Two things to know before changing it:
 
-- **The reserve discounts at the 25th percentile of the compound return, not the median.** Discounting at the expected return makes the reserve a coin-flip hurdle: a plan clears it for years while spending the whole optional and only starts cutting once the damage is done. Measured on the default plan, switching from median to 25th percentile took the recovered share of the survival gap from 46% to 66%. The rate is derived from the plan's own return law less the proportional tax drag, so the rule adds no forecast of its own.
+- **The reserve discounts at the 25th percentile of the compound return, not the median.** Discounting at the expected return makes the reserve a coin-flip hurdle: a plan clears it for years while spending the whole extra and only starts cutting once the damage is done. Measured on the default plan, switching from median to 25th percentile took the recovered share of the survival gap from 46% to 66%. The rate is derived from the plan's own return law less the proportional tax drag, so the rule adds no forecast of its own.
 - **The annuity is a *due*, not immediate.** The year's withdrawal is taken straight after returns, so the first remaining payment is undiscounted. Getting this wrong shifts both reserve and payment count by a factor of (1+r).
 
-Guardrail families with hysteresis (Guyton-Klinger, Vanguard's ceiling/floor, the Kitces ratchet in `simulation.ts`) are deliberately **not** used: hysteresis is memory, so the current spending level becomes a state variable and costs a grid dimension. This rule is Markov in `(w, t)` and therefore free. If hysteresis is ever wanted, a *binary* on/off optional is one extra bit — the grid doubles rather than multiplying by 30.
+Guardrail families with hysteresis (Guyton-Klinger, Vanguard's ceiling/floor, the Kitces ratchet in `simulation.ts`) are deliberately **not** used: hysteresis is memory, so the current spending level becomes a state variable and costs a grid dimension. This rule is Markov in `(w, t)` and therefore free. If hysteresis is ever wanted, a *binary* on/off extra is one extra bit — the grid doubles rather than multiplying by 30.
 - **Inflation is deterministic.** Because returns are real and the ISK schablon is proportional, inflation cancels out of the real result *except* through `iskAllowance` (fribelopp), which is nominal and un-indexed — **given a fixed `iskTaxRate`**, which is an assumption rather than a consequence (see below). The allowance default tracks current law (300 000 kr from 2026). Deflating it is a forecast that it is never raised; the 100 000 kr loss threshold has stood since 1991 and supports that, but the fribelopp was doubled in its second year, so real-constant is about as defensible. Noted in `propagate.ts`; not worth a parameter at current magnitudes. Test helpers set `iskAllowance: 0` so the closed-form checks see a flat proportional tax; the Monte Carlo simulator models no allowance at all.
 - **The schablon rate is a real-SLR forecast, and the model's largest un-surfaced sensitivity.** It defaults to **4%**, a long-run level rather than the 2026 spot of 3.55% — holding one year's rate for four decades lets short-term rate moves drive the answer, which is why the pension standard fixes a long-run SLR too (it uses 2.5%, i.e. a 3.5% schablon; 4% implies ~3% SLR, from KI's policy-rate path plus the observed term premium). It is deliberately **independent of `inflationRate`** despite SLR being a nominal yield: measured on Riksgälden's weekly series from 1986 against SCB's KPI, pass-through in the inflation-targeting era 1995–2025 is a slope of −0.09, and SLR *negatively* predicts the next five years' inflation. 2022–23 inflation of 8.4%/8.6% moved SLR from 1.5% to 2.5%. What moves the schablon is the real rate, which fell across 8 points in the sample (+5.5% real SLR in 1996–2000 to −2.8% in 2021–25); full-sample regressions look Fisher-like only because that decline overlapped the disinflation. Band it at ±1.5 points, not by varying inflation — one point of SLR is 0.3 points of annual drag, ~11% of terminal capital over forty years.
 - Asset-class returns follow the Swedish **Prognosstandard för pensioner** (Pensionsmyndigheten + Svensk Försäkring, used by minPension), not the fund database — that database is nominal, short-window, per-fund. Standard: 6.5% nominal globala aktier, 2.5% långa räntor, 2% inflation, 3.5% real at its 75/25 reference. **The standard is deterministic, so its figures are compound rates**; `expectedRealReturn` holds the arithmetic mean that reproduces each compound rate at that volatility. Copying the standard's number straight in would understate growth by ~σ²/2 a year. Volatilities are *not* in the standard (it states none) and stay DMS-order. Tests pin the round trip.
@@ -198,13 +198,13 @@ The AF cross-check runs with **non-zero inflation** and in nominal terms on purp
 
 Two AF tolerances are deliberately loose and should not be tightened without understanding why. The zero-volatility AF recursion is ~0.5% off at default resolution because there is no averaging over returns to smooth the basis interpolation; the test asserts convergence under refinement instead. And a Monte Carlo median is meaningless when ruin approaches 50%, since the median is then the smallest surviving outcome — compare quantiles well clear of the ruin mass.
 
-### The optional-scale solver (`solve.ts`, `OptionalSolver.vue`)
+### The extra-scale solver (`solve.ts`, `ExtraSolver.vue`)
 
-Bisects for the multiple of the drawn optional curve that meets a survival target. Solving for a *multiplier* rather than an amount is what preserves the spending shape the household designed — only the level is negotiable.
+Bisects for the multiple of the drawn extra curve that meets a survival target. Solving for a *multiplier* rather than an amount is what preserves the spending shape the household designed — only the level is negotiable.
 
 - Survival is monotone in the multiplier, so plain bisection suffices; ~13 evaluations. `adaptiveSurvival` exists so each step runs one propagation rather than three.
-- The slider is bounded above by the **floor run's own survival**, which is the best the plan can reach with no optional at all. That makes an unreachable target structurally impossible rather than an error to report. Default 85%, clamped down when the floor cannot reach it — the practitioner band is 80–90% (Blanchett, Vanguard, Schwab, Kitces, J.P. Morgan), and it applies here to the floor, which is the part that must not fail.
-- The whole card is hidden when the floor cannot clear the slider's 50% lower bound. There is no target worth offering then; the floor is what fails and discretionary restraint cannot fix it.
+- The slider is bounded above by the **need run's own survival**, which is the best the plan can reach with no extra at all. That makes an unreachable target structurally impossible rather than an error to report. Default 85%, clamped down when the need run cannot reach it — the practitioner band is 80–90% (Blanchett, Vanguard, Schwab, Kitces, J.P. Morgan), and it applies here to the need, which is the part that must not fail.
+- The whole card is hidden when the need run cannot clear the slider's 50% lower bound. There is no target worth offering then; the need is what fails and discretionary restraint cannot fix it.
 - **Applying is a plain `<a href>`** to the rescaled plan, not a store mutation. The whole plan lives in the query string, so this is an ordinary navigation and the browser's back button is the undo — no history bookkeeping of our own.
 - Scaled amounts are floored to two significant digits (`floorToSignificant`). Rounding *down* can only underspend the target, keeping the result on the safe side of what was solved for. It does mean a multi-phase shape is not preserved exactly: the flooring bites unevenly across magnitudes, up to ~5% on a year that sits just under a boundary.
 - **A multiplier within `NEGLIGIBLE_SCALE_CHANGE` (5%) of 1 is not offered** — the link is disabled and the card says the plan is already there. That flooring to two significant digits often writes back the identical schedule, and what does move, moves by less than the grid's error in the survival probability it was solved for. The predicate lives in `solve.ts` rather than the component because the justification is the model's precision, not the layout.
@@ -215,7 +215,7 @@ Bisects for the multiple of the drawn optional curve that meets a survival targe
 
 Every *computed* figure goes through `src/planner/format.ts` and is rounded to **two significant digits**. The grid leaves the ruin probability a few tenths of a percentage point out and the return assumptions are round numbers, so a balance printed to the krona claims precision the model does not have. Values the user typed are echoed back as entered — the rounding is for outputs only.
 
-The cash flow editor is the one exemption (`formatKrExact`): its cadence lines restate an exact input in another unit rather than reporting a result, so 200 000 a year is shown as 16 667 a month, and its total column is just floor plus optional. Rounding either would make it worse at the only thing it is for, which is comparison against a household budget.
+The cash flow editor is the one exemption (`formatKrExact`): its cadence lines restate an exact input in another unit rather than reporting a result, so 200 000 a year is shown as 16 667 a month, and its total column is just need plus extra. Rounding either would make it worse at the only thing it is for, which is comparison against a household budget.
 
 The Slutkapital table can restate its figures as changes rather than amounts (`formatRelative`, "Förändring från start"). The comparison is **column-wise**, each figure against the thing it is a change *from*: final capital against `initialCapital`, expected withdrawal against that column's planned total. Both sides are real, so the change is too. The planned total itself stays in kronor — it is an input echoed back and the reference the row below is measured against, so turning it into "0 %" would delete the anchor. A reference of zero prints the same dash as any unstatable figure; a *value* of zero against a real reference is −100%, which is a ruined plan and worth printing.
 
@@ -245,7 +245,7 @@ The Slutkapital table can restate its figures as changes rather than amounts (`f
 - UI labels in Swedish
 - Code variables and comments in English
 - Number formatting uses Swedish locale (`sv-SE`)
-- Planner: the engine's `floor` and `optional` are **Behov** and **Extra** in the UI (*behovsuttag* and *extrauttag* in running prose, *det extra* attributively). The code words stay as they are — they are the literature's terms for the two parts of a spending plan, and the URL keys and stored plans are built on them. Say *tidsperiod*, not *horisont*.
+- Planner: the engine says `need` and `extra`, matching the UI's **Behov** and **Extra** (*behovsuttag* and *extrauttag* in running prose, *det extra* attributively). The simulator's own `floor` is a different thing — the ratchet's lower bound — and so is `floorToSignificant`. Say *tidsperiod*, not *horisont*.
 
 ## Development
 

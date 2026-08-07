@@ -4,7 +4,7 @@ import type { CashflowYear, PlannerParameters } from './types'
 // Compact URL encoding for a plan, so a plan can be shared or bookmarked.
 //
 // The cash flow is the bulky part: one entry per year, most of them identical.
-// It is run-length encoded as "count*floor|optional" segments, which keeps a
+// It is run-length encoded as "count*need|extra" segments, which keeps a
 // typical plan — a handful of distinct spending phases — down to a few dozen
 // characters regardless of the horizon.
 
@@ -17,11 +17,11 @@ function encodeCashflow(cashflow: CashflowYear[]): string {
 
   const flush = () => {
     if (current === null || count === 0) return
-    segments.push(`${count}*${current.floor}|${current.optional}`)
+    segments.push(`${count}*${current.need}|${current.extra}`)
   }
 
   for (const year of cashflow) {
-    if (current !== null && year.floor === current.floor && year.optional === current.optional) {
+    if (current !== null && year.need === current.need && year.extra === current.extra) {
       count++
       continue
     }
@@ -42,12 +42,12 @@ function decodeCashflow(encoded: string, years: number): CashflowYear[] | null {
     const match = segment.match(/^(\d+)\*(-?[\d.]+)\|(-?[\d.]+)$/)
     if (!match) return null
     const count = parseInt(match[1]!, 10)
-    const floor = parseFloat(match[2]!)
-    const optional = parseFloat(match[3]!)
-    if (!Number.isFinite(floor) || !Number.isFinite(optional)) return null
+    const need = parseFloat(match[2]!)
+    const extra = parseFloat(match[3]!)
+    if (!Number.isFinite(need) || !Number.isFinite(extra)) return null
     // Guard against a hand-edited URL asking for a huge allocation.
     if (count < 1 || cashflow.length + count > 200) return null
-    for (let i = 0; i < count; i++) cashflow.push({ floor, optional })
+    for (let i = 0; i < count; i++) cashflow.push({ need, extra })
   }
 
   if (cashflow.length !== years) return null

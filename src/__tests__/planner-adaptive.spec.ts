@@ -19,7 +19,7 @@ function singleAsset(expectedRealReturn: number, volatility: number) {
 const finalOf = (run: { outcomes: { median: number; ruinProbability: number }[] }) =>
   run.outcomes[run.outcomes.length - 1]!
 
-describe('adaptive optional withdrawals', () => {
+describe('adaptive extra withdrawals', () => {
   it('sits between the two fixed runs', () => {
     const years = 40
     const result = runPlanner(
@@ -30,19 +30,19 @@ describe('adaptive optional withdrawals', () => {
       }),
     )
 
-    // It spends at least the floor and at most floor+optional every year, so
+    // It spends at least the need and at most need+extra every year, so
     // both its survival and its terminal capital have to land in between.
-    const floor = finalOf(result.floorRun)
-    const optional = finalOf(result.optionalRun)
+    const need = finalOf(result.needRun)
+    const extra = finalOf(result.extraRun)
     const adaptive = finalOf(result.adaptiveRun)
 
-    expect(adaptive.ruinProbability).toBeGreaterThanOrEqual(floor.ruinProbability - 1e-12)
-    expect(adaptive.ruinProbability).toBeLessThanOrEqual(optional.ruinProbability + 1e-12)
-    expect(adaptive.median).toBeLessThanOrEqual(floor.median)
-    expect(adaptive.median).toBeGreaterThanOrEqual(optional.median)
+    expect(adaptive.ruinProbability).toBeGreaterThanOrEqual(need.ruinProbability - 1e-12)
+    expect(adaptive.ruinProbability).toBeLessThanOrEqual(extra.ruinProbability + 1e-12)
+    expect(adaptive.median).toBeLessThanOrEqual(need.median)
+    expect(adaptive.median).toBeGreaterThanOrEqual(extra.median)
   })
 
-  it('cuts failure risk well below spending the optional regardless', () => {
+  it('cuts failure risk well below spending the extra regardless', () => {
     const years = 40
     const result = runPlanner(
       plan({
@@ -52,19 +52,19 @@ describe('adaptive optional withdrawals', () => {
       }),
     )
 
-    // The whole point: taking the optional only when it is affordable should
+    // The whole point: taking the extra only when it is affordable should
     // recover most of the survival that taking it unconditionally gives up.
-    const floorRuin = finalOf(result.floorRun).ruinProbability
-    const optionalRuin = finalOf(result.optionalRun).ruinProbability
+    const needRuin = finalOf(result.needRun).ruinProbability
+    const extraRuin = finalOf(result.extraRun).ruinProbability
     const adaptiveRuin = finalOf(result.adaptiveRun).ruinProbability
     // Measured at about two thirds for this plan. The remainder is the price
-    // of actually spending the optional when it is affordable — a rule that
+    // of actually spending the extra when it is affordable — a rule that
     // recovered all of it would be one that never paid out.
-    const recovered = (optionalRuin - adaptiveRuin) / (optionalRuin - floorRuin)
+    const recovered = (extraRuin - adaptiveRuin) / (extraRuin - needRuin)
     expect(recovered).toBeGreaterThan(0.6)
   })
 
-  it('never touches the floor, so a plan with no optional is unchanged', () => {
+  it('never touches the need, so a plan with no extra is unchanged', () => {
     const years = 30
     const result = runPlanner(
       plan({
@@ -75,18 +75,18 @@ describe('adaptive optional withdrawals', () => {
     )
 
     // With nothing discretionary to modulate there is nothing for the rule to
-    // do, and it must not quietly alter the floor itself.
-    expect(finalOf(result.adaptiveRun).median).toBe(finalOf(result.floorRun).median)
+    // do, and it must not quietly alter the need itself.
+    expect(finalOf(result.adaptiveRun).median).toBe(finalOf(result.needRun).median)
     expect(finalOf(result.adaptiveRun).ruinProbability).toBeCloseTo(
-      finalOf(result.floorRun).ruinProbability,
+      finalOf(result.needRun).ruinProbability,
       12,
     )
   })
 
-  it('pays the full optional when the plan is far ahead of its commitments', () => {
+  it('pays the full extra when the plan is far ahead of its commitments', () => {
     const years = 20
-    // Capital far beyond what the floor needs, so the surplus supports the
-    // whole optional from the first year and the run matches spending it
+    // Capital far beyond what the need needs, so the surplus supports the
+    // whole extra from the first year and the run matches spending it
     // unconditionally.
     const result = runPlanner(
       plan({
@@ -96,10 +96,7 @@ describe('adaptive optional withdrawals', () => {
         ...singleAsset(0.05, 0.1),
       }),
     )
-    expect(finalOf(result.adaptiveRun).median / finalOf(result.optionalRun).median).toBeCloseTo(
-      1,
-      2,
-    )
+    expect(finalOf(result.adaptiveRun).median / finalOf(result.extraRun).median).toBeCloseTo(1, 2)
   })
 
   describe('the clamp at both ends, with returns held deterministic', () => {
@@ -127,14 +124,14 @@ describe('adaptive optional withdrawals', () => {
         }),
       ).adaptiveRun.outcomes[1]!.mean
 
-    it('pays the floor alone when the balance is short of the reserve', () => {
+    it('pays the need alone when the balance is short of the reserve', () => {
       const capital = 2_500_000
       expect(capital * (1 + rate)).toBeLessThan(reserve)
-      // Nothing spare, so the optional is declined in full.
+      // Nothing spare, so the extra is declined in full.
       expect(oneYear(capital)).toBeCloseTo(capital * (1 + rate) - 200_000, 2)
     })
 
-    it('pays part of the optional out of a thin surplus', () => {
+    it('pays part of the extra out of a thin surplus', () => {
       const capital = 4_000_000
       const grown = capital * (1 + rate)
       const affordable = (grown - reserve) / annuity
@@ -143,7 +140,7 @@ describe('adaptive optional withdrawals', () => {
       expect(oneYear(capital)).toBeCloseTo(grown - 200_000 - affordable, 2)
     })
 
-    it('never pays more than the optional the household asked for', () => {
+    it('never pays more than the extra the household asked for', () => {
       const capital = 20_000_000
       const grown = capital * (1 + rate)
       // The surplus would support far more, but the plan only wants 100 000.
@@ -181,14 +178,14 @@ describe('adaptive optional withdrawals', () => {
       )
 
     // A higher expected return discounts the same commitments to a smaller
-    // reserve, which frees more surplus and pays more of the optional.
+    // reserve, which frees more surplus and pays more of the extra.
     const modest = build(0.03)
     const strong = build(0.07)
     expect(strong.reserveReturn).toBeGreaterThan(modest.reserveReturn)
 
-    const gapToFloor = (r: ReturnType<typeof build>) =>
-      finalOf(r.floorRun).median - finalOf(r.adaptiveRun).median
-    expect(gapToFloor(strong)).toBeGreaterThan(gapToFloor(modest))
+    const gapToNeed = (r: ReturnType<typeof build>) =>
+      finalOf(r.needRun).median - finalOf(r.adaptiveRun).median
+    expect(gapToNeed(strong)).toBeGreaterThan(gapToNeed(modest))
   })
 
   it('works for AF as well as ISK', () => {
@@ -203,7 +200,7 @@ describe('adaptive optional withdrawals', () => {
     )
     const adaptive = finalOf(result.adaptiveRun)
     expect(adaptive.ruinProbability).toBeLessThanOrEqual(
-      finalOf(result.optionalRun).ruinProbability + 1e-12,
+      finalOf(result.extraRun).ruinProbability + 1e-12,
     )
     // The cost-basis dimension has to be carried through the adaptive run too.
     expect(result.adaptiveRun.liquidOutcomes).toBeDefined()
@@ -211,12 +208,12 @@ describe('adaptive optional withdrawals', () => {
 })
 
 describe('actual versus planned withdrawals', () => {
-  const planned = (years: number, floor: number, optional: number) => years * (floor + optional)
+  const planned = (years: number, need: number, extra: number) => years * (need + extra)
 
   it('takes exactly the plan when nothing fails and nothing is declined', () => {
     const years = 20
     // No volatility and capital far beyond the reserve, so every year pays the
-    // floor and the whole optional, and no path ruins.
+    // need and the whole extra, and no path ruins.
     const result = runPlanner(
       plan({
         years,
@@ -226,7 +223,7 @@ describe('actual versus planned withdrawals', () => {
       }),
     )
     const target = planned(years, 200_000, 100_000)
-    expect(result.optionalRun.expectedWithdrawn).toBeCloseTo(target, 2)
+    expect(result.extraRun.expectedWithdrawn).toBeCloseTo(target, 2)
     expect(result.adaptiveRun.expectedWithdrawn).toBeCloseTo(target, 2)
   })
 
@@ -243,10 +240,10 @@ describe('actual versus planned withdrawals', () => {
         ...singleAsset(0, 0),
       }),
     )
-    expect(result.floorRun.expectedWithdrawn).toBeCloseTo(5 * 190_000, 2)
+    expect(result.needRun.expectedWithdrawn).toBeCloseTo(5 * 190_000, 2)
   })
 
-  it('delivers more spending than taking the optional regardless', () => {
+  it('delivers more spending than taking the extra regardless', () => {
     const years = 40
     const result = runPlanner(
       plan({
@@ -262,12 +259,10 @@ describe('actual versus planned withdrawals', () => {
     // back more years of spending than it gives up. Against the unconditional
     // run it is better on both money and risk, not a trade between them.
     const target = planned(years, 200_000, 100_000)
-    expect(result.adaptiveRun.expectedWithdrawn).toBeGreaterThan(
-      result.optionalRun.expectedWithdrawn,
-    )
-    expect(result.adaptiveRun.expectedWithdrawn).toBeGreaterThan(result.floorRun.expectedWithdrawn)
+    expect(result.adaptiveRun.expectedWithdrawn).toBeGreaterThan(result.extraRun.expectedWithdrawn)
+    expect(result.adaptiveRun.expectedWithdrawn).toBeGreaterThan(result.needRun.expectedWithdrawn)
     // And neither can exceed what was planned.
-    for (const run of [result.floorRun, result.optionalRun, result.adaptiveRun]) {
+    for (const run of [result.needRun, result.extraRun, result.adaptiveRun]) {
       expect(run.expectedWithdrawn).toBeLessThanOrEqual(target + 1e-6)
     }
   })
@@ -283,6 +278,6 @@ describe('actual versus planned withdrawals', () => {
         ...singleAsset(0.05, 0),
       }),
     )
-    expect(result.floorRun.expectedWithdrawn).toBeCloseTo(-10 * 100_000, 2)
+    expect(result.needRun.expectedWithdrawn).toBeCloseTo(-10 * 100_000, 2)
   })
 })

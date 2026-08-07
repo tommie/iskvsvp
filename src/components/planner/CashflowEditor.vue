@@ -11,8 +11,8 @@ import { formatKrExact } from '../../planner/format'
 const store = usePlannerStore()
 const { cashflow, startAge } = storeToRefs(store)
 
-const FLOOR_COLOR = '#0d6efd'
-const OPTIONAL_COLOR = '#9ec5fe'
+const NEED_COLOR = '#0d6efd'
+const EXTRA_COLOR = '#9ec5fe'
 const DEPOSIT_COLOR = '#198754'
 const CHART_HEIGHT = 260
 
@@ -35,23 +35,23 @@ const selectionLabel = computed(() => {
 })
 
 // The inputs show the first selected year's values. Editing one applies it to
-// the whole selection, which is what makes "lower the floor from year 7
+// the whole selection, which is what makes "lower the need from year 7
 // onwards" a two-click operation rather than thirty edits.
-const editedFloor = ref(0)
-const editedOptional = ref(0)
+const editedNeed = ref(0)
+const editedExtra = ref(0)
 
 watch(
   [selection, cashflow],
   () => {
     const entry = cashflow.value[Math.min(selection.value.from, selection.value.to)]
     if (!entry) return
-    editedFloor.value = entry.floor
-    editedOptional.value = entry.optional
+    editedNeed.value = entry.need
+    editedExtra.value = entry.extra
   },
   { immediate: true, deep: true },
 )
 
-function applyToSelection(values: { floor?: number; optional?: number }) {
+function applyToSelection(values: { need?: number; extra?: number }) {
   store.setCashflowRange(selection.value.from, selection.value.to, values)
 }
 
@@ -67,13 +67,13 @@ function selectAll() {
 }
 
 /**
- * What the selected years actually pay out: floor plus optional.
+ * What the selected years actually pay out: need plus extra.
  *
  * The two fields are entered separately because the plan treats them
  * differently, but nobody budgets in two halves — the figure to hold against a
  * household's outgoings is their sum, in the same cadences.
  */
-const editedTotal = computed(() => editedFloor.value + editedOptional.value)
+const editedTotal = computed(() => editedNeed.value + editedExtra.value)
 
 const chartData = computed(() => ({
   cashflow: cashflow.value,
@@ -105,8 +105,8 @@ const renderChart = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
 
   // The domain always includes zero so deposits and withdrawals share a
   // baseline and can be told apart at a glance.
-  const totals = entries.map((entry) => entry.floor + entry.optional)
-  const low = Math.min(0, d3.min(entries, (entry) => entry.floor) ?? 0)
+  const totals = entries.map((entry) => entry.need + entry.extra)
+  const low = Math.min(0, d3.min(entries, (entry) => entry.need) ?? 0)
   const high = Math.max(0, d3.max(totals) ?? 0)
   const y = d3
     .scaleLinear()
@@ -165,7 +165,7 @@ const renderChart = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     .attr('stroke-linecap', 'round')
     .attr('stroke-linejoin', 'round')
 
-  // Floor bars. Deposits go downwards from the baseline in their own colour.
+  // Need bars. Deposits go downwards from the baseline in their own colour.
   plot
     .append('g')
     .selectAll('rect')
@@ -173,11 +173,11 @@ const renderChart = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     .join('rect')
     .attr('x', (_, index) => x(index) ?? 0)
     .attr('width', x.bandwidth())
-    .attr('y', (entry) => y(Math.max(0, entry.floor)))
-    .attr('height', (entry) => Math.abs(y(entry.floor) - y(0)))
-    .attr('fill', (entry) => (entry.floor < 0 ? DEPOSIT_COLOR : FLOOR_COLOR))
+    .attr('y', (entry) => y(Math.max(0, entry.need)))
+    .attr('height', (entry) => Math.abs(y(entry.need) - y(0)))
+    .attr('fill', (entry) => (entry.need < 0 ? DEPOSIT_COLOR : NEED_COLOR))
 
-  // Optional top-up, stacked from the floor upwards.
+  // Extra top-up, stacked from the need upwards.
   plot
     .append('g')
     .selectAll('rect')
@@ -185,9 +185,9 @@ const renderChart = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     .join('rect')
     .attr('x', (_, index) => x(index) ?? 0)
     .attr('width', x.bandwidth())
-    .attr('y', (entry) => y(entry.floor + entry.optional))
-    .attr('height', (entry) => Math.abs(y(entry.floor + entry.optional) - y(entry.floor)))
-    .attr('fill', OPTIONAL_COLOR)
+    .attr('y', (entry) => y(entry.need + entry.extra))
+    .attr('height', (entry) => Math.abs(y(entry.need + entry.extra) - y(entry.need)))
+    .attr('fill', EXTRA_COLOR)
 
   const yearAt = (event: MouseEvent): number => {
     const [pointerX] = d3.pointer(event, plot.node())
@@ -260,9 +260,9 @@ function stopDragging() {
 
           <div class="d-flex flex-wrap gap-3 align-items-center small text-muted mt-2">
             <span
-              ><span class="swatch" :style="{ background: FLOOR_COLOR }"></span> Behov (uttag)</span
+              ><span class="swatch" :style="{ background: NEED_COLOR }"></span> Behov (uttag)</span
             >
-            <span><span class="swatch" :style="{ background: OPTIONAL_COLOR }"></span> Extra</span>
+            <span><span class="swatch" :style="{ background: EXTRA_COLOR }"></span> Extra</span>
             <span
               ><span class="swatch" :style="{ background: DEPOSIT_COLOR }"></span> Insättning</span
             >
@@ -276,30 +276,30 @@ function stopDragging() {
           </div>
 
           <div>
-            <label class="form-label" for="cashflow-floor">Behov (kr/år)</label>
+            <label class="form-label" for="cashflow-need">Behov (kr/år)</label>
             <input
-              id="cashflow-floor"
-              v-model.number="editedFloor"
+              id="cashflow-need"
+              v-model.number="editedNeed"
               type="number"
               step="10000"
               class="form-control"
-              @change="applyToSelection({ floor: editedFloor })"
+              @change="applyToSelection({ need: editedNeed })"
             />
-            <div class="form-text">{{ formatCadences(editedFloor) }}</div>
+            <div class="form-text">{{ formatCadences(editedNeed) }}</div>
           </div>
 
           <div>
-            <label class="form-label" for="cashflow-optional">Extra (kr/år)</label>
+            <label class="form-label" for="cashflow-extra">Extra (kr/år)</label>
             <input
-              id="cashflow-optional"
-              v-model.number="editedOptional"
+              id="cashflow-extra"
+              v-model.number="editedExtra"
               type="number"
               step="10000"
               min="0"
               class="form-control"
-              @change="applyToSelection({ optional: editedOptional })"
+              @change="applyToSelection({ extra: editedExtra })"
             />
-            <div class="form-text">{{ formatCadences(editedOptional) }}</div>
+            <div class="form-text">{{ formatCadences(editedExtra) }}</div>
           </div>
 
           <div>

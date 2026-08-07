@@ -27,8 +27,8 @@ beforeAll(() => {
 })
 
 const INITIAL_CAPITAL = 6_000_000
-const FLOOR = 200_000
-const OPTIONAL = 100_000
+const NEED = 200_000
+const EXTRA = 100_000
 const YEARS = 40
 
 function mountOutcome() {
@@ -40,7 +40,7 @@ function mountOutcome() {
     iskAllowance: 0,
     years: YEARS,
     initialCapital: INITIAL_CAPITAL,
-    cashflow: buildCashflow(YEARS, FLOOR, OPTIONAL),
+    cashflow: buildCashflow(YEARS, NEED, EXTRA),
   })
   store.run()
 
@@ -86,11 +86,11 @@ describe('PlannerOutcome relative view', () => {
     const { wrapper } = mountOutcome()
     await toggleRelative(wrapper)
 
-    // The floor column plans the floor alone; the other two add the optional.
+    // The need column plans the need alone; the other two add the extra.
     const planned = row(wrapper, 'Totalt planerat uttag')
-    expect(planned[0]).toBe(formatKr(YEARS * FLOOR))
-    expect(planned[1]).toBe(formatKr(YEARS * (FLOOR + OPTIONAL)))
-    expect(planned[2]).toBe(formatKr(YEARS * (FLOOR + OPTIONAL)))
+    expect(planned[0]).toBe(formatKr(YEARS * NEED))
+    expect(planned[1]).toBe(formatKr(YEARS * (NEED + EXTRA)))
+    expect(planned[2]).toBe(formatKr(YEARS * (NEED + EXTRA)))
   })
 
   it('states the expected withdrawal against what that column planned', async () => {
@@ -98,9 +98,9 @@ describe('PlannerOutcome relative view', () => {
     await toggleRelative(wrapper)
 
     const expected = [
-      formatRelative(store.results!.floorRun.expectedWithdrawn, YEARS * FLOOR),
-      formatRelative(store.results!.adaptiveRun.expectedWithdrawn, YEARS * (FLOOR + OPTIONAL)),
-      formatRelative(store.results!.optionalRun.expectedWithdrawn, YEARS * (FLOOR + OPTIONAL)),
+      formatRelative(store.results!.needRun.expectedWithdrawn, YEARS * NEED),
+      formatRelative(store.results!.adaptiveRun.expectedWithdrawn, YEARS * (NEED + EXTRA)),
+      formatRelative(store.results!.extraRun.expectedWithdrawn, YEARS * (NEED + EXTRA)),
     ]
     expect(row(wrapper, 'Förväntat faktiskt uttag')).toEqual(expected)
     // A plan can only fall short of its own schedule, never exceed it.

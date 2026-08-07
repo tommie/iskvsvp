@@ -12,8 +12,8 @@ import D3Chart from '../D3Chart.vue'
 const store = usePlannerStore()
 const { results, cashflow, initialCapital } = storeToRefs(store)
 
-const FLOOR_COLOR = '#0d6efd'
-const OPTIONAL_COLOR = '#fd7e14'
+const NEED_COLOR = '#0d6efd'
+const EXTRA_COLOR = '#fd7e14'
 const ADAPTIVE_COLOR = '#6f42c1'
 const CHART_HEIGHT = 320
 
@@ -68,23 +68,20 @@ const runs = computed(() => {
     }
   }
   return [
-    resolve(results.value.floorRun, FLOOR_COLOR, false),
+    resolve(results.value.needRun, NEED_COLOR, false),
     resolve(results.value.adaptiveRun, ADAPTIVE_COLOR, false),
-    resolve(results.value.optionalRun, OPTIONAL_COLOR, true),
+    resolve(results.value.extraRun, EXTRA_COLOR, true),
   ]
 })
 
 /** Total real cash taken out over the horizon, for context on the trade-off. */
-function totalWithdrawn(includeOptional: boolean): number {
-  return cashflow.value.reduce(
-    (sum, year) => sum + year.floor + (includeOptional ? year.optional : 0),
-    0,
-  )
+function totalWithdrawn(includeExtra: boolean): number {
+  return cashflow.value.reduce((sum, year) => sum + year.need + (includeExtra ? year.extra : 0), 0)
 }
 
 const summary = computed(() => {
   if (!results.value) return null
-  const build = (entry: (typeof runs.value)[number], includeOptional: boolean) => {
+  const build = (entry: (typeof runs.value)[number], includeExtra: boolean) => {
     const final = entry.outcomes[entry.outcomes.length - 1]!
     return {
       label: entry.run.label,
@@ -92,7 +89,7 @@ const summary = computed(() => {
       median: final.median,
       percentile10: final.percentile10,
       percentile90: final.percentile90,
-      withdrawn: totalWithdrawn(includeOptional),
+      withdrawn: totalWithdrawn(includeExtra),
       actualWithdrawn: entry.run.expectedWithdrawn,
     }
   }
@@ -103,14 +100,14 @@ const summary = computed(() => {
 const hasDeferredTax = computed(
   () =>
     !!results.value &&
-    (results.value.floorRun.liquidOutcomes !== undefined ||
-      results.value.optionalRun.liquidOutcomes !== undefined),
+    (results.value.needRun.liquidOutcomes !== undefined ||
+      results.value.extraRun.liquidOutcomes !== undefined),
 )
 
 /** Warns when the grid could not hold the upper tail; see PropagationRun.clippedMass. */
 const gridWarning = computed(() => {
   if (!results.value) return null
-  const worst = Math.max(results.value.floorRun.clippedMass, results.value.optionalRun.clippedMass)
+  const worst = Math.max(results.value.needRun.clippedMass, results.value.extraRun.clippedMass)
   return worst > 1e-6 ? worst : null
 })
 
@@ -157,12 +154,12 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
 
   const upper = d3.max(runs.value, (entry) => d3.max(entry.outcomes, (o) => o.percentile90)) ?? 1
 
-  // A log axis cannot show ruin, which sits at exactly zero. The floor is set
+  // A log axis cannot show ruin, which sits at exactly zero. The bottom is set
   // to a small fraction of the top of the range so a collapsing plan still
   // reads as "falls off the chart" rather than being clipped invisibly.
-  const floor = Math.max(1, upper * 1e-4)
+  const lowerBound = Math.max(1, upper * 1e-4)
   const y = logScale.value
-    ? d3.scaleLog().domain([floor, upper]).range([innerHeight, 0]).clamp(true)
+    ? d3.scaleLog().domain([lowerBound, upper]).range([innerHeight, 0]).clamp(true)
     : d3.scaleLinear().domain([0, upper]).range([innerHeight, 0])
 
   plot
@@ -177,7 +174,7 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   if (logScale.value) {
     leftAxis.tickValues(
       d3
-        .range(Math.ceil(Math.log10(floor)), Math.floor(Math.log10(upper)) + 1)
+        .range(Math.ceil(Math.log10(lowerBound)), Math.floor(Math.log10(upper)) + 1)
         .map((exponent) => Math.pow(10, exponent)),
     )
   } else {
@@ -189,15 +186,15 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     const band = d3
       .area<(typeof series)[number]>()
       .x((o) => x(o.age))
-      .y0((o) => y(Math.max(floor, o.percentile10)))
-      .y1((o) => y(Math.max(floor, o.percentile90)))
+      .y0((o) => y(Math.max(lowerBound, o.percentile10)))
+      .y1((o) => y(Math.max(lowerBound, o.percentile90)))
 
     plot.append('path').datum(series).attr('d', band).attr('fill', color).attr('fill-opacity', 0.15)
 
     const line = d3
       .line<(typeof series)[number]>()
       .x((o) => x(o.age))
-      .y((o) => y(Math.max(floor, o.median)))
+      .y((o) => y(Math.max(lowerBound, o.median)))
 
     plot
       .append('path')
@@ -222,7 +219,7 @@ const renderSurvival = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     left: 60,
   })
 
-  const outcomes = results.value.floorRun.outcomes
+  const outcomes = results.value.needRun.outcomes
   const x = d3
     .scaleLinear()
     .domain([outcomes[0]!.age, outcomes[outcomes.length - 1]!.age])

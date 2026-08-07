@@ -2,13 +2,13 @@ import { adaptiveSurvival } from './propagate'
 import type { PlannerParameters } from './types'
 
 /**
- * Largest multiple of the drawn optional the solver will consider.
+ * Largest multiple of the drawn extra the solver will consider.
  *
  * Beyond this the answer stops being a plan and starts being a demonstration
  * that spending everything ruins everything: the adaptive rule does not limit
  * its own risk, because spending the whole surplus every year pins the balance
  * at a reserve that only assumes a 25th-percentile return, so nothing is ever
- * banked above it. The optional cap is what makes the rule safe, not the
+ * banked above it. The extra cap is what makes the rule safe, not the
  * reserve rate.
  */
 const MAX_SCALE = 20
@@ -19,23 +19,23 @@ const SCALE_TOLERANCE = 0.005
 /** Hard stop, so a pathological plan cannot spin. Bisection needs ~13. */
 const MAX_ITERATIONS = 40
 
-export type OptionalScaleStatus =
+export type ExtraScaleStatus =
   /** A multiplier hits the target. */
   | 'solved'
-  /** Even taking no optional at all leaves the plan short of the target. */
+  /** Even taking no extra at all leaves the plan short of the target. */
   | 'unreachable'
   /** The target is so easy that the search bound binds first. */
   | 'capped'
-  /** The plan has no optional to scale. */
+  /** The plan has no extra to scale. */
   | 'nothing-to-scale'
 
-export interface OptionalScaleSolution {
-  status: OptionalScaleStatus
-  /** Multiplier to apply to every year's optional. */
+export interface ExtraScaleSolution {
+  status: ExtraScaleStatus
+  /** Multiplier to apply to every year's extra. */
   scale: number
   /** Survival the multiplier actually achieves. */
   survival: number
-  /** Survival with no optional at all, which is the best the plan can do. */
+  /** Survival with no extra at all, which is the best the plan can do. */
   ceiling: number
   evaluations: number
 }
@@ -59,12 +59,12 @@ export function isNegligibleScale(scale: number): boolean {
 function withScale(params: PlannerParameters, scale: number): PlannerParameters {
   return {
     ...params,
-    cashflow: params.cashflow.map((year) => ({ ...year, optional: year.optional * scale })),
+    cashflow: params.cashflow.map((year) => ({ ...year, extra: year.extra * scale })),
   }
 }
 
 /**
- * Finds the multiple of the drawn optional that meets a survival target.
+ * Finds the multiple of the drawn extra that meets a survival target.
  *
  * Solving for a *multiplier* rather than for an amount is what keeps the
  * household's own spending shape intact: the plan may ask for more in the early
@@ -75,15 +75,15 @@ function withScale(params: PlannerParameters, scale: number): PlannerParameters 
  * spending can only cost — so plain bisection is reliable and needs no
  * derivative. Each step costs one adaptive propagation.
  */
-export function solveOptionalScale(
+export function solveExtraScale(
   params: PlannerParameters,
   targetSurvival: number,
-): OptionalScaleSolution {
-  const hasOptional = params.cashflow.some((year) => year.optional > 0)
+): ExtraScaleSolution {
+  const hasExtra = params.cashflow.some((year) => year.extra > 0)
   const ceiling = adaptiveSurvival(withScale(params, 0))
   let evaluations = 1
 
-  if (!hasOptional) {
+  if (!hasExtra) {
     return { status: 'nothing-to-scale', scale: 1, survival: ceiling, ceiling, evaluations }
   }
 

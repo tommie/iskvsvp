@@ -17,7 +17,7 @@ describe('densityBins', () => {
       initialCapital: 6_000_000,
       cashflow: buildCashflow(years, 250_000, 0),
     })
-    const run = result.floorRun
+    const run = result.needRun
 
     // The y axis is labelled as a probability per decade, so the area under
     // the curve has to be the probability of ending anywhere at all — that is,
@@ -34,7 +34,7 @@ describe('densityBins', () => {
       ...defaultPlannerParameters(),
       years,
       cashflow: buildCashflow(years, 150_000, 0),
-    }).floorRun
+    }).needRun
 
     const areas = [40, 160, 400].map((count) =>
       integrate(densityBins(run.finalDistribution, count)),

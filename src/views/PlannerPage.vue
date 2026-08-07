@@ -7,7 +7,7 @@ import { usePlannerStore } from '../stores/planner'
 import PlannerInputs from '../components/planner/PlannerInputs.vue'
 import CashflowEditor from '../components/planner/CashflowEditor.vue'
 import PlannerOutcome from '../components/planner/PlannerOutcome.vue'
-import OptionalSolver from '../components/planner/OptionalSolver.vue'
+import ExtraSolver from '../components/planner/ExtraSolver.vue'
 
 const store = usePlannerStore()
 const { error } = storeToRefs(store)
@@ -44,9 +44,9 @@ onMounted(() => {
       <PlannerOutcome />
       <!-- Last, because it answers a question the outcome raises: you read what
            the plan does, then ask what it would take to make it hold. It also
-           takes its own upper bound from the floor run's survival, so it has
+           takes its own upper bound from the need run's survival, so it has
            nothing to offer until those results exist. -->
-      <OptionalSolver />
+      <ExtraSolver />
     </template>
 
     <div class="card mt-4 mb-3">

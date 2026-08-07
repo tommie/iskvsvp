@@ -36,16 +36,16 @@ export interface PlannerAsset {
 /**
  * One year of planned real cash flow, expressed in today's money.
  *
- * `floor` is the amount that must come out of the portfolio; a negative floor
- * is a deposit. `optional` is the discretionary amount on top, used only by
+ * `need` is the amount that must come out of the portfolio; a negative need
+ * is a deposit. `extra` is the discretionary amount on top, used only by
  * the upper bracketing run. Splitting them this way lets the plan express
  * things like "spend 400k/yr until the state pension starts, then 250k plus up
  * to 150k if the portfolio allows".
  */
 export interface CashflowYear {
-  floor: number
-  /** Non-negative top-up above the floor. */
-  optional: number
+  need: number
+  /** Non-negative top-up above the need. */
+  extra: number
 }
 
 export interface PlannerParameters {
@@ -146,7 +146,7 @@ export interface YearOutcome {
   /** 0 = the starting position, before any return or cash flow. */
   year: number
   age: number
-  /** Cumulative probability of having failed to fund a floor withdrawal. */
+  /** Cumulative probability of having failed to fund a need withdrawal. */
   ruinProbability: number
   /** Unconditional mean; ruined outcomes contribute zero. */
   mean: number
@@ -180,7 +180,7 @@ export interface PropagationRun {
    * Two things pull it below the planned total, and the figure carries both. A
    * plan that fails in year 25 of 40 took every earlier year's flow and nothing
    * after, so failure paths contribute less. And the adaptive run declines part
-   * of the optional whenever the surplus will not stretch to it — for that run
+   * of the extra whenever the surplus will not stretch to it — for that run
    * the planned total is only a ceiling.
    *
    * This is an expectation, not a median. The total taken depends on the whole
@@ -196,21 +196,21 @@ export interface PropagationRun {
 }
 
 export interface PlannerResults {
-  /** Withdrawing only the floor each year. */
-  floorRun: PropagationRun
-  /** Withdrawing floor + the full optional every year, regardless of the balance. */
-  optionalRun: PropagationRun
+  /** Withdrawing only the need each year. */
+  needRun: PropagationRun
+  /** Withdrawing need + the full extra every year, regardless of the balance. */
+  extraRun: PropagationRun
   /**
-   * Withdrawing the floor plus as much of the optional as the surplus supports.
+   * Withdrawing the need plus as much of the extra as the surplus supports.
    *
-   * The floor is never touched and the optional is never exceeded, so the plan
+   * The need is never touched and the extra is never exceeded, so the plan
    * is still driven by the amounts the household actually needs; the balance
    * only ever acts as a brake on the discretionary part.
    */
   adaptiveRun: PropagationRun
   portfolio: PortfolioMoments
   /**
-   * Real return used to discount the floor commitments when sizing the
+   * Real return used to discount the need commitments when sizing the
    * reserve. Derived from the plan's own portfolio and tax drag rather than
    * asked for, so the adaptive rule introduces no forecast of its own.
    */

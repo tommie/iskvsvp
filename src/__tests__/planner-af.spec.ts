@@ -105,8 +105,8 @@ function afYear(
 describe('AF propagation', () => {
   it('produces a result instead of refusing, and reports a liquidation value', () => {
     const result = runPlanner(af({ years: 20, cashflow: buildCashflow(20, 200_000, 0) }))
-    expect(result.floorRun.liquidOutcomes).toBeDefined()
-    expect(result.floorRun.outcomes).toHaveLength(21)
+    expect(result.needRun.liquidOutcomes).toBeDefined()
+    expect(result.needRun.outcomes).toHaveLength(21)
   })
 
   it('leaves ISK without a liquidation value, having no deferred tax', () => {
@@ -115,12 +115,12 @@ describe('AF propagation', () => {
       years: 10,
       cashflow: buildCashflow(10, 100_000, 0),
     })
-    expect(result.floorRun.liquidOutcomes).toBeUndefined()
+    expect(result.needRun.liquidOutcomes).toBeUndefined()
   })
 
   it('conserves probability mass', () => {
     const run = runPlanner(af({ years: 25, cashflow: buildCashflow(25, 250_000, 100_000) }))
-    for (const propagation of [run.floorRun, run.optionalRun]) {
+    for (const propagation of [run.needRun, run.extraRun]) {
       let total = propagation.finalDistribution.ruinProbability
       for (const m of propagation.finalDistribution.mass) total += m
       expect(total).toBeCloseTo(1, 9)
@@ -154,15 +154,15 @@ describe('AF propagation', () => {
     // averaging over returns to smooth the cost-basis interpolation, and the
     // ratio sweeps across the whole basis grid as the value compounds away from
     // the basis, so every year contributes discretisation error.
-    const atDefault = result.floorRun.outcomes[years]!.mean
+    const atDefault = result.needRun.outcomes[years]!.mean
     expect(Math.abs(atDefault / wealth - 1)).toBeLessThan(0.01)
 
     const liquid = wealth - Math.max(0, wealth - basis) * p.capitalGainsTaxRate
-    expect(Math.abs(netFinal(result.floorRun).mean / liquid - 1)).toBeLessThan(0.01)
+    expect(Math.abs(netFinal(result.needRun).mean / liquid - 1)).toBeLessThan(0.01)
 
     // What makes that discretisation rather than a modelling error: refining
     // the basis grid converges on the closed-form recursion.
-    const refined = runPlanner({ ...p, basisNodes: 256 }).floorRun.outcomes[years]!.mean
+    const refined = runPlanner({ ...p, basisNodes: 256 }).needRun.outcomes[years]!.mean
     expect(Math.abs(refined / wealth - 1)).toBeLessThan(Math.abs(atDefault / wealth - 1) / 4)
   })
 
@@ -178,13 +178,13 @@ describe('AF propagation', () => {
     // No growth and basis equal to value: nothing is unrealised, so settling
     // the tax costs nothing.
     const par = runPlanner(af({ ...shared, initialCostBasisRatio: 1 }))
-    expect(netFinal(par.floorRun).median).toBeCloseTo(par.floorRun.outcomes[years]!.median, 0)
+    expect(netFinal(par.needRun).median).toBeCloseTo(par.needRun.outcomes[years]!.median, 0)
 
     // Half the balance is untaxed gain, so liquidation gives up 30% of it.
     const embedded = runPlanner(af({ ...shared, initialCostBasisRatio: 0.5 }))
-    const capital = embedded.floorRun.outcomes[years]!.median
-    expect(netFinal(embedded.floorRun).median).toBeLessThan(capital)
-    expect(netFinal(embedded.floorRun).median / capital).toBeCloseTo(1 - 0.5 * 0.3, 2)
+    const capital = embedded.needRun.outcomes[years]!.median
+    expect(netFinal(embedded.needRun).median).toBeLessThan(capital)
+    expect(netFinal(embedded.needRun).median / capital).toBeCloseTo(1 - 0.5 * 0.3, 2)
   })
 
   it('defers more tax the longer it compounds', () => {
@@ -197,7 +197,7 @@ describe('AF propagation', () => {
           cashflow: buildCashflow(years, 0, 0),
           ...singleAsset(0.06, 0),
         }),
-      ).floorRun
+      ).needRun
 
     // The basis never grows, so the embedded gain — and the gap between the
     // balance and what it is worth after tax — widens with the horizon.
@@ -218,10 +218,10 @@ describe('AF propagation', () => {
       initialCostBasisRatio: 0.2,
       ...singleAsset(0.05, 0),
     }
-    const noDeposits = runPlanner(af({ ...shared, cashflow: buildCashflow(years, 0, 0) })).floorRun
+    const noDeposits = runPlanner(af({ ...shared, cashflow: buildCashflow(years, 0, 0) })).needRun
     const deposits = runPlanner(
       af({ ...shared, cashflow: buildCashflow(years, -200_000, 0) }),
-    ).floorRun
+    ).needRun
 
     // Deposits buy at market, so they add basis and dilute the embedded gain.
     const embeddedShare = (run: typeof noDeposits, index: number) =>
@@ -261,9 +261,9 @@ describe('AF propagation', () => {
 
     // Realising gain along the way steps the basis up, so less tax stays
     // embedded in the final balance.
-    const embedded = (run: typeof locked.floorRun) =>
+    const embedded = (run: typeof locked.needRun) =>
       1 - netFinal(run).mean / run.outcomes[years]!.mean
-    expect(embedded(drifting.floorRun)).toBeLessThan(embedded(locked.floorRun))
+    expect(embedded(drifting.needRun)).toBeLessThan(embedded(locked.needRun))
   })
 
   it('pays a loss credit back into the portfolio', () => {
@@ -280,9 +280,9 @@ describe('AF propagation', () => {
     const result = runPlanner(p)
 
     const expected = afYear(2_000_000, 2_000_000, 0.5, 500_000, p, LOSS_CREDIT_THRESHOLD, 0)
-    expect(result.floorRun.outcomes[1]!.mean / expected.wealth).toBeCloseTo(1, 5)
+    expect(result.needRun.outcomes[1]!.mean / expected.wealth).toBeCloseTo(1, 5)
     // A credit, not a charge: the balance ends above the untaxed 500 000.
-    expect(result.floorRun.outcomes[1]!.mean).toBeGreaterThan(500_000)
+    expect(result.needRun.outcomes[1]!.mean).toBeGreaterThan(500_000)
   })
 
   it('taxes the nominal gain, not the real one', () => {
@@ -297,7 +297,7 @@ describe('AF propagation', () => {
       // Zero *real* return: in real terms the holding never gains a krona.
       ...singleAsset(0, 0),
     })
-    const run = runPlanner(p).floorRun
+    const run = runPlanner(p).needRun
 
     // Nominally it has gained, because the cost basis is fixed in kronor and
     // the price level is not. Swedish law does not index the omkostnadsbelopp,
@@ -342,8 +342,8 @@ describe('AF propagation', () => {
       cashflow: buildCashflow(years, 150_000, 0),
       ...singleAsset(0.02, 0.18),
     }
-    const noInflation = runPlanner(af({ ...shared, inflationRate: 0 })).floorRun
-    const highInflation = runPlanner(af({ ...shared, inflationRate: 0.06 })).floorRun
+    const noInflation = runPlanner(af({ ...shared, inflationRate: 0 })).needRun
+    const highInflation = runPlanner(af({ ...shared, inflationRate: 0.06 })).needRun
 
     // The 100 000 kr threshold is nominal, so inflation shrinks the band that
     // earns the full credit rate and losses are relieved less generously.
@@ -418,7 +418,7 @@ describe('AF against Monte Carlo', () => {
           wealth,
           basis,
           realGrowth * (1 + inflation),
-          p.cashflow[year]!.floor * priceLevel,
+          p.cashflow[year]!.need * priceLevel,
           p,
           LOSS_CREDIT_THRESHOLD,
           moments.rebalancingTurnover,
@@ -446,7 +446,7 @@ describe('AF against Monte Carlo', () => {
       return sorted[Math.min(sorted.length - 1, Math.floor(rank))]!
     }
 
-    const run = runPlanner(p).floorRun
+    const run = runPlanner(p).needRun
     const final = run.outcomes[years]!
 
     expect(run.finalDistribution.ruinProbability).toBeCloseTo(ruined / paths, 2)

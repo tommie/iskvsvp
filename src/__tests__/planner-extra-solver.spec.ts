@@ -2,14 +2,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import OptionalSolver from '../components/planner/OptionalSolver.vue'
+import ExtraSolver from '../components/planner/ExtraSolver.vue'
 import { usePlannerStore } from '../stores/planner'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
-import { solveOptionalScale } from '../planner/solve'
+import { solveExtraScale } from '../planner/solve'
 import type { PlannerParameters } from '../planner/types'
 
 /**
- * An ISK plan the solver has real work to do on: the drawn optional is well
+ * An ISK plan the solver has real work to do on: the drawn extra is well
  * above what the target survival allows, so a solve comes back with a
  * multiplier clearly below 1. ISK keeps a propagation at ~20 ms, which is what
  * makes a component test that runs the actual search affordable.
@@ -35,7 +35,7 @@ function mountSolver(params: PlannerParameters) {
   store.$patch({ ...params })
   store.run()
 
-  const wrapper = mount(OptionalSolver, { global: { plugins: [pinia] } })
+  const wrapper = mount(ExtraSolver, { global: { plugins: [pinia] } })
   return { wrapper, store }
 }
 
@@ -51,7 +51,7 @@ async function setTarget(wrapper: ReturnType<typeof mountSolver>['wrapper'], per
 const applyLink = (wrapper: ReturnType<typeof mountSolver>['wrapper']) =>
   wrapper.find('a.btn-primary')
 
-describe('OptionalSolver', () => {
+describe('ExtraSolver', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
@@ -73,9 +73,9 @@ describe('OptionalSolver', () => {
     const { wrapper } = mountSolver(params)
     await setTarget(wrapper, 65)
 
-    // The target is well above what this plan survives at full optional, so the
+    // The target is well above what this plan survives at full extra, so the
     // answer has to be a cut.
-    const expected = solveOptionalScale(params, 0.65)
+    const expected = solveExtraScale(params, 0.65)
     expect(expected.scale).toBeLessThan(0.95)
     const percent = Math.round((expected.scale - 1) * 100)
     // Two significant digits and a Swedish minus sign, via formatPercent.
@@ -101,11 +101,11 @@ describe('OptionalSolver', () => {
     // Solve once, apply the answer, and ask the same question of the result: the
     // plan is now at the level the target wants, so the multiplier is ~1.
     const params = plan()
-    const solved = solveOptionalScale(params, 0.65)
+    const solved = solveExtraScale(params, 0.65)
     const applied = plan({
       cashflow: params.cashflow.map((year) => ({
         ...year,
-        optional: year.optional * solved.scale,
+        extra: year.extra * solved.scale,
       })),
     })
 

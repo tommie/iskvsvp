@@ -43,7 +43,7 @@ describe('cadences', () => {
   })
 
   it('keeps the sign on a deposit', () => {
-    // A negative floor is money going in, and the line has to read that way.
+    // A negative need is money going in, and the line has to read that way.
     // Intl uses a real minus sign (U+2212), not a hyphen.
     expect(readable(-120_000)).toContain('\u221210 000 kr/mån')
   })

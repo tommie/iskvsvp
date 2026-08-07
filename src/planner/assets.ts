@@ -141,8 +141,8 @@ export const DEFAULT_ASSET_CLASSES: PlannerAsset[] = ASSET_CLASS_PRESETS.map((pr
 export const DEFAULT_CORRELATIONS: number[][] = correlationMatrixFor(DEFAULT_ASSET_CLASSES)
 
 /** Builds a flat cash flow schedule of `years` entries. */
-export function buildCashflow(years: number, floor: number, optional: number): CashflowYear[] {
-  return Array.from({ length: years }, () => ({ floor, optional }))
+export function buildCashflow(years: number, need: number, extra: number): CashflowYear[] {
+  return Array.from({ length: years }, () => ({ need, extra }))
 }
 
 /**
@@ -152,16 +152,17 @@ export function buildCashflow(years: number, floor: number, optional: number): C
  */
 export function resizeCashflow(cashflow: CashflowYear[], years: number): CashflowYear[] {
   if (years <= cashflow.length) return cashflow.slice(0, years)
-  const last = cashflow[cashflow.length - 1] ?? { floor: 0, optional: 0 }
+  const last = cashflow[cashflow.length - 1] ?? { need: 0, extra: 0 }
   return [...cashflow, ...Array.from({ length: years - cashflow.length }, () => ({ ...last }))]
 }
 
 export function defaultPlannerParameters(): PlannerParameters {
   const years = 40
   return {
-    // A 2.2% floor and a 3.3% ceiling over forty years. The floor alone survives
-    // about 90%, which puts it inside the band practitioners target for a fixed
-    // spending plan — and a sound floor is the premise the adaptive rule and the
+    // Withdrawing 2.2% of capital as need and up to 3.3% with the extra, over
+    // forty years. The need alone survives about 90%, which puts it inside the
+    // band practitioners target for a fixed spending plan — and a need the
+    // portfolio can actually carry is the premise the adaptive rule and the
     // scale solver are both built on, so the page should open on one. It also
     // separates the three runs enough that each says something: roughly 90%,
     // 81% and 69%.

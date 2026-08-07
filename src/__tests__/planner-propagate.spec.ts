@@ -128,8 +128,8 @@ describe('runPlanner', () => {
         cashflow: buildCashflow(30, 300_000, 100_000),
       }),
     )
-    expect(totalMass(result.floorRun)).toBeCloseTo(1, 10)
-    expect(totalMass(result.optionalRun)).toBeCloseTo(1, 10)
+    expect(totalMass(result.needRun)).toBeCloseTo(1, 10)
+    expect(totalMass(result.extraRun)).toBeCloseTo(1, 10)
   })
 
   it('preserves the arithmetic mean when nothing is withdrawn or taxed', () => {
@@ -148,9 +148,9 @@ describe('runPlanner', () => {
     // reproduces E[G] = 1 + mu to near machine precision, so the compounded
     // mean must match the closed form.
     const expected = 1_000_000 * Math.pow(1.06, years)
-    const final = result.floorRun.outcomes[years]!
+    const final = result.needRun.outcomes[years]!
     expect(final.mean / expected).toBeCloseTo(1, 5)
-    expect(result.floorRun.clippedMass).toBeLessThan(1e-8)
+    expect(result.needRun.clippedMass).toBeLessThan(1e-8)
   })
 
   it('reproduces the lognormal median when nothing is withdrawn', () => {
@@ -166,7 +166,7 @@ describe('runPlanner', () => {
     )
 
     const expectedMedian = 1_000_000 * Math.exp(result.portfolio.logMean * years)
-    expect(result.floorRun.outcomes[years]!.median / expectedMedian).toBeCloseTo(1, 2)
+    expect(result.needRun.outcomes[years]!.median / expectedMedian).toBeCloseTo(1, 2)
   })
 
   it('matches a deterministic recursion when volatility is zero', () => {
@@ -187,8 +187,8 @@ describe('runPlanner', () => {
       wealth -= wealth * taxRate
     }
 
-    expect(result.floorRun.outcomes[years]!.mean / wealth).toBeCloseTo(1, 6)
-    expect(result.floorRun.finalDistribution.ruinProbability).toBe(0)
+    expect(result.needRun.outcomes[years]!.mean / wealth).toBeCloseTo(1, 6)
+    expect(result.needRun.finalDistribution.ruinProbability).toBe(0)
   })
 
   it('pays the schablon out of the portfolio, so the withdrawal is net', () => {
@@ -210,8 +210,8 @@ describe('runPlanner', () => {
     // balance that remains, on top of the withdrawal rather than out of it. If
     // the tax were netted out of the withdrawal the balance would instead be
     // 5 000 000 - 300 000 exactly.
-    expect(result.floorRun.outcomes[1]!.mean).toBeCloseTo(afterWithdrawal * (1 - taxRate), 4)
-    expect(result.floorRun.outcomes[1]!.mean).toBeLessThan(afterWithdrawal)
+    expect(result.needRun.outcomes[1]!.mean).toBeCloseTo(afterWithdrawal * (1 - taxRate), 4)
+    expect(result.needRun.outcomes[1]!.mean).toBeLessThan(afterWithdrawal)
   })
 
   it('charges the schablon only above the allowance', () => {
@@ -226,7 +226,7 @@ describe('runPlanner', () => {
     const result = runPlanner(p)
 
     const taxRate = p.iskTaxRate * p.capitalGainsTaxRate
-    expect(result.floorRun.outcomes[1]!.mean).toBeCloseTo(
+    expect(result.needRun.outcomes[1]!.mean).toBeCloseTo(
       1_000_000 - (1_000_000 - 300_000) * taxRate,
       4,
     )
@@ -239,7 +239,7 @@ describe('runPlanner', () => {
     const taxed = runPlanner(params({ ...shared, iskTaxRate: 0.03, ...singleAsset(0.05, 0) }))
 
     const drag = Math.pow(1 - 0.03 * 0.3, years)
-    const ratio = taxed.floorRun.outcomes[years]!.mean / untaxed.floorRun.outcomes[years]!.mean
+    const ratio = taxed.needRun.outcomes[years]!.mean / untaxed.needRun.outcomes[years]!.mean
     expect(ratio).toBeCloseTo(drag, 6)
   })
 
@@ -257,8 +257,8 @@ describe('runPlanner', () => {
 
     // The allowance shields a nominal amount. High inflation erodes it, so the
     // same real portfolio pays more real tax and ends up smaller.
-    expect(highInflation.floorRun.outcomes[years]!.mean).toBeLessThan(
-      lowInflation.floorRun.outcomes[years]!.mean,
+    expect(highInflation.needRun.outcomes[years]!.mean).toBeLessThan(
+      lowInflation.needRun.outcomes[years]!.mean,
     )
   })
 
@@ -274,7 +274,7 @@ describe('runPlanner', () => {
     const a = runPlanner(params({ ...shared, inflationRate: 0.0 }))
     const b = runPlanner(params({ ...shared, inflationRate: 0.08 }))
 
-    expect(a.floorRun.outcomes[years]!.median).toBeCloseTo(b.floorRun.outcomes[years]!.median, 6)
+    expect(a.needRun.outcomes[years]!.median).toBeCloseTo(b.needRun.outcomes[years]!.median, 6)
   })
 
   it('ruins with certainty at the year a zero-volatility plan runs dry', () => {
@@ -291,15 +291,15 @@ describe('runPlanner', () => {
     // 1 000 000 funds five withdrawals of 190 000 with 50 000 to spare; the
     // sixth cannot be paid. The amounts avoid landing exactly on zero, where
     // the grid interpolation would legitimately straddle the ruin boundary.
-    expect(result.floorRun.outcomes[5]!.ruinProbability).toBeCloseTo(0, 10)
-    expect(result.floorRun.outcomes[6]!.ruinProbability).toBeCloseTo(1, 10)
+    expect(result.needRun.outcomes[5]!.ruinProbability).toBeCloseTo(0, 10)
+    expect(result.needRun.outcomes[6]!.ruinProbability).toBeCloseTo(1, 10)
   })
 
   it('treats ruin as absorbing, so a later deposit cannot revive the plan', () => {
     const years = 10
     const cashflow: CashflowYear[] = buildCashflow(years, 0, 0)
-    for (let i = 0; i < 6; i++) cashflow[i] = { floor: 200_000, optional: 0 }
-    cashflow[8] = { floor: -5_000_000, optional: 0 }
+    for (let i = 0; i < 6; i++) cashflow[i] = { need: 200_000, extra: 0 }
+    cashflow[8] = { need: -5_000_000, extra: 0 }
 
     const result = runPlanner(
       params({
@@ -311,7 +311,7 @@ describe('runPlanner', () => {
       }),
     )
 
-    expect(result.floorRun.finalDistribution.ruinProbability).toBeCloseTo(1, 10)
+    expect(result.needRun.finalDistribution.ruinProbability).toBeCloseTo(1, 10)
   })
 
   it('makes ruin probability non-decreasing over time', () => {
@@ -319,7 +319,7 @@ describe('runPlanner', () => {
     const result = runPlanner(
       params({ years, initialCapital: 3_000_000, cashflow: buildCashflow(years, 250_000, 0) }),
     )
-    const outcomes = result.floorRun.outcomes
+    const outcomes = result.needRun.outcomes
     for (let i = 1; i < outcomes.length; i++) {
       expect(outcomes[i]!.ruinProbability).toBeGreaterThanOrEqual(
         outcomes[i - 1]!.ruinProbability - 1e-15,
@@ -327,7 +327,7 @@ describe('runPlanner', () => {
     }
   })
 
-  it('leaves the optional run no better off than the floor run', () => {
+  it('leaves the extra run no better off than the need run', () => {
     const years = 35
     // Enough capital that both runs finish with a positive median; otherwise
     // both medians are zero and the comparison says nothing.
@@ -339,11 +339,11 @@ describe('runPlanner', () => {
       }),
     )
 
-    expect(result.optionalRun.outcomes[years]!.median).toBeLessThan(
-      result.floorRun.outcomes[years]!.median,
+    expect(result.extraRun.outcomes[years]!.median).toBeLessThan(
+      result.needRun.outcomes[years]!.median,
     )
-    expect(result.optionalRun.finalDistribution.ruinProbability).toBeGreaterThanOrEqual(
-      result.floorRun.finalDistribution.ruinProbability,
+    expect(result.extraRun.finalDistribution.ruinProbability).toBeGreaterThanOrEqual(
+      result.needRun.finalDistribution.ruinProbability,
     )
   })
 
@@ -362,7 +362,7 @@ describe('runPlanner', () => {
     // Returns are applied before the cash flow, so the deposit lands at the
     // end of each year: an ordinary annuity, not an annuity-due.
     const expected = 100_000 * ((Math.pow(1.05, years) - 1) / 0.05)
-    expect(result.floorRun.outcomes[years]!.mean / expected).toBeCloseTo(1, 5)
+    expect(result.needRun.outcomes[years]!.mean / expected).toBeCloseTo(1, 5)
   })
 
   describe('input validation', () => {
@@ -403,7 +403,7 @@ describe('runPlanner against Monte Carlo', () => {
         const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
 
         wealth *= Math.exp(moments.logMean + moments.logStdDev * z)
-        wealth -= p.cashflow[year]!.floor
+        wealth -= p.cashflow[year]!.need
         if (wealth <= 0) {
           alive = false
           break
@@ -439,7 +439,7 @@ describe('runPlanner against Monte Carlo', () => {
       ...singleAsset(0.05, 0.16),
     })
 
-    const grid = runPlanner(p).floorRun
+    const grid = runPlanner(p).needRun
     const mc = monteCarlo(p, 200_000)
 
     // Binomial standard error at p ~ 0.2 over 200k paths is ~0.001; allow a

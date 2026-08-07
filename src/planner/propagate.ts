@@ -72,17 +72,17 @@ interface StepContext {
  * What a year's cash flow is, at one grid node.
  *
  * A fixed policy pays `baseFlow` whatever the balance. An adaptive one pays the
- * floor plus as much of the optional as the surplus over the reserve supports —
+ * need plus as much of the extra as the surplus over the reserve supports —
  * so the amounts still come from what the household needs, and the balance only
  * decides how much of the discretionary part is affordable.
  */
 interface YearPolicy {
-  /** The whole flow when fixed; the floor alone when adaptive. */
+  /** The whole flow when fixed; the need alone when adaptive. */
   baseFlow: number
   adaptive: boolean
-  /** Adaptive only: the most that may be added on top of the floor. */
-  optional: number
-  /** Adaptive only: capital to hold back for the remaining floor commitments. */
+  /** Adaptive only: the most that may be added on top of the need. */
+  extra: number
+  /** Adaptive only: capital to hold back for the remaining need commitments. */
   reserve: number
   /** Adaptive only: the payment count the surplus is spread over. */
   annuityFactor: number
@@ -91,7 +91,7 @@ interface YearPolicy {
 /**
  * Reserve and annuity factor for every year, by backward recursion.
  *
- * `reserve[t]` is what the remaining floor commitments are worth at the start
+ * `reserve[t]` is what the remaining need commitments are worth at the start
  * of year t, discounted at `rate`; `annuity[t]` is the number of payments the
  * surplus has to stretch over, so `surplus / annuity[t]` is the level real
  * amount it supports for the rest of the plan.
@@ -107,7 +107,7 @@ function reserveSchedule(params: PlannerParameters, rate: number) {
   const annuity = new Float64Array(years + 1)
 
   for (let t = years - 1; t >= 0; t--) {
-    reserve[t] = params.cashflow[t]!.floor + reserve[t + 1]! * discount
+    reserve[t] = params.cashflow[t]!.need + reserve[t + 1]! * discount
     annuity[t] = 1 + annuity[t + 1]! * discount
   }
   for (let t = 0; t <= years; t++) {
@@ -120,14 +120,14 @@ function reserveSchedule(params: PlannerParameters, rate: number) {
 /**
  * Quantile of the compound return used to size the reserve, and its z score.
  *
- * Not the median. Discounting the floor at the return the plan expects on
+ * Not the median. Discounting the need at the return the plan expects on
  * average makes the reserve a coin-flip hurdle: clearing it only means the
- * floor is funded on the median path, and half of all paths are worse. A plan
- * would then pass the test for years while spending the whole optional, and
+ * need is funded on the median path, and half of all paths are worse. A plan
+ * would then pass the test for years while spending the whole extra, and
  * only start cutting once the damage was done. A lower quantile asks the
- * question that matters — is the floor funded even if the portfolio does
- * poorly — which is the flooring logic the safety-first literature applies to
- * essential spending.
+ * question that matters — is the need funded even if the portfolio does
+ * poorly — which is what the safety-first literature asks of essential
+ * spending: secure it first, treat the rest as discretionary.
  */
 const RESERVE_QUANTILE_Z = -0.6744897501960817 // 25th percentile
 
@@ -156,13 +156,13 @@ function reserveReturnFor(params: PlannerParameters, moments: PortfolioMoments):
 }
 
 /** Which of the three bracketing runs a propagation represents. */
-type SpendingMode = 'floor' | 'optional' | 'adaptive'
+type SpendingMode = 'need' | 'extra' | 'adaptive'
 
 interface StepResult {
   mass: Float64Array
   /** Probability-weighted cash actually taken this year. */
   withdrawn: number
-  /** Mass that failed to fund its floor withdrawal in this step. */
+  /** Mass that failed to fund its need withdrawal in this step. */
   ruin: number
   /** Mass pinned to the top grid node. */
   clipped: number
@@ -392,10 +392,10 @@ function gridBounds(params: PlannerParameters, moments: PortfolioMoments) {
   let scale = Math.max(params.initialCapital, 1)
 
   for (const year of params.cashflow) {
-    // Deposits are largest when the optional top-up is not taken, so the floor
+    // Deposits are largest when the extra top-up is not taken, so the need
     // alone bounds how much capital can be added.
-    if (year.floor < 0) deposits += -year.floor
-    scale = Math.max(scale, Math.abs(year.floor) + Math.max(0, year.optional))
+    if (year.need < 0) deposits += -year.need
+    scale = Math.max(scale, Math.abs(year.need) + Math.max(0, year.extra))
   }
 
   const drift = Math.max(0, moments.logMean) * params.years
@@ -496,7 +496,7 @@ function step(
   const capitalGainsTaxRate = params.capitalGainsTaxRate
   const schablonRate = params.afSchablonRate
   const top = grid[nGrid - 1]!
-  const { adaptive, baseFlow, optional, reserve, annuityFactor } = policy
+  const { adaptive, baseFlow, extra, reserve, annuityFactor } = policy
   // With a fixed flow the sign is known before the loops, which lets the AF
   // path hoist the post-flow basis ratio out of the wealth loop. An adaptive
   // flow varies per node, so those have to be computed inside.
@@ -536,16 +536,16 @@ function step(
 
         let flow = baseFlow
         if (adaptive) {
-          // Spend the floor, then whatever level amount the surplus over the
+          // Spend the need, then whatever level amount the surplus over the
           // reserve would support for the rest of the plan — never more than
-          // the optional the household actually asked for.
+          // the extra the household actually asked for.
           const surplus = grown - reserve
-          if (surplus > 0) flow += Math.min(optional, surplus / annuityFactor)
+          if (surplus > 0) flow += Math.min(extra, surplus / annuityFactor)
         }
 
         const afterFlow = grown - flow
 
-        // Ruin is defined as being unable to fund the floor withdrawal in
+        // Ruin is defined as being unable to fund the need withdrawal in
         // full. Paying part of it and continuing would understate the failure.
         if (afterFlow <= 0) {
           ruin += probability
@@ -789,7 +789,7 @@ function validate(params: PlannerParameters): void {
     }
   }
   for (const year of params.cashflow) {
-    if (!Number.isFinite(year.floor) || !Number.isFinite(year.optional)) {
+    if (!Number.isFinite(year.need) || !Number.isFinite(year.extra)) {
       throw new Error('planner: cashflow entries must be finite numbers')
     }
   }
@@ -884,20 +884,20 @@ function propagate(
 
   for (let year = 0; year < params.years; year++) {
     const entry = params.cashflow[year]!
-    const optional = Math.max(0, entry.optional)
+    const extra = Math.max(0, entry.extra)
     const policy: YearPolicy =
       mode === 'adaptive'
         ? {
-            baseFlow: entry.floor,
+            baseFlow: entry.need,
             adaptive: true,
-            optional,
+            extra,
             reserve: schedule.reserve[year]!,
             annuityFactor: schedule.annuity[year]!,
           }
         : {
-            baseFlow: entry.floor + (mode === 'optional' ? optional : 0),
+            baseFlow: entry.need + (mode === 'extra' ? extra : 0),
             adaptive: false,
-            optional: 0,
+            extra: 0,
             reserve: 0,
             annuityFactor: 1,
           }
@@ -931,7 +931,7 @@ function propagate(
     const stepped = step(ctx, values, mass, policy, allowanceReal, lossThresholdReal)
 
     // Ruin is absorbing. A deposit scheduled after the plan already failed to
-    // pay its floor does not undo that failure, so the ruined mass is never
+    // cover its need does not undo that failure, so the ruined mass is never
     // returned to the grid.
     ruin += stepped.ruin
     clipped += stepped.clipped
@@ -973,8 +973,8 @@ function propagate(
 /**
  * Runs the plan twice to bracket the discretionary spending.
  *
- * The lower run takes only the floor every year, the upper run takes the floor
- * plus the optional top-up. Both share one grid so their distributions are
+ * The lower run takes only the need every year, the upper run takes the need
+ * plus the extra top-up. Both share one grid so their distributions are
  * directly comparable node for node. Neither run lets the balance influence
  * what is spent, which is what keeps the model free of a feedback rule that
  * would need to be justified separately.
@@ -1006,7 +1006,7 @@ function setup(params: PlannerParameters) {
  * Survival probability of the adaptive run alone.
  *
  * The scale solver evaluates this many times over, and the other two runs would
- * be pure waste there — the floor run does not depend on the optional at all,
+ * be pure waste there — the need run does not depend on the extra at all,
  * and the unconditional run is not what is being solved for.
  */
 export function adaptiveSurvival(params: PlannerParameters): number {
@@ -1019,17 +1019,8 @@ export function runPlanner(params: PlannerParameters): PlannerResults {
   const { portfolio, quad, spec, basis, reserveReturn, schedule } = setup(params)
 
   return {
-    floorRun: propagate(params, spec, basis, quad, portfolio, 'floor', 'Behov', schedule),
-    optionalRun: propagate(
-      params,
-      spec,
-      basis,
-      quad,
-      portfolio,
-      'optional',
-      'Behov + extra',
-      schedule,
-    ),
+    needRun: propagate(params, spec, basis, quad, portfolio, 'need', 'Behov', schedule),
+    extraRun: propagate(params, spec, basis, quad, portfolio, 'extra', 'Behov + extra', schedule),
     adaptiveRun: propagate(
       params,
       spec,

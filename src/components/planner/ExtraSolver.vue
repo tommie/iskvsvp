@@ -6,9 +6,9 @@ import { useDebounced } from '../../composables/useDebounced'
 import { usePlannerStore } from '../../stores/planner'
 import {
   isNegligibleScale,
-  solveOptionalScale,
+  solveExtraScale,
   NEGLIGIBLE_SCALE_CHANGE,
-  type OptionalScaleSolution,
+  type ExtraScaleSolution,
 } from '../../planner/solve'
 import { floorToSignificant, formatPercent, formatRelative } from '../../planner/format'
 import { encodePlan } from '../../planner/url'
@@ -21,19 +21,19 @@ const MIN_TARGET = 50
 /**
  * Mid-range of what practitioners target for a fixed spending plan — Blanchett,
  * Vanguard and Schwab all cite 85–90%, Kitces and J.P. Morgan 80–90%. Applied
- * here to the floor, which is the part that must not fail, so the strict end of
- * the band is the defensible one. Clamped down when the floor cannot reach it.
+ * here to the need, which is the part that must not fail, so the strict end of
+ * the band is the defensible one. Clamped down when the need cannot reach it.
  */
 const DEFAULT_TARGET = 85
 
 /**
- * The most the plan can reach, which is what it survives taking no optional at
- * all. Bounding the slider by it means the target can never be one the floor
+ * The most the plan can reach, which is what it survives taking no extra at
+ * all. Bounding the slider by it means the target can never be one the need
  * cannot deliver — declining discretionary spending buys safety only up to
- * here, and past it the floor itself is what needs changing.
+ * here, and past it the need itself is what has to change.
  */
 const ceiling = computed(() => {
-  const run = results.value?.floorRun
+  const run = results.value?.needRun
   if (!run) return null
   const final = run.outcomes[run.outcomes.length - 1]!
   return Math.floor((1 - final.ruinProbability) * 100)
@@ -42,7 +42,7 @@ const ceiling = computed(() => {
 const usable = computed(() => ceiling.value !== null && ceiling.value > MIN_TARGET)
 
 const targetPercent = ref(DEFAULT_TARGET)
-const solution = ref<OptionalScaleSolution | null>(null)
+const solution = ref<ExtraScaleSolution | null>(null)
 const solving = ref(false)
 const error = ref<string | null>(null)
 
@@ -51,7 +51,7 @@ const error = ref<string | null>(null)
 // button.
 watch(parameters, () => (solution.value = null), { deep: true })
 
-// A target the floor cannot deliver is not a target, so keep the value inside
+// A target the need cannot deliver is not a target, so keep the value inside
 // the slider's range whenever the plan moves the ceiling.
 watch(
   ceiling,
@@ -82,7 +82,7 @@ function solve() {
   // the thread; an AF plan spends a couple of seconds here.
   window.setTimeout(() => {
     try {
-      solution.value = solveOptionalScale(parameters.value, targetPercent.value / 100)
+      solution.value = solveExtraScale(parameters.value, targetPercent.value / 100)
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
@@ -151,7 +151,7 @@ const scaledHref = computed(() => {
       // Down to two significant digits: the schedule is written back into the
       // plan, and rounding down can only underspend the target the solver was
       // given. It also keeps the numbers round enough to reason about.
-      optional: Math.max(0, floorToSignificant(year.optional * scale)),
+      extra: Math.max(0, floorToSignificant(year.extra * scale)),
     })),
   }
   return `${window.location.pathname}?${encodePlan(rescaled)}`
@@ -160,8 +160,8 @@ const scaledHref = computed(() => {
 
 <template>
   <!--
-    Hidden entirely unless the floor alone clears the slider's lower bound.
-    Below that there is no target worth offering — the floor is what fails, and
+    Hidden entirely unless the need alone clears the slider's lower bound.
+    Below that there is no target worth offering — the need is what fails, and
     no amount of discretionary restraint changes that. Gating the whole card
     also means the range input is never mounted before its bounds are known,
     which would let the browser clamp its value and leave the control disagreeing
@@ -258,7 +258,7 @@ const scaledHref = computed(() => {
         skulle kunna vara ännu större.
       </p>
 
-      <!-- The slider cannot ask for more than the floor delivers, so this should
+      <!-- The slider cannot ask for more than the need delivers, so this should
            not occur. It is here so the card explains itself rather than falling
            silent if the bound and the solver ever disagree. -->
       <p v-else-if="solution?.status === 'unreachable'" class="form-text text-warning mb-0 mt-3">

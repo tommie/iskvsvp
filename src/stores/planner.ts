@@ -108,12 +108,8 @@ export const usePlannerStore = defineStore('planner', () => {
 
   // --- Cash flow editing -----------------------------------------------
 
-  /** Sets floor and/or optional across an inclusive range of year indices. */
-  function setCashflowRange(
-    from: number,
-    to: number,
-    values: { floor?: number; optional?: number },
-  ) {
+  /** Sets need and/or extra across an inclusive range of year indices. */
+  function setCashflowRange(from: number, to: number, values: { need?: number; extra?: number }) {
     const start = Math.max(0, Math.min(from, to))
     const end = Math.min(cashflow.value.length - 1, Math.max(from, to))
     if (end < start) return
@@ -123,10 +119,10 @@ export const usePlannerStore = defineStore('planner', () => {
     const next = cashflow.value.map((entry, index) => {
       if (index < start || index > end) return entry
       return {
-        floor: values.floor ?? entry.floor,
-        // The optional top-up is defined as an amount above the floor, so a
-        // negative one would silently mean "withdraw less than the floor".
-        optional: Math.max(0, values.optional ?? entry.optional),
+        need: values.need ?? entry.need,
+        // The extra top-up is defined as an amount above the need, so a
+        // negative one would silently mean "withdraw less than the need".
+        extra: Math.max(0, values.extra ?? entry.extra),
       }
     })
     cashflow.value = next
