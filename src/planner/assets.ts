@@ -182,6 +182,25 @@ export function defaultPlannerParameters(): PlannerParameters {
     // scenario has the policy rate rising to 2.5% by 2031, and the observed term
     // premium of SLR over the policy rate is currently around 0.8 points. That
     // is half a point above the standard; see the note in the UI.
+    //
+    // This is a forecast of the *real* SLR, not of inflation, and it is
+    // deliberately independent of `inflationRate`. SLR is a nominal yield, so
+    // Fisher would have it track inflation — but it does not, at the horizon
+    // this model runs at. Regressing annual SLR (Riksgälden, weekly from 1986)
+    // on annual KPI (SCB) gives a slope of -0.09 over the inflation-targeting
+    // era 1995-2025, and SLR is a *negative* predictor of the following five
+    // years' inflation over the same window. 2022-2023 is the vivid case:
+    // inflation of 8.4% and 8.6% moved SLR from 1.5% to 2.5%. What actually
+    // moves the schablon is the real rate, which fell monotonically across 8
+    // percentage points in the sample — from a +5.5% real SLR in 1996-2000 to
+    // -2.8% in 2021-2025. A full-sample regression looks Fisher-like only
+    // because that secular decline happened to overlap the disinflation.
+    //
+    // So this rate is the model's largest un-surfaced sensitivity, and it is
+    // not one that varying inflation would expose. A plausible band is +-1.5
+    // points (2.5% to 5.5%); one point of SLR is 0.3 points of annual drag on
+    // the whole balance, which compounds to roughly 11% of terminal capital
+    // over forty years.
     iskTaxRate: 0.04,
     capitalGainsTaxRate: 0.3,
     // The tax-free base level is 300 000 kr from 2026-01-01. Unlike the

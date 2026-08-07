@@ -906,6 +906,24 @@ function propagate(
     // today's money. Year `year` ends at price level (1+pi)^(year+1), matching
     // the Monte Carlo simulator, which accrues inflation at the top of each
     // year.
+    //
+    // Deflating is a forecast that neither threshold is ever raised, and the
+    // two do not deserve equal confidence. The loss threshold has stood at a
+    // nominal 100 000 kr since the 1991 tax reform, so thirty-five years say
+    // it is left alone. The ISK fribelopp is likewise a fixed kronor figure
+    // with no indexation provision (42 kap. 48 § IL), but it has been
+    // legislated exactly twice — 150 000 kr for 2025, 300 000 kr for 2026 —
+    // which is a doubling in its second year and no track record at all.
+    // Swedish practice on un-indexed amounts sorts by political salience
+    // rather than by legal form: unsalient ones are left to erode for decades,
+    // while salient ones have beaten inflation outright (the rental
+    // schablonavdrag went 18 000 -> 50 000 kr in fourteen years), and the
+    // preparatory works state no intent either way. Holding the fribelopp
+    // constant in real terms is therefore at least as defensible as deflating
+    // it. There is not enough evidence to say which is right, nor — given how
+    // small the allowance is against a multi-million balance — whether the
+    // choice moves the answer enough to be worth a parameter. Deflating is
+    // kept because it is the conservative side of the range.
     const priceLevel = Math.pow(1 + params.inflationRate, year + 1)
     const allowanceReal = params.iskAllowance > 0 ? params.iskAllowance / priceLevel : 0
     const lossThresholdReal = LOSS_CREDIT_THRESHOLD / priceLevel
