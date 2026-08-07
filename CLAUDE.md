@@ -245,6 +245,7 @@ The Slutkapital table can restate its figures as changes rather than amounts (`f
 - UI labels in Swedish
 - Code variables and comments in English
 - Number formatting uses Swedish locale (`sv-SE`)
+- Planner: the engine's `floor` and `optional` are **Behov** and **Extra** in the UI (*behovsuttag* and *extrauttag* in running prose, *det extra* attributively). The code words stay as they are — they are the literature's terms for the two parts of a spending plan, and the URL keys and stored plans are built on them. Say *tidsperiod*, not *horisont*.
 
 ## Development
 

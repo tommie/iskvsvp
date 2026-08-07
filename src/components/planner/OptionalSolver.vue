@@ -168,7 +168,7 @@ const scaledHref = computed(() => {
     with the number beside it.
   -->
   <div v-if="usable" class="card mb-3">
-    <div class="card-header">Skala tillvalet till en önskad sannolikhet</div>
+    <div class="card-header">Skala det extra uttaget till en önskad sannolikhet</div>
     <div class="card-body">
       <!-- Centred: the slider column is taller than the others because of its
            label and its two end markers, and aligning on the bottom edge leaves
@@ -192,7 +192,7 @@ const scaledHref = computed(() => {
           />
           <div class="d-flex justify-content-between form-text mt-0">
             <span>{{ formatPercent(MIN_TARGET) }}</span>
-            <span>{{ formatPercent(ceiling!) }} utan tillval</span>
+            <span>{{ formatPercent(ceiling!) }} utan extra</span>
           </div>
         </div>
 
@@ -215,17 +215,17 @@ const scaledHref = computed(() => {
 
         <div class="col-6 col-md-2">
           <div v-if="solution?.status === 'solved' || solution?.status === 'capped'">
-            <div class="form-label mb-1">Ändring av tillvalet</div>
+            <div class="form-label mb-1">Ändring av extrauttaget</div>
             <div class="fs-4 lh-1">{{ formatChange(solution.scale) }}</div>
           </div>
         </div>
 
         <div class="col-12 col-md-3">
           <a v-if="scaledHref" class="btn btn-primary w-100" :href="scaledHref">
-            Skala tillvalet
+            Skala extrauttaget
           </a>
           <button v-else type="button" class="btn btn-primary w-100" disabled>
-            Skala tillvalet
+            Skala extrauttaget
           </button>
         </div>
       </div>
@@ -234,36 +234,36 @@ const scaledHref = computed(() => {
            whether or not there is anything to say about the current answer; the
            situational notes below it are what move. -->
       <p class="form-text mb-0 mt-3">
-        Söker hur mycket hela tillvalskurvan behöver ändras. Formen du ritat behålls — bara nivån
+        Söker hur mycket hela extrakurvan behöver ändras. Formen du ritat behålls — bara nivån
         ändras. Länken går till den omskalade planen, så bakåtknappen tar dig tillbaka till den här.
       </p>
 
       <p v-if="error" class="form-text text-danger mb-0 mt-3">{{ error }}</p>
 
       <p v-else-if="solution?.status === 'nothing-to-scale'" class="form-text mb-0 mt-3">
-        Planen har inget tillval att skala. Ange ett tillval i diagrammet ovan först.
+        Planen har inget extrauttag att skala. Ange ett extra uttag i diagrammet ovan först.
       </p>
 
       <!-- Takes precedence over the 'capped' and 'unreachable' branches below: a
            multiplier this close to 1 means the plan already sits at the target,
            which is the useful thing to say, not how the search ended. -->
       <p v-else-if="nearTarget" class="form-text mb-0 mt-3">
-        Planen ligger redan på den nivån. Tillvalet skulle ändras med mindre än
+        Planen ligger redan på den nivån. Extrauttaget skulle ändras med mindre än
         {{ formatPercent(NEGLIGIBLE_SCALE_CHANGE * 100) }}, vilket är mindre än modellens egen
         osäkerhet — det är inte värt att skala om.
       </p>
 
       <p v-else-if="solution?.status === 'capped'" class="form-text mb-0 mt-3">
-        Målet nås med marginal. Multiplikatorn är begränsad till sökområdets tak; tillvalet skulle
-        kunna vara ännu större.
+        Målet nås med marginal. Multiplikatorn är begränsad till sökområdets tak; extrauttaget
+        skulle kunna vara ännu större.
       </p>
 
       <!-- The slider cannot ask for more than the floor delivers, so this should
            not occur. It is here so the card explains itself rather than falling
            silent if the bound and the solver ever disagree. -->
       <p v-else-if="solution?.status === 'unreachable'" class="form-text text-warning mb-0 mt-3">
-        Målet ligger över vad golvet ensamt klarar ({{ formatPercent(solution.ceiling * 100) }}), så
-        det är golvet som inte bär. Att avstå tillvalet hjälper inte.
+        Målet ligger över vad behovet ensamt klarar ({{ formatPercent(solution.ceiling * 100) }}),
+        så det är behovet som inte bär. Att avstå det extra hjälper inte.
       </p>
     </div>
   </div>

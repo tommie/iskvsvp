@@ -1019,7 +1019,7 @@ export function runPlanner(params: PlannerParameters): PlannerResults {
   const { portfolio, quad, spec, basis, reserveReturn, schedule } = setup(params)
 
   return {
-    floorRun: propagate(params, spec, basis, quad, portfolio, 'floor', 'Golv', schedule),
+    floorRun: propagate(params, spec, basis, quad, portfolio, 'floor', 'Behov', schedule),
     optionalRun: propagate(
       params,
       spec,
@@ -1027,7 +1027,7 @@ export function runPlanner(params: PlannerParameters): PlannerResults {
       quad,
       portfolio,
       'optional',
-      'Golv + tillval',
+      'Behov + extra',
       schedule,
     ),
     adaptiveRun: propagate(
@@ -1039,7 +1039,7 @@ export function runPlanner(params: PlannerParameters): PlannerResults {
       'adaptive',
       // Short because it is a column header in a table that shares its row with
       // the fan chart; the chart legend carries the full description.
-      'Golv + anpassat',
+      'Behov + anpassat',
       schedule,
     ),
     portfolio,

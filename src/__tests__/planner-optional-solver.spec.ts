@@ -63,7 +63,7 @@ describe('OptionalSolver', () => {
 
     await setTarget(wrapper, 65)
 
-    expect(wrapper.text()).toContain('Ändring av tillvalet')
+    expect(wrapper.text()).toContain('Ändring av extrauttaget')
     expect(applyLink(wrapper).exists()).toBe(true)
     expect(applyLink(wrapper).attributes('href')).toContain('?')
   })

@@ -17,7 +17,7 @@ const DEPOSIT_COLOR = '#198754'
 const CHART_HEIGHT = 260
 
 // The selection always covers at least one year. It stays put when focus moves
-// elsewhere: the Golv and Tillval fields write to whatever it covers, so
+// elsewhere: the Behov and Extra fields write to whatever it covers, so
 // clearing it on blur would leave those fields with nothing to act on.
 const selection = ref({ from: 0, to: 0 })
 const dragging = ref(false)
@@ -244,7 +244,7 @@ function stopDragging() {
       <!--
         The fields sit beside the chart, in one column, because they read as a
         panel for whatever the chart has selected: click a span, then work down
-        Golv, Tillval, Totalt. Below lg the column drops under the chart and
+        Behov, Extra, Totalt. Below lg the column drops under the chart and
         keeps its stacking — the chart needs the full width more than the fields
         need to be adjacent, and a narrow screen cannot give both.
 
@@ -260,11 +260,9 @@ function stopDragging() {
 
           <div class="d-flex flex-wrap gap-3 align-items-center small text-muted mt-2">
             <span
-              ><span class="swatch" :style="{ background: FLOOR_COLOR }"></span> Golv (uttag)</span
+              ><span class="swatch" :style="{ background: FLOOR_COLOR }"></span> Behov (uttag)</span
             >
-            <span
-              ><span class="swatch" :style="{ background: OPTIONAL_COLOR }"></span> Tillval</span
-            >
+            <span><span class="swatch" :style="{ background: OPTIONAL_COLOR }"></span> Extra</span>
             <span
               ><span class="swatch" :style="{ background: DEPOSIT_COLOR }"></span> Insättning</span
             >
@@ -278,7 +276,7 @@ function stopDragging() {
           </div>
 
           <div>
-            <label class="form-label" for="cashflow-floor">Golv (kr/år)</label>
+            <label class="form-label" for="cashflow-floor">Behov (kr/år)</label>
             <input
               id="cashflow-floor"
               v-model.number="editedFloor"
@@ -291,7 +289,7 @@ function stopDragging() {
           </div>
 
           <div>
-            <label class="form-label" for="cashflow-optional">Tillval (kr/år)</label>
+            <label class="form-label" for="cashflow-optional">Extra (kr/år)</label>
             <input
               id="cashflow-optional"
               v-model.number="editedOptional"

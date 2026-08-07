@@ -87,22 +87,23 @@ onMounted(() => {
               snitt eller en enkel framskrivning på förväntad avkastning inte kan visa.
             </p>
             <p>
-              Planen räknas tre gånger: med enbart golvuttaget, med golv plus hela tillvalet, och
-              med golv plus så mycket av tillvalet som går att bära. Bandet mellan de två fasta
-              körningarna visar vad det extra uttaget kostar i slutkapital och risk. En plan räknas
-              som sprucken det år portföljen inte klarar hela golvuttaget, och det tillståndet är
-              absorberande: en senare insättning räddar den inte. Percentilerna är ovillkorade, så
-              spruckna utfall ligger kvar som noll kronor i fördelningen. Det är därför 10:e
-              percentilen kan vara noll så snart risken att planen spricker överstiger 10&nbsp;%.
+              Planen räknas tre gånger: med enbart behovsuttaget, med behov plus hela det extra
+              uttaget, och med behov plus så mycket av det extra som går att bära. Bandet mellan de
+              två fasta körningarna visar vad det extra uttaget kostar i slutkapital och risk. En
+              plan räknas som sprucken det år portföljen inte klarar hela behovsuttaget, och det
+              tillståndet är absorberande: en senare insättning räddar den inte. Percentilerna är
+              ovillkorade, så spruckna utfall ligger kvar som noll kronor i fördelningen. Det är
+              därför 10:e percentilen kan vara noll så snart risken att planen spricker överstiger
+              10&nbsp;%.
             </p>
             <p>
-              Den anpassade körningen rör aldrig golvet och tar aldrig mer än det tillval hushållet
+              Den anpassade körningen rör aldrig behovet och tar aldrig mer än det extra hushållet
               angett — uttagen styrs alltså fortfarande av vad man faktiskt behöver, och saldot
               verkar bara som broms på den valfria delen. Varje år beräknas vad de återstående
-              golvuttagen kräver i reserv, och överskottet däröver fördelas jämnt över de år som
-              återstår; det beloppet, begränsat till tillvalet, är vad som tas. Reserven diskonteras
+              behovsuttagen kräver i reserv, och överskottet däröver fördelas jämnt över de år som
+              återstår; det beloppet, begränsat till det extra, är vad som tas. Reserven diskonteras
               inte till förväntad avkastning utan till 25:e percentilen av den ackumulerade
-              avkastningen över tidsperioden, eftersom en median­ränta bara innebär att golvet är
+              avkastningen över tidsperioden, eftersom en median­ränta bara innebär att behovet är
               finansierat i hälften av utfallen. Regeln behöver inget minne av tidigare år, till
               skillnad från intervallregler av Guyton–Klinger-typ, vars hysteres är just ett minne.
             </p>
@@ -163,9 +164,9 @@ onMounted(() => {
                 target="_blank"
                 rel="noopener"
                 >safety-first</a
-              >: säkra golvet först, betrakta resten som valfritt. Regeln här tillämpar
-              annuitetstanken enbart på överskottet, vilket ger både ett garanterat golv och en del
-              som inte kan ta slut.
+              >: säkra behovet först, betrakta resten som valfritt. Regeln här tillämpar
+              annuitetstanken enbart på överskottet, vilket ger både ett garanterat behovsuttag och
+              en del som inte kan ta slut.
             </p>
             <p class="mb-2">
               <em>Numerik.</em> Fördelningen förs framåt med en diskretiserad Chapman–Kolmogorov-

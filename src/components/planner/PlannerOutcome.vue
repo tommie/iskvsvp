@@ -532,13 +532,13 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
             </div>
             <p class="form-text mt-3 mb-0">
               Det planerade uttaget är vad planen begär över hela tidsperioden, inte vad en plan som
-              spruckit hann ta ut. För den anpassade körningen är det dessutom bara ett tak:
-              tillvalet tas i den mån överskottet över golvets reserv räcker till. Det förväntade
-              faktiska uttaget väger in båda sakerna — uteblivna tillval och år som aldrig inträffar
-              för att planen sprack — och är därför måttet som går att jämföra mellan kolumnerna.
-              Percentilerna är ovillkorade: en plan som spricker räknas som noll kronor, inte som
-              bortfall. Därför kan 10:e percentilen vara noll när risken att planen spricker
-              överstiger 10&nbsp;%.
+              spruckit hann ta ut. För den anpassade körningen är det dessutom bara ett tak: det
+              extra tas i den mån överskottet över behovets reserv räcker till. Det förväntade
+              faktiska uttaget väger in båda sakerna — uteblivna extrauttag och år som aldrig
+              inträffar för att planen sprack — och är därför måttet som går att jämföra mellan
+              kolumnerna. Percentilerna är ovillkorade: en plan som spricker räknas som noll kronor,
+              inte som bortfall. Därför kan 10:e percentilen vara noll när risken att planen
+              spricker överstiger 10&nbsp;%.
               <template v-if="relative">
                 Uttaget visas som förändring mot kolumnens planerade uttag, kapitalet som förändring
                 mot startkapitalet ({{ formatKr(initialCapital) }}) — båda i dagens penningvärde, så
@@ -573,7 +573,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
           <div class="card-body">
             <D3Chart :render-chart="renderSurvival" :data="chartData" />
             <p class="form-text mt-3 mb-0">
-              Sannolikheten att portföljen fortfarande klarar hela golvuttaget. Tillståndet är
+              Sannolikheten att portföljen fortfarande klarar hela behovsuttaget. Tillståndet är
               absorberande — en senare insättning räddar inte en plan som redan spruckit.
             </p>
           </div>
