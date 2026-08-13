@@ -1,15 +1,23 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import * as d3 from 'd3'
 import { storeToRefs } from 'pinia'
 
 import { usePlannerStore } from '../../stores/planner'
 import D3Chart from '../D3Chart.vue'
 import { formatCadences } from '../../planner/cadence'
-import { formatKrExact } from '../../planner/format'
+import { formatKr, formatKrExact } from '../../planner/format'
+import {
+  deflateToReferenceYear,
+  formatPercentileOrdinal,
+  loadIncomeReference,
+  medianForHousehold,
+  placeOnLadder,
+  type IncomeReference,
+} from '../../planner/income'
 
 const store = usePlannerStore()
-const { cashflow, startAge } = storeToRefs(store)
+const { cashflow, startAge, consumptionUnits, inflationRate } = storeToRefs(store)
 
 const NEED_COLOR = '#0d6efd'
 const EXTRA_COLOR = '#9ec5fe'
@@ -74,6 +82,65 @@ function selectAll() {
  * household's outgoings is their sum, in the same cadences.
  */
 const editedTotal = computed(() => editedNeed.value + editedExtra.value)
+
+// --- Income comparison -------------------------------------------------
+//
+// The total is the one figure here a household can hold against its own
+// budget, so it is also the one worth placing against everybody else's. SCB
+// publishes the whole percentile ladder of disposable income; see
+// src/planner/income.ts and the "Reference Data" section of CLAUDE.md.
+
+const incomeReference = ref<IncomeReference | null>(null)
+const incomeReferenceError = ref<string | null>(null)
+
+onMounted(async () => {
+  try {
+    incomeReference.value = await loadIncomeReference()
+  } catch (cause) {
+    // Reported rather than swallowed: an absent comparison that looks like a
+    // deliberate omission is worse than a line saying it could not be loaded.
+    // The page gets a plain sentence and the console keeps the reason, which is
+    // a stale filename or a bad deploy often enough to be worth having.
+    incomeReferenceError.value = cause instanceof Error ? cause.message : String(cause)
+    console.error(incomeReferenceError.value)
+  }
+})
+
+/** The year the plan's money is in. Its figures are real, in today's kronor. */
+const currentYear = new Date().getFullYear()
+
+/**
+ * Where the selected years' total spending sits on the Swedish ladder.
+ *
+ * Two conversions before the lookup, both of which change the answer by more
+ * than the ladder's own resolution: back into the reference year's prices,
+ * since the statistic is always published two years behind, and into
+ * consumption units, since that is the basis SCB reports the distribution on.
+ */
+const incomePlacement = computed(() => {
+  const reference = incomeReference.value
+  if (!reference) return null
+
+  const perUnit =
+    deflateToReferenceYear(
+      editedTotal.value,
+      reference.source.referenceYear,
+      currentYear,
+      inflationRate.value,
+    ) / consumptionUnits.value
+
+  const placement = placeOnLadder(reference.perConsumptionUnit, perUnit)
+  if (!placement) return null
+
+  return { ...placement, referenceYear: reference.source.referenceYear }
+})
+
+/** The median for the age and household the plan is actually for. */
+const groupMedian = computed(() => {
+  const reference = incomeReference.value
+  if (!reference) return null
+  return medianForHousehold(reference, startAge.value, consumptionUnits.value)
+})
 
 const chartData = computed(() => ({
   cashflow: cashflow.value,
@@ -308,6 +375,28 @@ function stopDragging() {
               {{ formatKrExact(editedTotal) }}
             </div>
             <div class="form-text">{{ formatCadences(editedTotal) }}</div>
+            <!-- Placed on the population ladder here rather than in the results
+                 below: this is the number the household recognises from its own
+                 budget, and the comparison is only useful while it is being
+                 chosen.
+
+                 Set in italics behind a marker, because it is the one figure in
+                 this column that does not come out of the plan: the lines above
+                 restate what was typed, this one holds it against an outside
+                 statistic. Without the distinction it reads as another output of
+                 the model. The marker is decorative and repeated on the footnote
+                 that explains the source, which is what ties the two together. -->
+            <div v-if="incomePlacement" class="form-text fst-italic">
+              <span class="source-marker" aria-hidden="true">📊</span>
+              <template v-if="incomePlacement.bound === 'above'">Över</template>
+              <template v-else-if="incomePlacement.bound === 'below'">Under</template>
+              <template v-else>Motsvarar</template>
+              {{ formatPercentileOrdinal(incomePlacement.percentile) }} percentilen av svenska
+              hushålls disponibla inkomst.
+            </div>
+            <div v-else-if="incomeReferenceError" class="form-text text-warning">
+              Jämförelsen mot inkomststatistiken kunde inte laddas.
+            </div>
           </div>
         </div>
       </div>
@@ -315,6 +404,29 @@ function stopDragging() {
       <p class="form-text mt-3 mb-0">
         Beloppen är disponibla — det är detta du får ut. Skatten dras separat ur portföljen och
         minskar inte uttaget.
+      </p>
+      <!-- Its own paragraph rather than a tail on the one above, and carrying
+           the same marker as the line it explains: this is an aside about an
+           outside statistic, not part of how the plan works. Upright, unlike the
+           short line — a paragraph of italics costs more legibility than the
+           distinction is worth, and the marker already makes it.
+
+           Kept to what changes how the figure is read: where it comes from, the
+           median for the group the plan is for (retirees sit well below the
+           all-ages one, so the ladder alone flatters a retirement plan), and the
+           fact that the base is the household's whole income. The deflation to
+           the reference year's prices is in CLAUDE.md instead; it moves the
+           percentile a point or two and explaining it costs a whole line. -->
+      <p v-if="incomePlacement" class="form-text mt-2 mb-0">
+        <span class="source-marker" aria-hidden="true">📊</span>
+        En utblick, inte en del av planen: uttaget mot SCB:s fördelning av disponibel inkomst
+        ({{ incomePlacement.referenceYear }}), per konsumtionsenhet.
+        <template v-if="groupMedian">
+          Median för {{ groupMedian.householdType }}, {{ groupMedian.ageLabel }}:
+          {{ formatKr(groupMedian.median) }} per år.
+        </template>
+        Disponibel inkomst är hushållets <em>hela</em> kassa, pension inräknad — portföljuttaget är
+        oftast bara en del av den.
       </p>
     </div>
   </div>
@@ -331,6 +443,17 @@ function stopDragging() {
    compiles that padding to a literal and there is no variable to read. */
 .field-aligned {
   padding-left: calc(0.75rem + var(--bs-border-width));
+}
+
+/* Marks the two places that hold the plan against an outside statistic rather
+   than reporting the plan itself. The gap is explicit because the whitespace
+   the template contributes collapses to a single space, which is too tight to
+   read as a marker set apart from the sentence rather than a character in it.
+   inline-block so the margin applies and the glyph cannot be split from what
+   follows. */
+.source-marker {
+  display: inline-block;
+  margin-right: 0.4rem;
 }
 
 .swatch {

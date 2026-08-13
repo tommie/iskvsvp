@@ -95,6 +95,23 @@ export interface PlannerParameters {
   /** Deterministic annual inflation, used to deflate nominal tax thresholds. */
   inflationRate: number
 
+  /**
+   * Consumption units the plan's household is worth, on SCB's scale: 1 for a
+   * single adult, 1.51 for a cohabiting couple.
+   *
+   * **The engine ignores this.** It exists only to place the withdrawals
+   * against SCB's income distribution, which is published per consumption unit
+   * so that households of different sizes are comparable. It rides along in
+   * `PlannerParameters` so that a shared link shows the reader the same
+   * percentile the sender saw; the store keeps it out of the recompute trigger
+   * so changing it does not re-run three propagations for a label.
+   *
+   * Any positive number is accepted from the URL — the scale can express a
+   * couple with an adult child at home — but the UI offers only the two forms
+   * a drawdown plan is nearly always one of.
+   */
+  consumptionUnits: number
+
   /** One entry per year; length must equal `years`. */
   cashflow: CashflowYear[]
 

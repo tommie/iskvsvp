@@ -21,6 +21,7 @@ const {
   afSchablonRate,
   initialCostBasisRatio,
   inflationRate,
+  consumptionUnits,
   results,
 } = storeToRefs(store)
 
@@ -137,6 +138,18 @@ const portfolioSummary = computed(() => {
                 max="100"
                 class="form-control"
               />
+            </div>
+            <!-- Changes nothing the engine computes: it only decides which of
+                 SCB:s income groups the withdrawals are held against, since
+                 that distribution is published per konsumtionsenhet so that
+                 households of different sizes can be compared at all. -->
+            <div class="col-6">
+              <label class="form-label" for="planner-household">Hushåll</label>
+              <select id="planner-household" v-model.number="consumptionUnits" class="form-select">
+                <option :value="1">Ensamstående</option>
+                <option :value="1.51">Sammanboende</option>
+              </select>
+              <div class="form-text">Används bara för inkomstjämförelsen.</div>
             </div>
             <div v-if="isAF" class="col-6">
               <label class="form-label" for="planner-basis">Omkostnadsbelopp (%)</label>

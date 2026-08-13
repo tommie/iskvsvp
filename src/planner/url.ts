@@ -115,6 +115,10 @@ export function encodePlan(params: PlannerParameters): string {
   query.set('sr', String(params.afSchablonRate))
   query.set('cb', String(params.initialCostBasisRatio))
   query.set('i', String(params.inflationRate))
+  // Carried even though the engine ignores it: it decides which income
+  // percentile the withdrawals are reported against, so a shared link that
+  // dropped it would show the recipient a different reading of the same plan.
+  query.set('q', String(params.consumptionUnits))
   return query.toString()
 }
 
@@ -122,6 +126,12 @@ function parsePositive(raw: string | null, fallback: number): number {
   if (raw === null) return fallback
   const value = parseFloat(raw)
   return Number.isFinite(value) && value >= 0 ? value : fallback
+}
+
+function parseStrictlyPositive(raw: string | null, fallback: number): number {
+  if (raw === null) return fallback
+  const value = parseFloat(raw)
+  return Number.isFinite(value) && value > 0 ? value : fallback
 }
 
 /**
@@ -202,5 +212,8 @@ export function decodePlan(search: string): PlannerParameters {
     afSchablonRate: parsePositive(query.get('sr'), defaults.afSchablonRate),
     initialCostBasisRatio: parsePositive(query.get('cb'), defaults.initialCostBasisRatio),
     inflationRate: parsePositive(query.get('i'), defaults.inflationRate),
+    // Strictly positive, unlike the rates above: zero consumption units would
+    // divide the household's spending by nothing.
+    consumptionUnits: parseStrictlyPositive(query.get('q'), defaults.consumptionUnits),
   }
 }

@@ -13,6 +13,7 @@ describe('planner URL encoding', () => {
     expect(restored.years).toBe(original.years)
     expect(restored.accountType).toBe(original.accountType)
     expect(restored.inflationRate).toBe(original.inflationRate)
+    expect(restored.consumptionUnits).toBe(original.consumptionUnits)
     expect(restored.cashflow).toEqual(original.cashflow)
     expect(restored.assets.map((a) => a.name)).toEqual(original.assets.map((a) => a.name))
     expect(restored.assets.map((a) => a.weight)).toEqual(original.assets.map((a) => a.weight))
@@ -57,6 +58,21 @@ describe('planner URL encoding', () => {
   it('rejects a cash flow that would allocate an absurd number of years', () => {
     const restored = decodePlan('y=30&f=999999*1000|0')
     expect(restored.cashflow).toHaveLength(30)
+  })
+
+  it('carries a household size the engine never reads', () => {
+    // It decides which income percentile the withdrawals are reported against,
+    // so a shared link that dropped it would show a different reading.
+    const original = defaultPlannerParameters()
+    original.consumptionUnits = 2.11
+    expect(decodePlan(encodePlan(original)).consumptionUnits).toBe(2.11)
+  })
+
+  it('refuses a household size of zero, which would divide the spending by nothing', () => {
+    const defaults = defaultPlannerParameters()
+    expect(decodePlan('q=0').consumptionUnits).toBe(defaults.consumptionUnits)
+    expect(decodePlan('q=-1').consumptionUnits).toBe(defaults.consumptionUnits)
+    expect(decodePlan('q=abc').consumptionUnits).toBe(defaults.consumptionUnits)
   })
 
   it('reconstructs a symmetric correlation matrix from the upper triangle', () => {

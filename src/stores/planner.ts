@@ -36,6 +36,7 @@ export const usePlannerStore = defineStore('planner', () => {
   const afSchablonRate = ref(defaults.afSchablonRate)
   const initialCostBasisRatio = ref(defaults.initialCostBasisRatio)
   const inflationRate = ref(defaults.inflationRate)
+  const consumptionUnits = ref(defaults.consumptionUnits)
   const cashflow = ref<CashflowYear[]>(defaults.cashflow)
   const gridNodes = ref(defaults.gridNodes)
   const quadratureNodes = ref(defaults.quadratureNodes)
@@ -64,11 +65,29 @@ export const usePlannerStore = defineStore('planner', () => {
     afSchablonRate: afSchablonRate.value,
     initialCostBasisRatio: initialCostBasisRatio.value,
     inflationRate: inflationRate.value,
+    consumptionUnits: consumptionUnits.value,
     cashflow: cashflow.value,
     gridNodes: gridNodes.value,
     quadratureNodes: quadratureNodes.value,
     basisNodes: basisNodes.value,
   }))
+
+  /**
+   * Everything the propagation actually reads.
+   *
+   * `consumptionUnits` only decides which income percentile the withdrawals are
+   * reported against, so recomputing for it would spend seconds of main thread
+   * on an AF plan to relabel one line. Splitting the watchers is what keeps it
+   * in the URL without putting it in the hot path.
+   */
+  const engineParameters = computed(() => {
+    // Destructured out by name rather than listed positively, so a parameter
+    // added later joins the recompute trigger by default. Forgetting to add
+    // one here would leave the results silently stale.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { consumptionUnits, ...rest } = parameters.value
+    return rest
+  })
 
   function loadParameters(params: PlannerParameters) {
     initialCapital.value = params.initialCapital
@@ -83,6 +102,7 @@ export const usePlannerStore = defineStore('planner', () => {
     afSchablonRate.value = params.afSchablonRate
     initialCostBasisRatio.value = params.initialCostBasisRatio
     inflationRate.value = params.inflationRate
+    consumptionUnits.value = params.consumptionUnits
     cashflow.value = params.cashflow.map((entry) => ({ ...entry }))
   }
 
@@ -213,14 +233,10 @@ export const usePlannerStore = defineStore('planner', () => {
     }
   })
 
-  watch(
-    parameters,
-    () => {
-      scheduleRun()
-      pushUrl()
-    },
-    { deep: true },
-  )
+  watch(engineParameters, scheduleRun, { deep: true })
+
+  // The URL carries the whole plan, including the parts the engine ignores.
+  watch(parameters, pushUrl, { deep: true })
 
   return {
     // State
@@ -236,6 +252,7 @@ export const usePlannerStore = defineStore('planner', () => {
     afSchablonRate,
     initialCostBasisRatio,
     inflationRate,
+    consumptionUnits,
     cashflow,
     gridNodes,
     quadratureNodes,

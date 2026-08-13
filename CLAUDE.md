@@ -33,6 +33,7 @@ src/
 │   ├── density.ts               - Grid mass to plottable density per decade
 │   ├── cadence.ts               - Yearly amounts as monthly/weekly/daily
 │   ├── format.ts                - Two-significant-digit kronor and percent
+│   ├── income.ts                - Withdrawals placed on SCB's income percentiles
 │   ├── solve.ts                 - Extra-spending multiplier for a survival target
 │   └── url.ts                   - Compact plan encoding (RLE cashflow)
 ├── composables/
@@ -61,6 +62,9 @@ src/
 ├── types.ts                     - TypeScript interfaces
 └── utils/
     └── url-params.ts            - URL encoding/decoding for parameters
+
+scripts/
+└── fetch-income-reference.sh    - Regenerates public/income-reference-*.json from SCB
 ```
 
 ### Key Components
@@ -101,6 +105,23 @@ src/
 - Correlations are lower triangular: `correlations[i][j]` where `i > j`
 - Fund properties: isin, name, category, monthly_file, start_month ("YYYY-MM"), mu (%), sigma (%), alpha, beta, r_squared
 - Bootstrap profiles: `public/bootstrap-profiles.json` — generated from `fundcmp/data/factor_presets.json` via jq
+
+### Reference Data (`public/*-reference-YYYYMMDD.json`)
+
+External statistics used to place a plan against the Swedish population. **One file per source**, never merged: they have different agencies, different publication cadences and very different reliability, and a merged file would hide that. The date in the filename is the retrieval date and is the whole staleness mechanism — compare it against the source's publication schedule below and propose a refresh when a newer reference year exists. Regenerate with the matching script under `scripts/`, then `git rm` the superseded file so exactly one of each remains.
+
+**`income-reference-YYYYMMDD.json`** — `scripts/fetch-income-reference.sh`, from SCB's PxWeb API (no key, 30 calls/10 s per IP). Product *Inkomster och skatter* (HE0110), region Riket. Published **annually around 20 January, for the income year two years earlier** — the 2024 reference year appeared on 2026-01-20, so a file is due for refresh each January. The script reads the newest year out of the table metadata rather than pinning one, and aborts if the three tables disagree on it.
+
+- `perConsumptionUnit` — P1…P99 limits of *ekonomisk standard*, the series SCB itself uses for income distribution and the only one comparable across household sizes. Percentile *limits*, not decile buckets, so a lookup is exact instead of interpolated.
+- `perHousehold` — the same fractiles without the consumption-unit adjustment. Simpler to compare against, but it mixes household sizes.
+- `medianByAge` — medians by age and household type. Retirees sit well below the all-ages median, so comparing a drawdown plan against "Riket, all ages" alone flatters it.
+- `consumptionUnitScale` — SCB's weights, needed to divide a household amount before using `perConsumptionUnit`.
+- Values are converted to **kronor**; SCB reports tkr. Nominal, in the reference year's prices — the planner runs in real terms, so a comparison has to be inflated to the plan's start year rather than used raw.
+- The income concept is *disponibel inkomst inklusive kapitalvinst*: a household's **total** spendable cash, pensions included. A planner withdrawal is usually only one component, so a percentile is honest only as "the portfolio alone provides as much as X% of households have in total", not as "this household is at percentile X". Capital gains fatten the top percentiles; `exkl. kapitalvinst` variants of the same tables are the alternative.
+
+Consumed by `src/planner/income.ts`. `INCOME_REFERENCE_FILE` there names the dated file, and the fetch script fails if the two have drifted apart — nothing derives one from the other, and a stale constant is a 404 at page load.
+
+**Portfolio size has no equivalent and no file.** Sweden stopped producing household wealth statistics when the wealth tax was abolished: `HE0104` in Statistikdatabasen ends at 2007 and carries only means, no percentiles. What was funded in 2025 (prop. 2025/26:255, in force 2026-08-01) is a sample collection on household *debts* for FASIT, not an asset distribution, and Sweden is not in the ECB's HFCS. The partial proxies — SCB Aktieägarstatistik `FM0201B` (median portfolio *among shareholders*, directly held listed shares only, so it excludes funds and understates badly: 223 tkr for 65–74 at 2025-12 against a mean of 2 148 tkr) and ISK aggregates (~3.8 M holders, median saver 78 tkr against a mean near 440 tkr) — are usable as **anchors**, not as a ladder. Fitting a distribution through a median and a mean to manufacture deciles would claim precision the sources do not have, which is the same reason the planner rounds outputs to two significant digits.
 
 ### Factor Model (upstream: fundcmp)
 
@@ -211,6 +232,15 @@ Bisects for the multiple of the drawn extra curve that meets a survival target. 
 - The multiplier is shown as the change it makes (`+11 %`, `−9 %`), not as `1,11×`: the household reads its own amounts in the cash flow editor above, so what it needs from the solver is how far they have to move.
 - **The slider solves itself**, debounced 400 ms via `useDebounced` (`src/composables/`), and clears the previous answer the moment it moves so a multiplier is never shown against a target it was not solved for. Driven from the input event, not a watcher on the value: the ceiling watcher clamps the target programmatically when results arrive, and a watcher would start a search on load. Plan edits deliberately do *not* auto-solve — ~13 propagations is seconds of main thread on an AF plan, and every drag in the cash flow editor would pay it — so the button remains for that case.
 
+### The income comparison (`income.ts`, `CashflowEditor.vue`)
+
+The cash flow editor places the selected years' **total** on SCB's percentile ladder of disposable income, beside the amount rather than in the results.
+
+- **Two conversions before the lookup**, both larger than the ladder's own resolution: back into the reference year's prices, since the statistic is published two years behind, and into **consumption units**, the basis SCB reports the distribution on. The deflation uses the plan's own inflation assumption rather than KPI — a deliberate limit, worth about two percentile points, taken to avoid a second reference source on a monthly cadence.
+- **`consumptionUnits` is a `PlannerParameter` the engine ignores**, carried so a shared link reads the same for the recipient. The store watches `engineParameters` (parameters minus this field) for recomputes and the full `parameters` for the URL; merging them would re-run three propagations to relabel one line.
+- **Amounts outside P1–P99 are reported as bounds**, never as a location, and a deposit year gets no line rather than a floor.
+- **The footnote anchors against the group the plan is for**, not just the ladder: retirees sit well below the all-ages median, so the population ladder alone flatters a retirement plan. And it states that disposable income is the household's *whole* spendable cash — the percentile says what the portfolio alone stretches to, not where the household lands.
+
 ### Output precision
 
 Every *computed* figure goes through `src/planner/format.ts` and is rounded to **two significant digits**. The grid leaves the ruin probability a few tenths of a percentage point out and the return assumptions are round numbers, so a balance printed to the krona claims precision the model does not have. Values the user typed are echoed back as entered — the rounding is for outputs only.
@@ -238,6 +268,7 @@ The Slutkapital table can restate its figures as changes rather than amounts (`f
 - Planner parameters as refs, debounced recompute (runs on the main thread; a 40-year plan is ~50 ms)
 - URL sync via `src/planner/url.ts`; the cashflow is run-length encoded so a multi-phase plan stays short
 - `years` and `cashflow.length` are kept equal by a watcher, since the engine throws if they disagree
+- Two watchers, not one: `engineParameters` (everything the propagation reads) triggers the recompute, the full `parameters` only the URL push. See "The income comparison"
 - Actions: run(), setCashflowRange(), addAsset(), removeAsset(), setCorrelation(), initUrlSync()
 
 ## Localization

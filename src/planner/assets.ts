@@ -215,6 +215,11 @@ export function defaultPlannerParameters(): PlannerParameters {
     // unrealised gain. Anyone carrying an older holding should lower this.
     initialCostBasisRatio: 1,
     inflationRate: 0.02,
+    // A cohabiting couple on SCB's scale. The default plan spends 300 000 a
+    // year off nine million from age 60, which is a two-person household far
+    // more often than a one-person one, and the choice only affects which
+    // income percentile the withdrawals are reported against.
+    consumptionUnits: 1.51,
     cashflow: buildCashflow(years, 200_000, 100_000),
     gridNodes: 800,
     // 41 nodes is fully converged: raising it to 81 moves nothing at the fifth
