@@ -149,14 +149,23 @@ export interface PortfolioMoments {
 /**
  * Discrete distribution of real capital.
  *
- * `mass` sums with `ruinProbability` to 1. Ruined outcomes are held separately
- * rather than as mass on a zero node, because "the plan failed" is a different
- * statement from "the balance happens to be small".
+ * `mass` sums with `ruinProbability` and `depletedProbability` to 1. Both
+ * zero-capital outcomes are held separately rather than as mass on a zero node,
+ * because "the plan failed" and "the plan spent its last krona" are different
+ * statements from "the balance happens to be small".
  */
 export interface WealthDistribution {
   grid: Float64Array
   mass: Float64Array
   ruinProbability: number
+  /**
+   * Funded every commitment and ended with nothing.
+   *
+   * Not a failure, and kept apart from `ruinProbability` for that reason. The
+   * adaptive run lands a whole band of outcomes here in the final year, where
+   * it spends the entire remaining surplus by design.
+   */
+  depletedProbability: number
 }
 
 export interface YearOutcome {

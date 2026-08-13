@@ -121,7 +121,10 @@ describe('AF propagation', () => {
   it('conserves probability mass', () => {
     const run = runPlanner(af({ years: 25, cashflow: buildCashflow(25, 250_000, 100_000) }))
     for (const propagation of [run.needRun, run.extraRun]) {
-      let total = propagation.finalDistribution.ruinProbability
+      // Three places a path can end: failed, spent out, or holding capital.
+      let total =
+        propagation.finalDistribution.ruinProbability +
+        propagation.finalDistribution.depletedProbability
       for (const m of propagation.finalDistribution.mass) total += m
       expect(total).toBeCloseTo(1, 9)
     }

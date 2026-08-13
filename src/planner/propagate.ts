@@ -164,6 +164,14 @@ interface StepResult {
   withdrawn: number
   /** Mass that failed to fund its need withdrawal in this step. */
   ruin: number
+  /**
+   * Mass that funded the year in full and was left with nothing.
+   *
+   * A separate outcome from ruin: the commitment was met. It is what the
+   * adaptive rule aims for in the final year, where the annuity factor is one
+   * and the whole remaining surplus is spent.
+   */
+  depleted: number
   /** Mass pinned to the top grid node. */
   clipped: number
 }
@@ -503,6 +511,7 @@ function step(
   const isWithdrawal = baseFlow >= 0
 
   let ruin = 0
+  let depleted = 0
   let clipped = 0
   let withdrawn = 0
 
@@ -534,23 +543,29 @@ function step(
 
         const grown = sourceValues[j]! * factor
 
+        // Ruin is defined as being unable to fund the need withdrawal in
+        // full. Paying part of it and continuing would understate the failure.
+        // Landing on exactly zero is *not* ruin: the commitment was met and
+        // nothing was left over, which is precisely what the adaptive rule
+        // aims for in the final year.
+        const available = grown - baseFlow
+        if (available < 0) {
+          ruin += probability
+          continue
+        }
+
         let flow = baseFlow
         if (adaptive) {
           // Spend the need, then whatever level amount the surplus over the
           // reserve would support for the rest of the plan — never more than
-          // the extra the household actually asked for.
+          // the extra the household actually asked for, and never more than
+          // is there: a schedule whose future deposits push the reserve below
+          // the current need can ask for more than the balance holds.
           const surplus = grown - reserve
-          if (surplus > 0) flow += Math.min(extra, surplus / annuityFactor)
+          if (surplus > 0) flow += Math.min(extra, surplus / annuityFactor, available)
         }
 
         const afterFlow = grown - flow
-
-        // Ruin is defined as being unable to fund the need withdrawal in
-        // full. Paying part of it and continuing would understate the failure.
-        if (afterFlow <= 0) {
-          ruin += probability
-          continue
-        }
 
         // The flow was funded in full, so it counts even if tax later empties
         // the account: the household did receive the money this year.
@@ -598,8 +613,15 @@ function step(
         }
 
         const next = afterFlow - tax
+
+        // Spending, or the tax on it, can empty the account. The year's
+        // commitment was still met, so this is not ruin; it leaves the grid as
+        // depleted mass, at a capital of exactly zero. Calling it ruin instead
+        // would put a step in the last year of the adaptive run's survival
+        // curve, which by construction spends the whole remaining surplus and
+        // so lands a whole band of outcomes on zero.
         if (next <= 0) {
-          ruin += probability
+          depleted += probability
           continue
         }
 
@@ -652,7 +674,7 @@ function step(
     }
   }
 
-  return { mass, ruin, clipped, withdrawn }
+  return { mass, ruin, depleted, clipped, withdrawn }
 }
 
 /** Sums the joint mass over the cost-basis dimension. */
@@ -666,12 +688,14 @@ function marginalOverBasis(mass: Float64Array, spec: GridSpec, basis: BasisSpec)
   return marginal
 }
 
-function quantileOf(grid: Float64Array, mass: Float64Array, ruin: number, p: number): number {
+function quantileOf(grid: Float64Array, mass: Float64Array, atZero: number, p: number): number {
   // Ruined outcomes sit at the bottom of the ordering with a capital of zero,
   // so a plan that fails a third of the time genuinely has a zero 10th
   // percentile. Reporting percentiles conditional on survival would hide that.
-  if (p <= ruin) return 0
-  let cumulative = ruin
+  // Depleted outcomes are worth zero too and share that position, even though
+  // they are not failures.
+  if (p <= atZero) return 0
+  let cumulative = atZero
   for (let i = 0; i < grid.length; i++) {
     cumulative += mass[i]!
     if (cumulative >= p) return grid[i]!
@@ -685,24 +709,30 @@ function summarize(
   grid: Float64Array,
   mass: Float64Array,
   ruin: number,
+  depleted: number,
 ): YearOutcome {
   let mean = 0
   for (let i = 0; i < grid.length; i++) {
     mean += mass[i]! * grid[i]!
   }
 
+  // Depleted mass contributes nothing to the mean and nothing to the grid, but
+  // it does occupy the bottom of the ordering, so the quantiles have to step
+  // over it before they reach the first grid node.
+  const atZero = ruin + depleted
+
   return {
     year,
     age: startAge + year,
     ruinProbability: ruin,
     mean,
-    percentile5: quantileOf(grid, mass, ruin, 0.05),
-    percentile10: quantileOf(grid, mass, ruin, 0.1),
-    percentile25: quantileOf(grid, mass, ruin, 0.25),
-    median: quantileOf(grid, mass, ruin, 0.5),
-    percentile75: quantileOf(grid, mass, ruin, 0.75),
-    percentile90: quantileOf(grid, mass, ruin, 0.9),
-    percentile95: quantileOf(grid, mass, ruin, 0.95),
+    percentile5: quantileOf(grid, mass, atZero, 0.05),
+    percentile10: quantileOf(grid, mass, atZero, 0.1),
+    percentile25: quantileOf(grid, mass, atZero, 0.25),
+    median: quantileOf(grid, mass, atZero, 0.5),
+    percentile75: quantileOf(grid, mass, atZero, 0.75),
+    percentile90: quantileOf(grid, mass, atZero, 0.9),
+    percentile95: quantileOf(grid, mass, atZero, 0.95),
   }
 }
 
@@ -855,6 +885,7 @@ function propagate(
     mass[index + 1] = fraction
   }
   let ruin = 0
+  let depleted = 0
   let clipped = 0
   let expectedWithdrawn = 0
 
@@ -928,19 +959,53 @@ function propagate(
     const allowanceReal = params.iskAllowance > 0 ? params.iskAllowance / priceLevel : 0
     const lossThresholdReal = LOSS_CREDIT_THRESHOLD / priceLevel
 
+    // What a cohort with no capital left does this year is decided entirely by
+    // the year's own flow, so it is settled here rather than inside the step.
+    if (depleted > 0) {
+      if (policy.baseFlow > 0) {
+        // Nothing to withdraw from, so the need fails and the plan ruins.
+        ruin += depleted
+        depleted = 0
+      } else if (policy.baseFlow < 0) {
+        // A deposit revives it: depletion is not failure, so a household that
+        // keeps paying in has a plan again. The mass re-enters at the bottom
+        // grid node rather than at a true zero, which hands it a millionth of
+        // the plan's scale — far below anything the outputs resolve.
+        //
+        // Copied rather than written in place because `marginalOverBasis`
+        // hands back this very array for a single-node basis, so the summary
+        // already published for last year can alias it.
+        mass = mass.slice()
+        // Fresh money is bought at market, so its basis ratio is one, which
+        // `buildBasisGrid` guarantees is a node.
+        const basisRow = basis.n === 1 ? 0 : Math.round(1 / basis.step)
+        mass[basisRow * values.length]! += depleted
+        depleted = 0
+      }
+      // A year with no flow at all leaves zero capital at zero.
+    }
+
     const stepped = step(ctx, values, mass, policy, allowanceReal, lossThresholdReal)
 
     // Ruin is absorbing. A deposit scheduled after the plan already failed to
     // cover its need does not undo that failure, so the ruined mass is never
     // returned to the grid.
     ruin += stepped.ruin
+    depleted += stepped.depleted
     clipped += stepped.clipped
     expectedWithdrawn += stepped.withdrawn
     values = spec.grid
     mass = stepped.mass
 
     outcomes.push(
-      summarize(year + 1, params.startAge, spec.grid, marginalOverBasis(mass, spec, basis), ruin),
+      summarize(
+        year + 1,
+        params.startAge,
+        spec.grid,
+        marginalOverBasis(mass, spec, basis),
+        ruin,
+        depleted,
+      ),
     )
 
     if (isAF) {
@@ -948,7 +1013,9 @@ function propagate(
       // so the net series is built every year rather than only at the end,
       // which lets the charts follow the same toggle as the table.
       liquidMass = liquidDistribution(mass, spec, basis, params.capitalGainsTaxRate)
-      liquidOutcomes.push(summarize(year + 1, params.startAge, spec.grid, liquidMass, ruin))
+      liquidOutcomes.push(
+        summarize(year + 1, params.startAge, spec.grid, liquidMass, ruin, depleted),
+      )
     }
   }
 
@@ -956,6 +1023,7 @@ function propagate(
     grid: spec.grid,
     mass: marginalOverBasis(mass, spec, basis),
     ruinProbability: ruin,
+    depletedProbability: depleted,
   }
 
   return {
@@ -965,7 +1033,14 @@ function propagate(
     expectedWithdrawn,
     liquidOutcomes: isAF ? liquidOutcomes : undefined,
     finalLiquidDistribution:
-      isAF && liquidMass ? { grid: spec.grid, mass: liquidMass, ruinProbability: ruin } : undefined,
+      isAF && liquidMass
+        ? {
+            grid: spec.grid,
+            mass: liquidMass,
+            ruinProbability: ruin,
+            depletedProbability: depleted,
+          }
+        : undefined,
     clippedMass: clipped,
   }
 }

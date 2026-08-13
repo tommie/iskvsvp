@@ -50,7 +50,7 @@ describe('densityBins', () => {
     // node-to-node would call the bin one decade wide and double the density.
     const grid = Float64Array.from([1, 10, 100, 1000])
     const mass = Float64Array.from([0, 0.5, 0, 0])
-    const bins = densityBins({ grid, mass, ruinProbability: 0.5 }, 2)
+    const bins = densityBins({ grid, mass, ruinProbability: 0.5, depletedProbability: 0 }, 2)
 
     expect(bins).toHaveLength(2)
     expect(bins[0]!.decades).toBeCloseTo(2, 12)
@@ -60,7 +60,15 @@ describe('densityBins', () => {
 
   it('returns nothing for a degenerate grid', () => {
     expect(
-      densityBins({ grid: Float64Array.of(1), mass: Float64Array.of(1), ruinProbability: 0 }, 10),
+      densityBins(
+        {
+          grid: Float64Array.of(1),
+          mass: Float64Array.of(1),
+          ruinProbability: 0,
+          depletedProbability: 0,
+        },
+        10,
+      ),
     ).toEqual([])
   })
 })

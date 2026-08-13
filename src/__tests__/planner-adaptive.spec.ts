@@ -149,6 +149,60 @@ describe('adaptive extra withdrawals', () => {
     })
   })
 
+  describe('the final year, where the rule spends the whole remaining surplus', () => {
+    // Zero return, no tax and no volatility, so the reserve rate is zero: the
+    // reserve is the remaining needs undiscounted and the annuity is the count
+    // of remaining payments. A capital of exactly need + extra per year is then
+    // spent to precisely zero, which is what the last year is supposed to do.
+    const years = 10
+    const spent = () =>
+      runPlanner(
+        plan({
+          years,
+          initialCapital: 1_000_000,
+          iskTaxRate: 0,
+          cashflow: buildCashflow(years, 50_000, 100_000),
+          ...singleAsset(0, 0),
+        }),
+      ).adaptiveRun
+
+    it('counts a plan that funded everything and ended at zero as survived', () => {
+      const run = spent()
+      // Ruin is failing to fund the *need*. Landing on zero having paid the
+      // need and the extra it could afford is the plan working, not failing;
+      // reading it as ruin would put a cliff in the last year of every
+      // adaptive survival curve.
+      expect(finalOf(run).ruinProbability).toBeCloseTo(0, 10)
+      expect(run.finalDistribution.depletedProbability).toBeCloseTo(1, 10)
+      expect(finalOf(run).median).toBe(0)
+    })
+
+    it('counts the cash that emptied the account as withdrawn', () => {
+      // 50 000 of need plus 50 000 of affordable extra, ten times over: the
+      // whole starting capital reaches the household.
+      expect(spent().expectedWithdrawn).toBeCloseTo(1_000_000, 2)
+    })
+
+    it('leaves no step in the survival curve at the horizon', () => {
+      const horizon = 40
+      const outcomes = runPlanner(
+        plan({
+          years: horizon,
+          initialCapital: 6_000_000,
+          cashflow: buildCashflow(horizon, 200_000, 100_000),
+        }),
+      ).adaptiveRun.outcomes
+      const failed = (i: number) => outcomes[i]!.ruinProbability - outcomes[i - 1]!.ruinProbability
+
+      // The annuity factor falls to one in the last year, so spending does
+      // accelerate towards the horizon and the final step is legitimately the
+      // largest — measured at about 1.7x its predecessor. What it must not be
+      // is a discontinuity: counting the deliberately emptied accounts as
+      // failures instead of as depleted takes it to 3.8x.
+      expect(failed(horizon)).toBeLessThan(2.5 * failed(horizon - 1))
+    })
+  })
+
   it('derives the reserve return from the plan rather than asking for one', () => {
     const params = plan({ years: 25, cashflow: buildCashflow(25, 200_000, 50_000) })
     const result = runPlanner(params)

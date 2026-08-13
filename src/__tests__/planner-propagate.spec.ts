@@ -4,7 +4,7 @@ import seedrandom from 'seedrandom'
 import { normalQuadrature } from '../planner/quadrature'
 import { portfolioMoments, runPlanner } from '../planner/propagate'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
-import type { CashflowYear, PlannerParameters } from '../planner/types'
+import type { CashflowYear, PlannerParameters, WealthDistribution } from '../planner/types'
 
 function params(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
   const base = defaultPlannerParameters()
@@ -26,8 +26,9 @@ function singleAsset(expectedRealReturn: number, volatility: number) {
   }
 }
 
-function totalMass(run: { finalDistribution: { mass: Float64Array; ruinProbability: number } }) {
-  let sum = run.finalDistribution.ruinProbability
+function totalMass(run: { finalDistribution: WealthDistribution }) {
+  // Three places a path can end: failed, spent out, or holding capital.
+  let sum = run.finalDistribution.ruinProbability + run.finalDistribution.depletedProbability
   for (const m of run.finalDistribution.mass) sum += m
   return sum
 }
