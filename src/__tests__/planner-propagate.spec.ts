@@ -133,6 +133,68 @@ describe('runPlanner', () => {
     expect(totalMass(result.extraRun)).toBeCloseTo(1, 10)
   })
 
+  describe('the per-year payout', () => {
+    const years = 25
+    const build = () =>
+      runPlanner(
+        params({
+          years,
+          initialCapital: 5_000_000,
+          cashflow: buildCashflow(years, 250_000, 100_000),
+        }),
+      )
+
+    it('decomposes the expected withdrawal exactly', () => {
+      // Binning the payout splits each amount between neighbouring bins, which
+      // conserves the mean. That is what makes this an identity rather than two
+      // estimates of the same total, and it is the check that the chart and the
+      // summary table can never tell different stories.
+      const result = build()
+      for (const run of [result.needRun, result.adaptiveRun, result.extraRun]) {
+        const summed = run.withdrawals.reduce((total, year) => total + year.mean, 0)
+        expect(summed / run.expectedWithdrawn).toBeCloseTo(1, 9)
+      }
+    })
+
+    it('indexes by cash-flow year, so a chart lines up with the schedule', () => {
+      const result = build()
+      const withdrawals = result.needRun.withdrawals
+      expect(withdrawals).toHaveLength(years)
+      expect(withdrawals[0]!.index).toBe(0)
+      expect(withdrawals[0]!.age).toBe(result.needRun.outcomes[0]!.age)
+      expect(withdrawals[years - 1]!.index).toBe(years - 1)
+    })
+
+    it('pays a fixed schedule its amount for as long as the plan holds', () => {
+      const result = build()
+      const first = result.needRun.withdrawals[0]!
+      // Nothing can have failed in the first year of this plan, so every
+      // percentile is the amount asked for.
+      expect(first.percentile10).toBeCloseTo(250_000, 3)
+      expect(first.median).toBeCloseTo(250_000, 3)
+      expect(first.percentile90).toBeCloseTo(250_000, 3)
+    })
+
+    it('counts a year the plan never reached as zero rather than leaving it out', () => {
+      const horizon = 12
+      const result = runPlanner(
+        params({
+          years: horizon,
+          initialCapital: 1_000_000,
+          iskTaxRate: 0,
+          cashflow: buildCashflow(horizon, 190_000, 0),
+          ...singleAsset(0, 0),
+        }),
+      )
+      // The plan runs dry in its sixth year, so from then on every percentile
+      // of the payout is zero — unconditional, like the capital percentiles.
+      const last = result.needRun.withdrawals[horizon - 1]!
+      expect(last.median).toBe(0)
+      expect(last.percentile90).toBe(0)
+      expect(last.mean).toBe(0)
+    })
+  })
+
   it('preserves the arithmetic mean when nothing is withdrawn or taxed', () => {
     const years = 30
     const result = runPlanner(

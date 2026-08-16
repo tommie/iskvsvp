@@ -6,6 +6,7 @@ import type {
   PortfolioMoments,
   PropagationRun,
   WealthDistribution,
+  WithdrawalOutcome,
   YearOutcome,
 } from './types'
 
@@ -93,8 +94,12 @@ interface YearPolicy {
  *
  * `reserve[t]` is what the remaining need commitments are worth at the start
  * of year t, discounted at `rate`; `annuity[t]` is the number of payments the
- * surplus has to stretch over, so `surplus / annuity[t]` is the level real
- * amount it supports for the rest of the plan.
+ * surplus has to stretch over.
+ *
+ * Both are in **cash delivered to the household**, not in balance. On an AF the
+ * two differ: raising a krona realises gain and costs more than a krona of
+ * balance. `step()` converts at the node's own cost basis, which it knows and
+ * this schedule cannot.
  *
  * The reserve is floored at zero. A schedule whose future deposits outweigh its
  * withdrawals would otherwise produce a negative requirement, manufacturing
@@ -141,8 +146,11 @@ const RESERVE_QUANTILE_Z = -0.6744897501960817 // 25th percentile
  * lengthens, so a long plan is allowed to discount at nearly its median while a
  * short one must be markedly more cautious.
  *
- * For AF only the schablonintäkt is subtracted; tax on realised gains depends
- * on the cost basis, so the reserve is very slightly optimistic there.
+ * Only the schablonintäkt is subtracted for AF, and that is the whole of it:
+ * the schablon is a drag on the balance and so belongs in the rate, while the
+ * tax on realised gains is a cost of *raising* cash and is priced into the
+ * amount instead, by `step()` dividing the reserve through the node's payable
+ * share. Charging it twice would reserve a plan into never spending.
  */
 function reserveReturnFor(params: PlannerParameters, moments: PortfolioMoments): number {
   const taxDrag =
@@ -157,6 +165,60 @@ function reserveReturnFor(params: PlannerParameters, moments: PortfolioMoments):
 
 /** Which of the three bracketing runs a propagation represents. */
 type SpendingMode = 'need' | 'extra' | 'adaptive'
+
+/**
+ * Number of bins the year's payout is collected into.
+ *
+ * The payout spans at most `need + extra`, so a few hundred bins put the
+ * quantisation three orders of magnitude below the amount itself — well under
+ * the two significant digits the outputs are rounded to.
+ */
+const FLOW_BINS = 257
+
+/**
+ * Histogram of what a plan hands over in one year.
+ *
+ * A histogram rather than a mapping of the wealth quantiles, even though the
+ * payout is monotone in the balance: on an AF it also depends on the cost-basis
+ * ratio, through the tax the sale realises, so there is no single index to read
+ * the quantiles off.
+ *
+ * Linear binning splits each amount between its two neighbouring bins, which
+ * conserves the mean exactly. That is what lets the mean of this histogram and
+ * `expectedWithdrawn` be the same number rather than two estimates of it.
+ */
+interface FlowHistogram {
+  low: number
+  step: number
+  /** Reciprocal of `step`, so binning costs a multiply rather than a divide in
+   *  a loop that runs hundreds of millions of times. Zero for a degenerate
+   *  range, which is the flag that everything lands in one bin. */
+  perStep: number
+  mass: Float64Array
+}
+
+function buildFlowHistogram(baseFlow: number, extra: number): FlowHistogram {
+  // A failed year pays nothing, so zero has to be inside the range even when
+  // the schedule itself never passes through it.
+  const low = Math.min(0, baseFlow)
+  const high = Math.max(0, baseFlow + extra)
+  const step = high > low ? (high - low) / (FLOW_BINS - 1) : 0
+  return { low, step, perStep: step > 0 ? 1 / step : 0, mass: new Float64Array(FLOW_BINS) }
+}
+
+function addFlow(histogram: FlowHistogram, value: number, probability: number): void {
+  if (histogram.perStep === 0) {
+    histogram.mass[0]! += probability
+    return
+  }
+  const position = (value - histogram.low) * histogram.perStep
+  let index = position | 0
+  if (index < 0) index = 0
+  else if (index > FLOW_BINS - 2) index = FLOW_BINS - 2
+  const fraction = position - index
+  histogram.mass[index]! += probability * (1 - fraction)
+  histogram.mass[index + 1]! += probability * fraction
+}
 
 interface StepResult {
   mass: Float64Array
@@ -425,6 +487,11 @@ function gridBounds(params: PlannerParameters, moments: PortfolioMoments) {
  * Returns a signed amount: negative is a skattereduktion, which flows back into
  * the portfolio as new money. That assumes enough other final tax — pension
  * income, say — to absorb the credit.
+ *
+ * The bill is *not* capped at the balance. A charge the portfolio cannot cover
+ * is a plan that has failed, and only the caller knows that; forgiving the
+ * excess here would let an account be emptied by a withdrawal, owe tax on the
+ * gain it realised, and carry on as though the debt had never existed.
  */
 function afTax(
   balance: number,
@@ -449,22 +516,56 @@ function afTax(
     )
   }
 
-  // Only the payable side is bounded by the portfolio; a credit is an inflow.
-  tax = Math.min(tax, Math.max(0, balance))
-
   // Raising the cash to pay the bill is itself a sale, so it realises further
   // gain and further tax. Solve for the gross amount G that nets the tax due:
   // G = tax + G·u·r, hence G = tax / (1 - u·r), with u the unrealised gain
   // fraction and r the rate. Closed form rather than iterating to a fixed
   // point. Sitting at an unrealised loss does not reduce the cash the bill
   // needs, so u is floored at zero.
-  if (tax > 0 && balance > 0) {
+  if (tax > 0) {
     const unrealizedFraction = Math.max(0, 1 - basisRatio)
     const denominator = 1 - unrealizedFraction * capitalGainsTaxRate
-    if (denominator > 0) tax = Math.min(tax / denominator, balance)
+    if (denominator > 0) tax = tax / denominator
   }
 
   return tax
+}
+
+/**
+ * The share of a grown AF balance that can be withdrawn with the tax the
+ * withdrawal itself triggers still payable out of what remains.
+ *
+ * Selling realises gain, and the gain is taxed whether or not anything is left
+ * to pay with, so "withdraw the whole balance" is not a feasible instruction
+ * for a taxable account. Everything in the year's tax is proportional to either
+ * the withdrawal or the balance behind it, so the largest fundable withdrawal
+ * has a closed form: with `k` the effective rate after the gross-up, the
+ * remainder must satisfy `x·(1 − k·(s + τ·(1−r))) ≥ k·(1−r)·F`, which solves to
+ * a fixed share of the grown balance.
+ *
+ * Depends only on the cost-basis ratio and the year's rates, so it is computed
+ * once per basis and return node rather than per wealth node.
+ *
+ * An unrealised loss makes the year's capital income negative, and a credit is
+ * an inflow rather than a charge, so the whole balance stays available.
+ */
+function payableWithdrawalShare(
+  basisRatio: number,
+  schablonRate: number,
+  turnover: number,
+  capitalGainsTaxRate: number,
+): number {
+  const unrealizedFraction = Math.max(0, (1 - basisRatio) * (1 - turnover))
+  const denominator = 1 - unrealizedFraction * capitalGainsTaxRate
+  if (!(denominator > 0)) return 0
+  const rate = capitalGainsTaxRate / denominator
+
+  const remainderShare = 1 - rate * (schablonRate + turnover * (1 - basisRatio))
+  const withdrawalShare = rate * (1 - basisRatio)
+  if (!(remainderShare > 0)) return 0
+  const total = remainderShare + withdrawalShare
+  if (!(total > 0)) return 1
+  return Math.min(1, remainderShare / total)
 }
 
 /**
@@ -493,6 +594,7 @@ function step(
   policy: YearPolicy,
   allowanceReal: number,
   lossThresholdReal: number,
+  flows: FlowHistogram,
 ): StepResult {
   const { spec, basis, quad, growth, isAF, iskRate, turnover, inflationFactor, params } = ctx
   const nWealth = sourceValues.length
@@ -514,6 +616,7 @@ function step(
   let depleted = 0
   let clipped = 0
   let withdrawn = 0
+  let paidMass = 0
 
   for (let b = 0; b < basis.n; b++) {
     const rowOffset = b * nWealth
@@ -534,6 +637,23 @@ function step(
       // is just grownRatio. With a fixed flow the realised gain is known here
       // too, before the wealth loop starts.
       const flatGain = !adaptive && isWithdrawal ? baseFlow * (1 - grownRatio) : 0
+      // An ISK's schablon is a fraction of the balance, so whatever is left
+      // always covers it and the whole balance is withdrawable. An AF has to
+      // keep back the tax on the gain the sale realises.
+      const payableShare = isAF
+        ? payableWithdrawalShare(grownRatio, schablonRate, turnover, capitalGainsTaxRate)
+        : 1
+      // The reserve and the annuity are in cash delivered; the balance is not.
+      // Holding back the need itself would leave an AF short of the tax that
+      // raising it costs, so the reserve becomes the balance that funds it, and
+      // a surplus of balance supports a correspondingly smaller payment.
+      //
+      // Both use the share at this node's *current* basis. Gains accrue as the
+      // plan runs, so the share the far future will face is lower and the
+      // reserve is still a little optimistic — carrying that would need the
+      // remaining horizon's basis path as a state of its own.
+      const reservedBalance = payableShare > 0 ? reserve / payableShare : Infinity
+      const paymentPerSurplus = payableShare / annuityFactor
 
       let pointer = 0
 
@@ -544,13 +664,16 @@ function step(
         const grown = sourceValues[j]! * factor
 
         // Ruin is defined as being unable to fund the need withdrawal in
-        // full. Paying part of it and continuing would understate the failure.
+        // full — the tax the withdrawal itself triggers included, since a
+        // household that cannot settle the bill has not funded the year.
+        // Paying part of it and continuing would understate the failure.
         // Landing on exactly zero is *not* ruin: the commitment was met and
         // nothing was left over, which is precisely what the adaptive rule
         // aims for in the final year.
-        const available = grown - baseFlow
+        const available = grown * payableShare - baseFlow
         if (available < 0) {
           ruin += probability
+          if (adaptive) addFlow(flows, 0, probability)
           continue
         }
 
@@ -559,17 +682,15 @@ function step(
           // Spend the need, then whatever level amount the surplus over the
           // reserve would support for the rest of the plan — never more than
           // the extra the household actually asked for, and never more than
-          // is there: a schedule whose future deposits push the reserve below
-          // the current need can ask for more than the balance holds.
-          const surplus = grown - reserve
-          if (surplus > 0) flow += Math.min(extra, surplus / annuityFactor, available)
+          // can be paid for. Two things bound the last one: a schedule whose
+          // future deposits push the reserve below the current need can ask
+          // for more than the balance holds, and on an AF the sale that funds
+          // the withdrawal is taxed.
+          const surplus = grown - reservedBalance
+          if (surplus > 0) flow += Math.min(extra, surplus * paymentPerSurplus, available)
         }
 
         const afterFlow = grown - flow
-
-        // The flow was funded in full, so it counts even if tax later empties
-        // the account: the household did receive the money this year.
-        withdrawn += probability * flow
 
         let tax: number
         let ratio = 1
@@ -614,13 +735,39 @@ function step(
 
         const next = afterFlow - tax
 
-        // Spending, or the tax on it, can empty the account. The year's
-        // commitment was still met, so this is not ruin; it leaves the grid as
+        // The adaptive rule aims squarely at the point where what remains is
+        // exactly the bill, so the closed form that caps the withdrawal and the
+        // one that charges the tax have to agree to the last bit or a whole
+        // band of outcomes flips to ruin on rounding noise. A shortfall inside
+        // a billionth of the balance is that noise — fractions of an öre on a
+        // multi-million plan — and not something a household could act on.
+        const noise = grown * 1e-9
+
+        // A bill the remaining balance cannot cover is a failed year, and the
+        // withdrawal that caused it was never really affordable, so it is not
+        // counted either. `payableShare` keeps the adaptive rule clear of this
+        // by construction; a fixed schedule can still walk into it.
+        if (next < -noise) {
+          ruin += probability
+          if (adaptive) addFlow(flows, 0, probability)
+          continue
+        }
+
+        withdrawn += probability * flow
+        paidMass += probability
+        // A fixed schedule pays the same amount wherever it can afford it, so
+        // its payout is two lumps and is added once at the end. Only the
+        // adaptive run varies node by node, and this loop body runs hundreds of
+        // millions of times, so it is worth the branch.
+        if (adaptive) addFlow(flows, flow, probability)
+
+        // Spending can empty the account exactly, owing nothing further. The
+        // year's commitment was met, so this is not ruin; it leaves the grid as
         // depleted mass, at a capital of exactly zero. Calling it ruin instead
         // would put a step in the last year of the adaptive run's survival
         // curve, which by construction spends the whole remaining surplus and
         // so lands a whole band of outcomes on zero.
-        if (next <= 0) {
+        if (next <= noise) {
           depleted += probability
           continue
         }
@@ -672,6 +819,11 @@ function step(
         mass[high + 1]! += highMass * bFraction
       }
     }
+  }
+
+  if (!adaptive) {
+    addFlow(flows, baseFlow, paidMass)
+    addFlow(flows, 0, ruin)
   }
 
   return { mass, ruin, depleted, clipped, withdrawn }
@@ -733,6 +885,43 @@ function summarize(
     percentile75: quantileOf(grid, mass, atZero, 0.75),
     percentile90: quantileOf(grid, mass, atZero, 0.9),
     percentile95: quantileOf(grid, mass, atZero, 0.95),
+  }
+}
+
+function flowQuantile(histogram: FlowHistogram, p: number): number {
+  let cumulative = 0
+  for (let i = 0; i < FLOW_BINS; i++) {
+    cumulative += histogram.mass[i]!
+    if (cumulative >= p) return histogram.low + i * histogram.step
+  }
+  return histogram.low + (FLOW_BINS - 1) * histogram.step
+}
+
+/**
+ * The spread of what one year actually pays out.
+ *
+ * Unconditional, like every other figure the planner reports: a year the plan
+ * never reached pays nothing and is counted as zero rather than left out. That
+ * is why the lower band drops to zero once the risk of failure passes ten per
+ * cent, and it is the same reading as the capital percentiles.
+ */
+function summarizeWithdrawal(
+  index: number,
+  startAge: number,
+  histogram: FlowHistogram,
+): WithdrawalOutcome {
+  let mean = 0
+  for (let i = 0; i < FLOW_BINS; i++) {
+    mean += histogram.mass[i]! * (histogram.low + i * histogram.step)
+  }
+
+  return {
+    index,
+    age: startAge + index,
+    mean,
+    percentile10: flowQuantile(histogram, 0.1),
+    median: flowQuantile(histogram, 0.5),
+    percentile90: flowQuantile(histogram, 0.9),
   }
 }
 
@@ -910,6 +1099,10 @@ function propagate(
   }
 
   const outcomes: YearOutcome[] = [startOutcome(false)]
+  // One entry per cash-flow year, indexed as the cash flow itself is, so the
+  // chart lines up with the schedule the household typed in. There is no
+  // year-zero entry: nothing is paid before the first year's return.
+  const withdrawals: WithdrawalOutcome[] = []
   const liquidOutcomes: YearOutcome[] = isAF ? [startOutcome(true)] : []
   let liquidMass: Float64Array | null = null
 
@@ -985,7 +1178,14 @@ function propagate(
       // A year with no flow at all leaves zero capital at zero.
     }
 
-    const stepped = step(ctx, values, mass, policy, allowanceReal, lossThresholdReal)
+    // Everything off the grid pays nothing this year: a failed plan takes no
+    // more withdrawals, and a depleted one has nothing to take them from. The
+    // step bins the rest as it goes.
+    const flows = buildFlowHistogram(policy.baseFlow, policy.extra)
+    addFlow(flows, 0, ruin + depleted)
+
+    const stepped = step(ctx, values, mass, policy, allowanceReal, lossThresholdReal, flows)
+    withdrawals.push(summarizeWithdrawal(year, params.startAge, flows))
 
     // Ruin is absorbing. A deposit scheduled after the plan already failed to
     // cover its need does not undo that failure, so the ruined mass is never
@@ -1029,6 +1229,7 @@ function propagate(
   return {
     label,
     outcomes,
+    withdrawals,
     finalDistribution,
     expectedWithdrawn,
     liquidOutcomes: isAF ? liquidOutcomes : undefined,

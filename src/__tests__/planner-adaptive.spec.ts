@@ -183,23 +183,64 @@ describe('adaptive extra withdrawals', () => {
       expect(spent().expectedWithdrawn).toBeCloseTo(1_000_000, 2)
     })
 
-    it('leaves no step in the survival curve at the horizon', () => {
-      const horizon = 40
-      const outcomes = runPlanner(
-        plan({
-          years: horizon,
-          initialCapital: 6_000_000,
-          cashflow: buildCashflow(horizon, 200_000, 100_000),
-        }),
-      ).adaptiveRun.outcomes
-      const failed = (i: number) => outcomes[i]!.ruinProbability - outcomes[i - 1]!.ruinProbability
+    // The annuity factor falls to one in the last year, so spending does
+    // accelerate towards the horizon and the final step is legitimately the
+    // largest — measured at about 1.7x its predecessor on either account type.
+    // What it must not be is a discontinuity. Two separate mistakes produce
+    // one: counting the deliberately emptied accounts as failures rather than
+    // as depleted takes it to 3.8x, and reserving an AF's need without the tax
+    // that raising it costs takes it to 3.4x.
+    for (const accountType of ['ISK', 'AF'] as const) {
+      it(`leaves no step in the ${accountType} survival curve at the horizon`, () => {
+        const horizon = 30
+        const outcomes = runPlanner(
+          plan({
+            years: horizon,
+            accountType,
+            initialCapital: 6_000_000,
+            cashflow: buildCashflow(horizon, 200_000, 100_000),
+          }),
+        ).adaptiveRun.outcomes
+        const failed = (i: number) =>
+          outcomes[i]!.ruinProbability - outcomes[i - 1]!.ruinProbability
 
-      // The annuity factor falls to one in the last year, so spending does
-      // accelerate towards the horizon and the final step is legitimately the
-      // largest — measured at about 1.7x its predecessor. What it must not be
-      // is a discontinuity: counting the deliberately emptied accounts as
-      // failures instead of as depleted takes it to 3.8x.
-      expect(failed(horizon)).toBeLessThan(2.5 * failed(horizon - 1))
+        expect(failed(horizon)).toBeLessThan(2.5 * failed(horizon - 1))
+      })
+    }
+  })
+
+  describe('the payout it reports year by year', () => {
+    const years = 40
+    const result = () =>
+      runPlanner(
+        plan({
+          years,
+          initialCapital: 6_000_000,
+          cashflow: buildCashflow(years, 200_000, 100_000),
+        }),
+      )
+
+    it('stays inside the envelope the household asked for', () => {
+      // The rule can decline part of the extra and it can fail outright, but it
+      // can never pay more than was asked for — the amounts come from the
+      // schedule, and only the level of the discretionary part is negotiable.
+      for (const year of result().adaptiveRun.withdrawals) {
+        expect(year.percentile90).toBeLessThanOrEqual(300_000 + 1e-6)
+        expect(year.percentile10).toBeLessThanOrEqual(year.median + 1e-6)
+        expect(year.median).toBeLessThanOrEqual(year.percentile90 + 1e-6)
+        expect(year.percentile10).toBeGreaterThanOrEqual(0)
+      }
+    })
+
+    it('rations the extra from the first year and harder later', () => {
+      // 6 mkr against forty years of need is tight enough that the reserve
+      // already claims most of the balance in year one: the rule pays the need
+      // and only a sliver of the extra. By the horizon the low outcomes are
+      // down to the need alone or to nothing.
+      const withdrawals = result().adaptiveRun.withdrawals
+      expect(withdrawals[0]!.median).toBeGreaterThan(200_000)
+      expect(withdrawals[0]!.median).toBeLessThan(300_000)
+      expect(withdrawals[0]!.percentile10).toBeGreaterThan(withdrawals[years - 1]!.percentile10)
     })
   })
 

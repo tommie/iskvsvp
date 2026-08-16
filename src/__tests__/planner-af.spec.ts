@@ -288,6 +288,99 @@ describe('AF propagation', () => {
     expect(result.needRun.outcomes[1]!.mean).toBeGreaterThan(500_000)
   })
 
+  describe('the tax the withdrawal itself triggers', () => {
+    // A holding with no cost basis at all, no schablon and nothing to
+    // rebalance, so the year's whole bill is the gain the sale realises. To
+    // hand over F the account must raise F and then the 30% on it, and the
+    // sale that raises the tax is taxed in turn: the balance stretches to
+    // exactly 1 − 30% of itself, and no further.
+    const capital = 1_000_000
+    const payable = capital * (1 - 0.3)
+
+    const oneYear = (flow: number) =>
+      runPlanner(
+        af({
+          years: 1,
+          initialCapital: capital,
+          initialCostBasisRatio: 0,
+          afSchablonRate: 0,
+          capitalGainsTaxRate: 0.3,
+          cashflow: buildCashflow(1, flow, 0),
+          ...singleAsset(0, 0),
+        }),
+      ).needRun
+
+    it('hands over everything the balance stretches to, and ends at zero', () => {
+      const run = oneYear(payable)
+      expect(run.finalDistribution.ruinProbability).toBeCloseTo(0, 6)
+      expect(run.finalDistribution.depletedProbability).toBeCloseTo(1, 6)
+      expect(run.expectedWithdrawn).toBeCloseTo(payable, 2)
+    })
+
+    it('ruins on a bill the balance cannot settle, and pays out nothing', () => {
+      // Only a little more, but the account cannot raise it and the tax: a
+      // withdrawal the plan cannot pay for was never a withdrawal.
+      const run = oneYear(payable * 1.02)
+      expect(run.finalDistribution.ruinProbability).toBeCloseTo(1, 6)
+      expect(run.expectedWithdrawn).toBeCloseTo(0, 6)
+    })
+
+    it('reserves the balance the need costs to raise, not the need itself', () => {
+      // Ten years, no return and no volatility, so the whole thing is exact.
+      // The reserve for ten needs of 50 000 is 500 000 of cash, which on this
+      // account takes 500 000 / 0,7 = 714 286 of balance to raise; the 285 714
+      // above it supports 0,7 · 285 714 / 10 = 20 000 a year of extra. That
+      // holds at every step, so the plan pays a level 70 000 and lands on
+      // exactly zero after ten of them — 700 000 to the household and 300 000
+      // to Skatteverket.
+      //
+      // Reserving the 500 000 as if it were balance would leave a surplus of
+      // 500 000, pay out 100 000 a year, and run the account dry in year seven.
+      const run = runPlanner(
+        af({
+          years: 10,
+          initialCapital: capital,
+          initialCostBasisRatio: 0,
+          afSchablonRate: 0,
+          capitalGainsTaxRate: 0.3,
+          cashflow: buildCashflow(10, 50_000, 100_000),
+          ...singleAsset(0, 0),
+        }),
+      ).adaptiveRun
+
+      // The payout histogram spans 0 to need+extra, so a median can only land
+      // on one of its bin edges; the mean carries the exact figure.
+      const binWidth = 150_000 / 256
+      for (const year of run.withdrawals) {
+        expect(year.mean).toBeCloseTo(70_000, 0)
+        expect(Math.abs(year.median - 70_000)).toBeLessThan(binWidth)
+      }
+      expect(run.expectedWithdrawn).toBeCloseTo(payable, -1)
+      expect(run.finalDistribution.ruinProbability).toBeCloseTo(0, 6)
+      expect(run.finalDistribution.depletedProbability).toBeCloseTo(1, 6)
+    })
+
+    it('keeps the adaptive rule clear of a bill it cannot pay', () => {
+      // The need alone is affordable and the extra would take it well past
+      // what the account can raise, so the rule has to stop at the boundary
+      // rather than spend into a tax bill and fail.
+      const run = runPlanner(
+        af({
+          years: 1,
+          initialCapital: capital,
+          initialCostBasisRatio: 0,
+          afSchablonRate: 0,
+          capitalGainsTaxRate: 0.3,
+          cashflow: [{ need: payable / 2, extra: capital }],
+          ...singleAsset(0, 0),
+        }),
+      ).adaptiveRun
+
+      expect(run.finalDistribution.ruinProbability).toBeCloseTo(0, 6)
+      expect(run.expectedWithdrawn).toBeCloseTo(payable, 2)
+    })
+  })
+
   it('taxes the nominal gain, not the real one', () => {
     const years = 20
     const inflation = 0.02

@@ -185,10 +185,31 @@ export interface YearOutcome {
   percentile95: number
 }
 
+/**
+ * The spread of what a plan hands over in one year.
+ *
+ * Interesting mainly for the adaptive run, whose payout is the only one the
+ * balance modulates: a fixed schedule pays its amount or has failed. Reported
+ * for every run so the fixed ones can be drawn as the envelope the adaptive
+ * payout moves inside.
+ */
+export interface WithdrawalOutcome {
+  /** Index into `cashflow`, so a chart lines up with the schedule as entered. */
+  index: number
+  age: number
+  /** Probability-weighted amount paid; the year's share of `expectedWithdrawn`. */
+  mean: number
+  percentile10: number
+  median: number
+  percentile90: number
+}
+
 export interface PropagationRun {
   label: string
   /** Length `years + 1`; index 0 is the deterministic starting position. */
   outcomes: YearOutcome[]
+  /** Length `years`; one entry per cash-flow year. */
+  withdrawals: WithdrawalOutcome[]
   finalDistribution: WealthDistribution
   /**
    * The same series and final distribution, net of the capital gains tax still

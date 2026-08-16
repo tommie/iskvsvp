@@ -63,7 +63,7 @@ describe('PlannerOutcome layout', () => {
   it('names the curves exactly as it names the columns', () => {
     const { wrapper } = mountOutcome()
     const legend = wrapper
-      .findAll('.line')
+      .findAll('.run-legend .line')
       .map((swatch) => swatch.element.parentElement!.textContent!.trim())
     // The header row leads with an empty corner cell for the row labels.
     const columns = wrapper
