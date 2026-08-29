@@ -10,7 +10,10 @@ import { formatKr, formatPercent, formatRelative } from '../../planner/format'
 import D3Chart from '../D3Chart.vue'
 
 const store = usePlannerStore()
-const { results, cashflow, initialCapital } = storeToRefs(store)
+const { results, cashflow, initialCapital, bequestRatio } = storeToRefs(store)
+
+/** The bequest target as an amount; 0 when the plan sets none. */
+const bequestTarget = computed(() => Math.max(0, bequestRatio.value) * initialCapital.value)
 
 const NEED_COLOR = '#0d6efd'
 const EXTRA_COLOR = '#fd7e14'
@@ -91,6 +94,7 @@ const summary = computed(() => {
       percentile90: final.percentile90,
       withdrawn: totalWithdrawn(includeExtra),
       actualWithdrawn: entry.run.expectedWithdrawn,
+      bequest: entry.run.bequestProbability,
     }
   }
   return [build(runs.value[0]!, false), build(runs.value[1]!, true), build(runs.value[2]!, true)]
@@ -135,6 +139,7 @@ const chartData = computed(() => ({
   results: results.value,
   logScale: logScale.value,
   netOfTax: netOfTax.value,
+  bequestTarget: bequestTarget.value,
 }))
 
 const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
@@ -181,6 +186,30 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     leftAxis.ticks(6)
   }
   plot.append('g').call(leftAxis)
+
+  // The target the adaptive run holds back for, so the fan can be read against
+  // it: where the band sits at the horizon *is* the answer to whether it holds.
+  // Drawn only when it is on the scale — a target above the 90th percentile
+  // would otherwise pin itself to the top of the chart and misreport itself.
+  if (bequestTarget.value > 0 && bequestTarget.value <= upper) {
+    const at = y(Math.max(lowerBound, bequestTarget.value))
+    plot
+      .append('line')
+      .attr('x1', 0)
+      .attr('x2', innerWidth)
+      .attr('y1', at)
+      .attr('y2', at)
+      .attr('stroke', '#6c757d')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '4 4')
+    plot
+      .append('text')
+      .attr('x', 4)
+      .attr('y', at - 4)
+      .attr('font-size', 11)
+      .style('fill', '#6c757d')
+      .text('Arvsmål')
+  }
 
   for (const { outcomes: series, color, dashed } of runs.value) {
     const band = d3
@@ -629,6 +658,16 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                       {{ formatPercent(row.survival) }}
                     </td>
                   </tr>
+                  <!-- Only the adaptive run aims at the target, but all three
+                       are shown: what målet kostar is the difference between
+                       columns, and a fast plan som råkar nå det ändå är värt
+                       att se. -->
+                  <tr v-if="bequestTarget > 0">
+                    <th>Sannolikhet att nå arvsmålet</th>
+                    <td v-for="row in summary" :key="row.label" class="text-end">
+                      {{ row.bequest === undefined ? '—' : formatPercent(row.bequest * 100) }}
+                    </td>
+                  </tr>
                   <!-- Against the capital paid in. Both are in today's money, so the
                    change is real growth net of everything the plan withdrew. -->
                   <tr>
@@ -661,6 +700,13 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
               kolumnerna. Percentilerna är ovillkorade: en plan som spricker räknas som noll kronor,
               inte som bortfall. Därför kan 10:e percentilen vara noll när risken att planen
               spricker överstiger 10&nbsp;%.
+              <template v-if="bequestTarget > 0">
+                Arvsmålet är {{ formatKr(bequestTarget) }} i dagens penningvärde, mätt efter
+                eventuell latent skatt — det är vad som faktiskt blir kvar till någon annan. Bara
+                den anpassade körningen siktar på det: målet reserveras vid sidan av behovet, så det
+                är det extra uttaget som betalar för det. Att missa målet är inte att planen
+                spricker; det är fortfarande behovet som avgör den saken.
+              </template>
               <template v-if="relative">
                 Uttaget visas som förändring mot kolumnens planerade uttag, kapitalet som förändring
                 mot startkapitalet ({{ formatKr(initialCapital) }}) — båda i dagens penningvärde, så

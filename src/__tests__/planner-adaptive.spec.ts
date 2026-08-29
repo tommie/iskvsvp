@@ -244,6 +244,183 @@ describe('adaptive extra withdrawals', () => {
     })
   })
 
+  describe('the bequest target', () => {
+    // No return, no volatility and no tax, so the reserve rate is zero: the
+    // need reserve is the remaining needs undiscounted, the bequest reserve is
+    // the target itself, and the whole recursion can be worked out by hand.
+    const years = 10
+    const deterministic = (bequestRatio: number) =>
+      runPlanner(
+        plan({
+          years,
+          bequestRatio,
+          initialCapital: 1_000_000,
+          iskTaxRate: 0,
+          cashflow: buildCashflow(years, 50_000, 100_000),
+          ...singleAsset(0, 0),
+        }),
+      ).adaptiveRun
+
+    it('lands on the target instead of spending the plan to zero', () => {
+      // Half the capital reserved and half of it committed to the need leaves
+      // no surplus at all, so the extra is declined outright and the plan ends
+      // on exactly the target. The mean is the figure to check: the linear
+      // scatter conserves it exactly, while a percentile can only land on a
+      // grid node.
+      //
+      // Only to within a per cent, though, and deliberately not tightened. The
+      // surplus is a convex function of the balance — clamped below at zero —
+      // so mass spread across two grid nodes spends slightly more than the
+      // exact path does, exactly as the zero-volatility AF recursion is off for
+      // want of averaging. It converges: 493.8k, 496.6k, 498.0k, 498.9k over
+      // four doublings of the grid.
+      const run = deterministic(0.5)
+      const final = run.outcomes[years]!
+      expect(final.mean).toBeGreaterThan(500_000 * 0.985)
+      expect(final.mean).toBeLessThanOrEqual(500_000)
+      expect(run.expectedWithdrawn).toBeGreaterThanOrEqual(years * 50_000)
+      expect(run.expectedWithdrawn).toBeLessThan(years * 50_000 * 1.02)
+      expect(run.finalDistribution.depletedProbability).toBeCloseTo(0, 10)
+    })
+
+    it('reports reaching a target it clears and missing one it does not', () => {
+      // The deterministic plan above ends on half its starting capital, so a
+      // target well inside that is certain and one well outside it impossible.
+      // Deliberately not asked at the margin: a plan that aims exactly at its
+      // target puts the whole distribution on the threshold, where the answer
+      // is decided by how far the interpolation has smeared it and not by the
+      // plan.
+      expect(deterministic(0.3).bequestProbability).toBeCloseTo(1, 6)
+      expect(deterministic(0.5).bequestProbability).toBeGreaterThan(0.5)
+      // Twice the starting capital, from a plan that also has forty years of
+      // need to fund out of a portfolio that grows not at all.
+      expect(deterministic(2).bequestProbability).toBeCloseTo(0, 6)
+    })
+
+    it('converges on the target as the grid is refined', () => {
+      // The shortfall above is quantisation, not the rule, so it has to shrink
+      // with the grid. Pinned because a rule that genuinely overspent would
+      // look identical at a single resolution.
+      const meanAt = (gridNodes: number) =>
+        runPlanner(
+          plan({
+            years,
+            gridNodes,
+            bequestRatio: 0.5,
+            initialCapital: 1_000_000,
+            iskTaxRate: 0,
+            cashflow: buildCashflow(years, 50_000, 100_000),
+            ...singleAsset(0, 0),
+          }),
+        ).adaptiveRun.outcomes[years]!.mean
+
+      const coarse = meanAt(400)
+      const fine = meanAt(3200)
+      expect(500_000 - fine).toBeLessThan((500_000 - coarse) / 4)
+    })
+
+    it('reports no probability when the plan sets no target', () => {
+      expect(deterministic(0).bequestProbability).toBeUndefined()
+      // And the same plan without one is spent to nothing, which is the
+      // behaviour the target exists to change.
+      expect(deterministic(0).outcomes[years]!.mean).toBeCloseTo(0, 2)
+    })
+
+    it('buys terminal capital out of the extra, and only out of the extra', () => {
+      const none = deterministic(0)
+      const some = deterministic(0.25)
+      const most = deterministic(0.5)
+
+      // Every krona left behind is a krona of extra declined; the need is
+      // untouched, so the totals move together and in opposite directions.
+      expect(some.outcomes[years]!.mean).toBeGreaterThan(none.outcomes[years]!.mean)
+      expect(most.outcomes[years]!.mean).toBeGreaterThan(some.outcomes[years]!.mean)
+      expect(some.expectedWithdrawn).toBeLessThan(none.expectedWithdrawn)
+      expect(most.expectedWithdrawn).toBeLessThan(some.expectedWithdrawn)
+      // Every krona of it, to the same per cent the grid resolves the target to.
+      const givenUp = none.expectedWithdrawn - most.expectedWithdrawn
+      expect(givenUp).toBeGreaterThan(500_000 * 0.98)
+      expect(givenUp).toBeLessThanOrEqual(500_000)
+    })
+
+    it('leaves a plan with no extra to give up completely alone', () => {
+      const build = (bequestRatio: number) =>
+        runPlanner(
+          plan({
+            years: 30,
+            bequestRatio,
+            initialCapital: 6_000_000,
+            cashflow: buildCashflow(30, 250_000, 0),
+          }),
+        )
+      // The target is a brake on discretionary spending. With none to brake it
+      // must not reach for the need instead — a household that has to spend
+      // 250 000 a year does not stop doing so to leave an inheritance.
+      const withTarget = build(1)
+      const without = build(0)
+      expect(withTarget.adaptiveRun.expectedWithdrawn).toBeCloseTo(
+        without.adaptiveRun.expectedWithdrawn,
+        6,
+      )
+      expect(finalOf(withTarget.adaptiveRun).ruinProbability).toBeCloseTo(
+        finalOf(without.adaptiveRun).ruinProbability,
+        12,
+      )
+    })
+
+    it('does not make missing the target count as ruin', () => {
+      const years = 40
+      const build = (bequestRatio: number) =>
+        runPlanner(
+          plan({
+            years,
+            bequestRatio,
+            initialCapital: 6_000_000,
+            cashflow: buildCashflow(years, 200_000, 100_000),
+          }),
+        ).adaptiveRun
+      // An ambitious target on a plan that cannot afford it is missed most of
+      // the time, and that has to show up as a low bequest probability rather
+      // than as a plan that failed. Spending less can only help survival.
+      const ambitious = build(1)
+      expect(ambitious.bequestProbability!).toBeLessThan(0.5)
+      expect(finalOf(ambitious).ruinProbability).toBeLessThan(
+        finalOf(build(0)).ruinProbability + 1e-12,
+      )
+    })
+
+    it('measures an AF target after the tax the heirs inherit', () => {
+      // Half the balance is unrealised gain and stays so: with no return and no
+      // inflation the basis ratio never moves, and a single asset rebalances
+      // nothing. A 500 000 target therefore has to leave 588 235 of balance,
+      // which is 500 000 once the 30% on the embedded gain is settled.
+      const years = 10
+      const run = runPlanner(
+        plan({
+          years,
+          accountType: 'AF',
+          bequestRatio: 0.5,
+          initialCapital: 1_000_000,
+          initialCostBasisRatio: 0.5,
+          afSchablonRate: 0,
+          capitalGainsTaxRate: 0.3,
+          inflationRate: 0,
+          // No need at all, so the only commitment the rule weighs is the
+          // bequest and the arithmetic is the target's alone.
+          cashflow: buildCashflow(years, 0, 1_000_000),
+          ...singleAsset(0, 0),
+        }),
+      ).adaptiveRun
+
+      const liquid = run.liquidOutcomes![years]!
+      expect(liquid.mean).toBeCloseTo(500_000, 0)
+      expect(run.outcomes[years]!.mean).toBeCloseTo(500_000 / 0.85, 0)
+      // What is left over is spendable at 85 öre in the krona, the rest going
+      // to the tax the sales realise.
+      expect(run.expectedWithdrawn).toBeCloseTo((1_000_000 - 500_000 / 0.85) * 0.85, 0)
+    })
+  })
+
   it('derives the reserve return from the plan rather than asking for one', () => {
     const params = plan({ years: 25, cashflow: buildCashflow(25, 200_000, 50_000) })
     const result = runPlanner(params)

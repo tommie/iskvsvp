@@ -21,6 +21,7 @@ const {
   afSchablonRate,
   initialCostBasisRatio,
   inflationRate,
+  bequestRatio,
   consumptionUnits,
   results,
 } = storeToRefs(store)
@@ -29,6 +30,9 @@ const isAF = computed(() => accountType.value === 'AF')
 
 /** The cost basis in kronor that the ratio implies, which is what a tax return states. */
 const costBasisAmount = computed(() => initialCapital.value * initialCostBasisRatio.value)
+
+/** The share the household entered, as the amount it is a share of. */
+const bequestAmount = computed(() => initialCapital.value * bequestRatio.value)
 
 const weightSum = computed(() => assets.value.reduce((sum, asset) => sum + asset.weight, 0))
 
@@ -138,6 +142,31 @@ const portfolioSummary = computed(() => {
                 max="100"
                 class="form-control"
               />
+            </div>
+            <!-- A share of startkapitalet rather than an amount: "behåll
+                 kapitalet" and "lämna hälften" is what a household has an
+                 opinion about, and a share survives att planen skalas om. -->
+            <div class="col-6">
+              <label class="form-label" for="planner-bequest">Arvsmål (% av start)</label>
+              <input
+                id="planner-bequest"
+                type="number"
+                step="10"
+                min="0"
+                class="form-control"
+                :value="(bequestRatio * 100).toFixed(0)"
+                @change="onNumber($event, (v) => (bequestRatio = v), 100)"
+              />
+              <div class="form-text">
+                <template v-if="bequestRatio > 0">
+                  {{ formatKr(bequestAmount) }} kvar vid slutet i dagens penningvärde<template
+                    v-if="isAF"
+                  >
+                    efter latent skatt</template
+                  >. Bara det extra uttaget bromsas.
+                </template>
+                <template v-else>Planen får tömmas helt.</template>
+              </div>
             </div>
             <!-- Changes nothing the engine computes: it only decides which of
                  SCB:s income groups the withdrawals are held against, since

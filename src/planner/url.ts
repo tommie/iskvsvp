@@ -115,6 +115,7 @@ export function encodePlan(params: PlannerParameters): string {
   query.set('sr', String(params.afSchablonRate))
   query.set('cb', String(params.initialCostBasisRatio))
   query.set('i', String(params.inflationRate))
+  query.set('bq', String(params.bequestRatio))
   // Carried even though the engine ignores it: it decides which income
   // percentile the withdrawals are reported against, so a shared link that
   // dropped it would show the recipient a different reading of the same plan.
@@ -212,6 +213,7 @@ export function decodePlan(search: string): PlannerParameters {
     afSchablonRate: parsePositive(query.get('sr'), defaults.afSchablonRate),
     initialCostBasisRatio: parsePositive(query.get('cb'), defaults.initialCostBasisRatio),
     inflationRate: parsePositive(query.get('i'), defaults.inflationRate),
+    bequestRatio: parsePositive(query.get('bq'), defaults.bequestRatio),
     // Strictly positive, unlike the rates above: zero consumption units would
     // divide the household's spending by nothing.
     consumptionUnits: parseStrictlyPositive(query.get('q'), defaults.consumptionUnits),

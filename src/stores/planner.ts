@@ -36,6 +36,7 @@ export const usePlannerStore = defineStore('planner', () => {
   const afSchablonRate = ref(defaults.afSchablonRate)
   const initialCostBasisRatio = ref(defaults.initialCostBasisRatio)
   const inflationRate = ref(defaults.inflationRate)
+  const bequestRatio = ref(defaults.bequestRatio)
   const consumptionUnits = ref(defaults.consumptionUnits)
   const cashflow = ref<CashflowYear[]>(defaults.cashflow)
   const gridNodes = ref(defaults.gridNodes)
@@ -65,6 +66,7 @@ export const usePlannerStore = defineStore('planner', () => {
     afSchablonRate: afSchablonRate.value,
     initialCostBasisRatio: initialCostBasisRatio.value,
     inflationRate: inflationRate.value,
+    bequestRatio: bequestRatio.value,
     consumptionUnits: consumptionUnits.value,
     cashflow: cashflow.value,
     gridNodes: gridNodes.value,
@@ -102,6 +104,7 @@ export const usePlannerStore = defineStore('planner', () => {
     afSchablonRate.value = params.afSchablonRate
     initialCostBasisRatio.value = params.initialCostBasisRatio
     inflationRate.value = params.inflationRate
+    bequestRatio.value = params.bequestRatio
     consumptionUnits.value = params.consumptionUnits
     cashflow.value = params.cashflow.map((entry) => ({ ...entry }))
   }
@@ -252,6 +255,7 @@ export const usePlannerStore = defineStore('planner', () => {
     afSchablonRate,
     initialCostBasisRatio,
     inflationRate,
+    bequestRatio,
     consumptionUnits,
     cashflow,
     gridNodes,

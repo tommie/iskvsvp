@@ -85,21 +85,46 @@ interface YearPolicy {
   extra: number
   /** Adaptive only: capital to hold back for the remaining need commitments. */
   reserve: number
+  /**
+   * Adaptive only: capital to hold back for the bequest target, as the
+   * after-tax value it has to be worth at the horizon, discounted to this year.
+   */
+  keep: number
   /** Adaptive only: the payment count the surplus is spread over. */
   annuityFactor: number
 }
 
 /**
- * Reserve and annuity factor for every year, by backward recursion.
+ * The bequest target as an amount of real capital.
+ *
+ * Entered as a share of the starting capital, so this is the one place the two
+ * are tied together. Both sides are real, so the target keeps its purchasing
+ * power rather than its kronor.
+ */
+export function bequestTarget(params: PlannerParameters): number {
+  return Math.max(0, params.bequestRatio) * Math.max(0, params.initialCapital)
+}
+
+/**
+ * Reserve, bequest reserve and annuity factor for every year, by backward
+ * recursion.
  *
  * `reserve[t]` is what the remaining need commitments are worth at the start
  * of year t, discounted at `rate`; `annuity[t]` is the number of payments the
  * surplus has to stretch over.
  *
- * Both are in **cash delivered to the household**, not in balance. On an AF the
- * two differ: raising a krona realises gain and costs more than a krona of
- * balance. `step()` converts at the node's own cost basis, which it knows and
- * this schedule cannot.
+ * `keep[t]` is the bequest target discounted the same way. It is held apart
+ * from the need reserve because the two are in different units: the need is
+ * **cash delivered to the household**, while the bequest is capital that is
+ * never sold at all. On an AF those convert differently — raising a krona
+ * realises gain and costs more than a krona of balance, whereas leaving a krona
+ * behind costs the deferred tax on it — so `step()` converts each at the node's
+ * own cost basis, which it knows and this schedule cannot.
+ *
+ * Discounting the bequest at the same 25th-percentile rate as the need is what
+ * makes it a commitment rather than a hope: the surplus is measured over what
+ * the target needs to be worth today if the portfolio does poorly, not on the
+ * median path.
  *
  * The reserve is floored at zero. A schedule whose future deposits outweigh its
  * withdrawals would otherwise produce a negative requirement, manufacturing
@@ -110,16 +135,19 @@ function reserveSchedule(params: PlannerParameters, rate: number) {
   const discount = 1 / (1 + rate)
   const reserve = new Float64Array(years + 1)
   const annuity = new Float64Array(years + 1)
+  const keep = new Float64Array(years + 1)
 
+  keep[years] = bequestTarget(params)
   for (let t = years - 1; t >= 0; t--) {
     reserve[t] = params.cashflow[t]!.need + reserve[t + 1]! * discount
     annuity[t] = 1 + annuity[t + 1]! * discount
+    keep[t] = keep[t + 1]! * discount
   }
   for (let t = 0; t <= years; t++) {
     if (reserve[t]! < 0) reserve[t] = 0
   }
 
-  return { reserve, annuity }
+  return { reserve, annuity, keep }
 }
 
 /**
@@ -606,7 +634,7 @@ function step(
   const capitalGainsTaxRate = params.capitalGainsTaxRate
   const schablonRate = params.afSchablonRate
   const top = grid[nGrid - 1]!
-  const { adaptive, baseFlow, extra, reserve, annuityFactor } = policy
+  const { adaptive, baseFlow, extra, reserve, keep, annuityFactor } = policy
   // With a fixed flow the sign is known before the loops, which lets the AF
   // path hoist the post-flow basis ratio out of the wealth loop. An adaptive
   // flow varies per node, so those have to be computed inside.
@@ -652,7 +680,16 @@ function step(
       // plan runs, so the share the far future will face is lower and the
       // reserve is still a little optimistic — carrying that would need the
       // remaining horizon's basis path as a state of its own.
-      const reservedBalance = payableShare > 0 ? reserve / payableShare : Infinity
+      //
+      // The bequest converts the other way. It is never sold, so it costs no
+      // gain tax to raise — but it is measured after the tax the heirs inherit,
+      // so the balance that leaves that much behind is larger than the target
+      // by exactly the deferred liability. Dividing it by `payableShare` like
+      // the need would charge a sale that never happens.
+      const keptBalance = isAF
+        ? keep / (1 - Math.max(0, 1 - grownRatio) * capitalGainsTaxRate)
+        : keep
+      const reservedBalance = (payableShare > 0 ? reserve / payableShare : Infinity) + keptBalance
       const paymentPerSurplus = payableShare / annuityFactor
 
       let pointer = 0
@@ -888,6 +925,37 @@ function summarize(
   }
 }
 
+/**
+ * Probability that the final capital is at least `threshold`, to grid
+ * resolution: the node the threshold falls between counts as reaching it.
+ *
+ * That last cell is not slack, it is the only honest reading. The adaptive rule
+ * aims *at* the target, so the terminal distribution piles up on it — and a
+ * value that lands exactly on the threshold is scattered across the two
+ * bracketing nodes, which a strict comparison would split into a near-arbitrary
+ * coin flip. Measured on a deterministic plan that hits the target exactly, a
+ * strict count reported 0.37, 0.10, 0.10 and 0.25 as the grid was refined
+ * through four doublings, where the answer is 1.
+ *
+ * The cell is also the right *size*. The rule undershoots the target by a
+ * fraction of a per cent, because the surplus is a convex function of the
+ * balance and mass smeared over two nodes therefore spends a little more than
+ * the exact path would; that error and the cell width both shrink as 1/n, so
+ * one cell of tolerance tracks it rather than hiding it.
+ */
+function tailProbability(grid: Float64Array, mass: Float64Array, threshold: number): number {
+  let i = grid.length - 1
+  // Nothing on the grid reaches the target. The top node also absorbs whatever
+  // was clipped there, which is why this is asked before the loop rather than
+  // being allowed to fall out of it.
+  if (grid[i]! < threshold) return 0
+
+  let total = 0
+  while (i >= 0 && grid[i]! >= threshold) total += mass[i--]!
+  if (i >= 0) total += mass[i]!
+  return Math.min(1, total)
+}
+
 function flowQuantile(histogram: FlowHistogram, p: number): number {
   let cumulative = 0
   for (let i = 0; i < FLOW_BINS; i++) {
@@ -1116,6 +1184,7 @@ function propagate(
             adaptive: true,
             extra,
             reserve: schedule.reserve[year]!,
+            keep: schedule.keep[year]!,
             annuityFactor: schedule.annuity[year]!,
           }
         : {
@@ -1123,6 +1192,9 @@ function propagate(
             adaptive: false,
             extra: 0,
             reserve: 0,
+            // A fixed schedule spends what it was told to. The bequest target is
+            // a brake on discretionary spending, and there is none to brake.
+            keep: 0,
             annuityFactor: 1,
           }
 
@@ -1226,12 +1298,23 @@ function propagate(
     depletedProbability: depleted,
   }
 
+  // Measured on the same basis the target is stated on: what is actually left
+  // behind, after the tax an AF's heirs inherit. A ruined or depleted plan
+  // leaves nothing and is off the grid entirely, so it cannot reach a positive
+  // target — no term for either is needed here.
+  const target = bequestTarget(params)
+  const bequestProbability =
+    target > 0
+      ? tailProbability(spec.grid, liquidMass ?? finalDistribution.mass, target)
+      : undefined
+
   return {
     label,
     outcomes,
     withdrawals,
     finalDistribution,
     expectedWithdrawn,
+    bequestProbability,
     liquidOutcomes: isAF ? liquidOutcomes : undefined,
     finalLiquidDistribution:
       isAF && liquidMass

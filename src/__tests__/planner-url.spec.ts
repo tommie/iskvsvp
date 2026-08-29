@@ -20,6 +20,16 @@ describe('planner URL encoding', () => {
     expect(restored.correlations).toEqual(original.correlations)
   })
 
+  it('round-trips a bequest target', () => {
+    const original = defaultPlannerParameters()
+    original.bequestRatio = 0.6
+
+    expect(decodePlan(encodePlan(original)).bequestRatio).toBe(0.6)
+    // A link written before the target existed has to keep meaning what it did,
+    // which is a plan that may be spent down to nothing.
+    expect(decodePlan('c=5000000').bequestRatio).toBe(0)
+  })
+
   it('round-trips a multi-phase cash flow', () => {
     const original = defaultPlannerParameters()
     original.years = 30

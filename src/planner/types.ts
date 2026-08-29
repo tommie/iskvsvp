@@ -96,6 +96,32 @@ export interface PlannerParameters {
   inflationRate: number
 
   /**
+   * Real capital the plan should still hold at the horizon, as a fraction of
+   * `initialCapital`. 0 means the plan may be spent down to nothing.
+   *
+   * A share rather than an amount because that is the question a household
+   * actually has an opinion on — "leave the capital intact", "leave half" —
+   * and because it is the form that survives editing the plan: rescaling the
+   * starting capital, or applying the extra solver's multiplier, leaves the
+   * intent alone instead of turning it into a different target.
+   *
+   * Measured **net of the deferred capital gains tax**, like the Slutkapital
+   * table's default view: an AF balance owes its heirs' tax bill, so only the
+   * after-tax figure is what is actually left behind, and only on that basis is
+   * the same target the same thing in an ISK and an AF. Both sides are real, so
+   * "100%" means preserving the purchasing power of the starting capital, not
+   * its kronor.
+   *
+   * It changes what the *adaptive* run spends and nothing else. The rule holds
+   * the target back as a commitment alongside the need, so only the
+   * discretionary extra pays for it; the need is untouched, the two fixed runs
+   * ignore it, and failing to leave it is not ruin — ruin stays "failed to fund
+   * the need". `PropagationRun.bequestProbability` reports how often each run
+   * reaches it, which is what makes the cost of the target visible.
+   */
+  bequestRatio: number
+
+  /**
    * Consumption units the plan's household is worth, on SCB's scale: 1 for a
    * single adult, 1.51 for a cohabiting couple.
    *
@@ -235,6 +261,15 @@ export interface PropagationRun {
    * state variable; the mean needs nothing beyond the mass already on the grid.
    */
   expectedWithdrawn: number
+  /**
+   * Probability of ending with at least the bequest target left, net of any
+   * deferred tax. `undefined` when the plan sets no target.
+   *
+   * Reported for every run, not only the adaptive one that aims at it: what a
+   * target costs is the difference between the runs, and a fixed schedule that
+   * reaches it anyway is worth knowing about.
+   */
+  bequestProbability?: number
   /**
    * Mass that reached the top of the grid and was pinned there. Anything above
    * ~1e-6 means the grid was too narrow and the upper percentiles understate.

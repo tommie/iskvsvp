@@ -215,6 +215,10 @@ export function defaultPlannerParameters(): PlannerParameters {
     // unrealised gain. Anyone carrying an older holding should lower this.
     initialCostBasisRatio: 1,
     inflationRate: 0.02,
+    // No bequest target by default: the page should open on the plain drawdown
+    // question, and a target is a second thing to explain before the first one
+    // has been answered. Anyone who wants one sets it.
+    bequestRatio: 0,
     // A cohabiting couple on SCB's scale. The default plan spends 300 000 a
     // year off nine million from age 60, which is a two-person household far
     // more often than a one-person one, and the choice only affects which

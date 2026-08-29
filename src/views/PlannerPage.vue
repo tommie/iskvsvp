@@ -107,6 +107,16 @@ onMounted(() => {
               finansierat i hälften av utfallen. Regeln behöver inget minne av tidigare år, till
               skillnad från intervallregler av Guyton–Klinger-typ, vars hysteres är just ett minne.
             </p>
+            <p>
+              Ett arvsmål läggs in som ytterligare ett åtagande i samma reserv: en andel av
+              startkapitalet som ska finnas kvar realt vid periodens slut, diskonterad till i dag
+              med samma försiktiga ränta som behovet. Därmed är det bara det extra uttaget som
+              betalar för arvet — behovet rörs inte, och de två fasta körningarna påverkas inte
+              alls. Målet mäts efter latent skatt, alltså det som faktiskt blir kvar till någon
+              annan, vilket också är det enda sätt på vilket samma mål betyder samma sak i ett ISK
+              och i ett AF-konto. Att missa målet räknas inte som att planen spricker; den frågan
+              avgörs fortfarande av behovet ensamt.
+            </p>
             <p class="mb-0">
               Modellen förutsätter att portföljen ombalanseras till sina målvikter varje år och att
               avkastningen är oberoende mellan år. Portföljens årsavkastning momentanpassas till en
