@@ -110,8 +110,21 @@ export function bequestTarget(params: PlannerParameters): number {
  * recursion.
  *
  * `reserve[t]` is what the remaining need commitments are worth at the start
- * of year t, discounted at `rate`; `annuity[t]` is the number of payments the
- * surplus has to stretch over.
+ * of year t; `annuity[t]` is the number of payments the surplus has to stretch
+ * over.
+ *
+ * Each fold discounts one year at `rateFor(years - t)`, the rate for the
+ * horizon still left at that point, so the discount curve tightens as the plan
+ * runs out of room to recover. See `reserveReturnFor` for why a single
+ * full-horizon rate was the rule's main source of aggression.
+ *
+ * A commitment therefore reaches year 0 through a product of one-year factors
+ * spanning long horizons at the start and short ones at the end, rather than
+ * being discounted at the rate for its own distance. That alternative — a
+ * stationary term structure along the path that sits at the 25th percentile at
+ * every horizon at once — is more conservative again, chiefly about the next
+ * few years, and is the obvious next thing to try if the rule still looks too
+ * aggressive. It was not measured.
  *
  * `keep[t]` is the bequest target discounted the same way. It is held apart
  * from the need reserve because the two are in different units: the need is
@@ -130,15 +143,15 @@ export function bequestTarget(params: PlannerParameters): number {
  * withdrawals would otherwise produce a negative requirement, manufacturing
  * surplus out of money not yet paid in.
  */
-function reserveSchedule(params: PlannerParameters, rate: number) {
+function reserveSchedule(params: PlannerParameters, rateFor: (horizon: number) => number) {
   const years = params.years
-  const discount = 1 / (1 + rate)
   const reserve = new Float64Array(years + 1)
   const annuity = new Float64Array(years + 1)
   const keep = new Float64Array(years + 1)
 
   keep[years] = bequestTarget(params)
   for (let t = years - 1; t >= 0; t--) {
+    const discount = 1 / (1 + rateFor(years - t))
     reserve[t] = params.cashflow[t]!.need + reserve[t + 1]! * discount
     annuity[t] = 1 + annuity[t + 1]! * discount
     keep[t] = keep[t + 1]! * discount
@@ -165,14 +178,27 @@ function reserveSchedule(params: PlannerParameters, rate: number) {
 const RESERVE_QUANTILE_Z = -0.6744897501960817 // 25th percentile
 
 /**
- * The real return the reserve is discounted at.
+ * The real return a commitment `horizon` years away is discounted at.
  *
  * Derived from the plan's own return law rather than asked for, so the adaptive
  * rule introduces no forecast the plan was not already making: it is the 25th
- * percentile of the annualised compound return over the horizon, less the
- * proportional tax drag. Compounding narrows that distribution as the horizon
- * lengthens, so a long plan is allowed to discount at nearly its median while a
- * short one must be markedly more cautious.
+ * percentile of the annualised compound return over that horizon, less the
+ * proportional tax drag.
+ *
+ * **The horizon is the one actually remaining, not the plan's original one.**
+ * Quantile dispersion shrinks as 1/sqrt(T), so a single full-horizon rate is
+ * only about 1.7 points below the median on a forty-year plan — and it stays
+ * 1.7 points below in year 38, when the honest figure for two years left is
+ * nearer 7. That made the reserve most optimistic exactly where a bad sequence
+ * can no longer be recovered from, and it was the whole of the rule's
+ * aggression: measured on the default plan, discounting each year at its own
+ * remaining horizon buys 2.4 points of survival for 0.9% of the expected
+ * spending, and takes the final year's failure step from 1.67x its predecessor
+ * to 1.44x (AF: 1.76x to 1.51x). No other adjustment tried came close on that
+ * exchange rate — a lower quantile at the full horizon costs twice as much
+ * spending per point, and scaling the extra costs fifteen times as much,
+ * because it cuts discretionary spending in the good states too, where it
+ * buys no safety at all.
  *
  * Only the schablonintäkt is subtracted for AF, and that is the whole of it:
  * the schablon is a drag on the balance and so belongs in the rate, while the
@@ -180,14 +206,19 @@ const RESERVE_QUANTILE_Z = -0.6744897501960817 // 25th percentile
  * amount instead, by `step()` dividing the reserve through the node's payable
  * share. Charging it twice would reserve a plan into never spending.
  */
-function reserveReturnFor(params: PlannerParameters, moments: PortfolioMoments): number {
+function reserveReturnFor(
+  params: PlannerParameters,
+  moments: PortfolioMoments,
+  horizon: number,
+): number {
   const taxDrag =
     params.accountType === 'AF'
       ? params.afSchablonRate * params.capitalGainsTaxRate
       : params.iskTaxRate * params.capitalGainsTaxRate
   const annualised =
-    Math.exp(moments.logMean + (RESERVE_QUANTILE_Z * moments.logStdDev) / Math.sqrt(params.years)) -
-    1
+    Math.exp(
+      moments.logMean + (RESERVE_QUANTILE_Z * moments.logStdDev) / Math.sqrt(Math.max(1, horizon)),
+    ) - 1
   return Math.max(-0.99, annualised - taxDrag)
 }
 
@@ -1350,14 +1381,17 @@ function setup(params: PlannerParameters) {
   // pays none of its cost.
   const basis = buildBasisGrid(params.accountType === 'AF' ? params.basisNodes : 1)
 
-  const reserveReturn = reserveReturnFor(params, portfolio)
+  const rateFor = (horizon: number) => reserveReturnFor(params, portfolio, horizon)
   return {
     portfolio,
     quad,
     spec,
     basis,
-    reserveReturn,
-    schedule: reserveSchedule(params, reserveReturn),
+    // Reported as the rate at the start of the plan, which is the whole horizon
+    // and the least conservative point on the curve. The years after it discount
+    // at progressively lower rates.
+    reserveReturn: rateFor(params.years),
+    schedule: reserveSchedule(params, rateFor),
   }
 }
 

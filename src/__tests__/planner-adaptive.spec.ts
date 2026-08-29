@@ -57,11 +57,38 @@ describe('adaptive extra withdrawals', () => {
     const needRuin = finalOf(result.needRun).ruinProbability
     const extraRuin = finalOf(result.extraRun).ruinProbability
     const adaptiveRuin = finalOf(result.adaptiveRun).ruinProbability
-    // Measured at about two thirds for this plan. The remainder is the price
-    // of actually spending the extra when it is affordable — a rule that
-    // recovered all of it would be one that never paid out.
+    // Measured at 88% for this plan, and 81% for the default one. The
+    // remainder is the price of actually spending the extra when it is
+    // affordable — a rule that recovered all of it would be one that never
+    // paid out. It was 70% while the reserve discounted every year at the
+    // plan's original horizon rather than the one still remaining.
     const recovered = (extraRuin - adaptiveRuin) / (extraRuin - needRuin)
-    expect(recovered).toBeGreaterThan(0.6)
+    expect(recovered).toBeGreaterThan(0.8)
+  })
+
+  it('discounts a shrinking horizon at a falling rate', () => {
+    const years = 40
+    const result = runPlanner(
+      plan({
+        years,
+        iskAllowance: 300_000,
+        initialCapital: 9_000_000,
+        cashflow: buildCashflow(years, 200_000, 100_000),
+      }),
+    )
+
+    // The reported rate is the one at the start of the plan, where the whole
+    // horizon is still ahead and the curve is at its least conservative. Every
+    // year after it discounts lower, which is not observable from here — what
+    // is, is the survival it buys: 86% against the 84% a single full-horizon
+    // rate gives, for two tenths of a per cent of the expected spending.
+    expect(1 - finalOf(result.adaptiveRun).ruinProbability).toBeGreaterThan(0.85)
+    expect(result.adaptiveRun.expectedWithdrawn).toBeGreaterThan(
+      0.99 * result.extraRun.expectedWithdrawn,
+    )
+    // Still only a brake on the discretionary part: the need run, which the
+    // reserve never touches, is unchanged by any of this.
+    expect(1 - finalOf(result.needRun).ruinProbability).toBeGreaterThan(0.89)
   })
 
   it('never touches the need, so a plan with no extra is unchanged', () => {
@@ -185,11 +212,12 @@ describe('adaptive extra withdrawals', () => {
 
     // The annuity factor falls to one in the last year, so spending does
     // accelerate towards the horizon and the final step is legitimately the
-    // largest — measured at about 1.7x its predecessor on either account type.
-    // What it must not be is a discontinuity. Two separate mistakes produce
+    // largest — measured at about 1.4x its predecessor on either account type.
+    // What it must not be is a discontinuity. Three separate mistakes produce
     // one: counting the deliberately emptied accounts as failures rather than
-    // as depleted takes it to 3.8x, and reserving an AF's need without the tax
-    // that raising it costs takes it to 3.4x.
+    // as depleted takes it to 3.8x, reserving an AF's need without the tax that
+    // raising it costs takes it to 3.4x, and discounting every year at the
+    // plan's original horizon instead of the one remaining takes it to 1.7x.
     for (const accountType of ['ISK', 'AF'] as const) {
       it(`leaves no step in the ${accountType} survival curve at the horizon`, () => {
         const horizon = 30
@@ -204,7 +232,7 @@ describe('adaptive extra withdrawals', () => {
         const failed = (i: number) =>
           outcomes[i]!.ruinProbability - outcomes[i - 1]!.ruinProbability
 
-        expect(failed(horizon)).toBeLessThan(2.5 * failed(horizon - 1))
+        expect(failed(horizon)).toBeLessThan(1.9 * failed(horizon - 1))
       })
     }
   })
