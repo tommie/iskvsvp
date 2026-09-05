@@ -52,3 +52,29 @@ export function densityBins(distribution: WealthDistribution, binCount: number):
 
   return bins
 }
+
+/**
+ * Height of the plotted curve at `value`, or null when it falls outside it.
+ *
+ * Interpolated between the two neighbouring bin centres rather than taken from
+ * the nearest one, so a marker placed with it sits *on* the line instead of
+ * beside it. That matters most exactly where the density is steepest, which is
+ * where markers are most often wanted: the point mass a bequest target leaves
+ * on the final distribution is the steepest thing on that chart.
+ *
+ * Interpolated in log space, matching the geometric bins and the log axis they
+ * are drawn on, so the fraction is the same one the renderer uses for x.
+ */
+export function densityAt(bins: DensityBin[], value: number): number | null {
+  if (!(value > 0) || bins.length === 0) return null
+  if (value < bins[0]!.value || value > bins[bins.length - 1]!.value) return null
+
+  let index = 0
+  while (index < bins.length - 2 && bins[index + 1]!.value < value) index++
+  const low = bins[index]!
+  const high = bins[index + 1]!
+  const span = Math.log(high.value) - Math.log(low.value)
+  if (!(span > 0)) return low.density
+  const fraction = (Math.log(value) - Math.log(low.value)) / span
+  return low.density + fraction * (high.density - low.density)
+}

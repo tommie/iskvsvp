@@ -5,7 +5,7 @@ import { storeToRefs } from 'pinia'
 
 import { usePlannerStore } from '../../stores/planner'
 import type { PropagationRun } from '../../planner/types'
-import { densityBins } from '../../planner/density'
+import { densityAt, densityBins } from '../../planner/density'
 import { formatKr, formatPercent, formatRelative } from '../../planner/format'
 import D3Chart from '../D3Chart.vue'
 
@@ -459,10 +459,13 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     left: 60,
   })
 
-  const series = runs.value.map(({ distribution, color, dashed }) => ({
+  const series = runs.value.map(({ distribution, outcomes, color, dashed }) => ({
     color,
     dashed,
     bins: densityBins(distribution, 160),
+    // The same median the Slutkapital table prints, on the same net-of-tax
+    // basis, so the chart's marker and the table's row cannot disagree.
+    median: outcomes[outcomes.length - 1]!.median,
   }))
 
   const all = series.flatMap((s) => s.bins).filter((bin) => bin.density > 0)
@@ -536,18 +539,30 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       .attr('stroke-width', 2)
       .attr('stroke-dasharray', s.dashed ? '6 4' : null)
 
-    const peak = s.bins.reduce((best, bin) => (bin.density > best.density ? bin : best), s.bins[0]!)
-    if (!(peak.density > 0)) continue
+    // The median, not the tallest bin.
+    //
+    // A mode is only a summary while the density is smooth, and this one is
+    // not: the dynamic run leaves a point mass exactly on the bequest target,
+    // because its final year pays `need + clamp(w − need − target, 0, extra)`
+    // and maps a whole band of balances onto the target. That atom is the
+    // tallest thing on the chart whenever a target is set, so marking the peak
+    // labelled the target itself — a property of the rule rather than of the
+    // outcome — and did so however unlikely the plan was to land there.
+    //
+    // Off the scale below when the plan is ruined or depleted more than half
+    // the time: the median is then zero, which a log axis has no room for. No
+    // marker is the honest answer, and the survival curve already says why.
+    const density = densityAt(s.bins, s.median)
+    if (density === null) continue
 
-    // A dot on the crest, so "topp" in the margin has something to point at.
     plot
       .append('circle')
-      .attr('cx', x(peak.value))
-      .attr('cy', y(peak.density))
+      .attr('cx', x(s.median))
+      .attr('cy', y(density))
       .attr('r', 3)
       .attr('fill', s.color)
 
-    labels.push({ y: y(peak.density), text: formatKr(peak.value), color: s.color })
+    labels.push({ y: y(density), text: formatKr(s.median), color: s.color })
   }
 
   const MIN_LABEL_GAP = 13
@@ -832,8 +847,8 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
           <div class="card-body">
             <D3Chart :render-chart="renderFinal" :data="chartData" />
             <p class="form-text mt-3 mb-0">
-              Markeringen visar toppen, det mest sannolika utfallet. Massan som hamnat i ruin ritas
-              inte ut.
+              Markeringen visar medianen, samma tal som i tabellen ovan. Massan som hamnat i ruin
+              ritas inte ut, och saknas markeringen är medianen noll.
             </p>
             <!-- The spike is a real point mass, not a rendering artefact, so it
                  is worth a line: the adaptive rule's last year pays
