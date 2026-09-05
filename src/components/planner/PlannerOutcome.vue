@@ -785,9 +785,20 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
           <div class="card-body">
             <D3Chart :render-chart="renderFinal" :data="chartData" />
             <p class="form-text mt-3 mb-0">
-              Y-axeln är sannolikhet per tiopotens kapital: ytan under kurvan över en tiopotens är
-              chansen att hamna där. Markeringen visar toppen, det mest sannolika utfallet. Massan
-              som hamnat i ruin ritas inte ut.
+              Markeringen visar toppen, det mest sannolika utfallet. Massan som hamnat i ruin ritas
+              inte ut.
+            </p>
+            <!-- The spike is a real point mass, not a rendering artefact, so it
+                 is worth a line: the adaptive rule's last year pays
+                 `need + clamp(balance − need − target, 0, extra)`, which maps a
+                 whole band of balances one `extra` wide onto the target exactly.
+                 Without this the reader is left to guess at a peak that stands
+                 clear of an otherwise smooth density. -->
+            <p v-if="bequestTarget > 0" class="form-text mt-2 mb-0">
+              Den anpassade körningen har en topp vid arvsmålet ({{ formatKr(bequestTarget) }}): har
+              avkastningen varit svag sänks extrauttaget precis så mycket att målet ändå nås, så ett
+              helt band av utfall hamnar på exakt den summan. Har det gått ännu sämre missas målet
+              och utfallet hamnar under.
             </p>
           </div>
         </div>
