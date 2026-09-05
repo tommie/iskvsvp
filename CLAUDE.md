@@ -321,7 +321,7 @@ The Slutkapital table can restate its figures as changes rather than amounts (`f
 - UI labels in Swedish
 - Code variables and comments in English
 - Number formatting uses Swedish locale (`sv-SE`)
-- Planner: the engine says `need` and `extra`, matching the UI's **Behov** and **Extra** (*behovsuttag* and *extrauttag* in running prose, *det extra* attributively). The simulator's own `floor` is a different thing — the ratchet's lower bound — and so is `floorToSignificant`. Say *tidsperiod*, not *horisont*.
+- Planner: the engine says `need` and `extra`, matching the UI's **Behov** and **Extra** (*behovsuttag* and *extrauttag* in running prose, *det extra* attributively). The three runs are named rather than described in the UI: `needRun` is **Minimum**, `extraRun` is **Maximum** and `adaptiveRun` is **Dynamisk** (*den dynamiska körningen* in running prose). They are column headers in a narrow table and entries in four chart legends, so they have to be short, and what a reader needs there is which bracket this is — Minimum and Maximum spend the need alone and the need plus the whole extra whatever happens, so every outcome the household could have lies between them, and Dynamisk is the one inside. Note this renames the *runs*, not the cash-flow components: those stay **Behov** and **Extra** everywhere, including the computation table's own columns. The simulator's own `floor` is a different thing — the ratchet's lower bound — and so is `floorToSignificant`. Say *tidsperiod*, not *horisont*.
 
 ## Development
 

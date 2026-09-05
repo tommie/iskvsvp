@@ -16,8 +16,8 @@ const { results, cashflow, initialCapital, bequestRatio } = storeToRefs(store)
 const bequestTarget = computed(() => Math.max(0, bequestRatio.value) * initialCapital.value)
 
 const NEED_COLOR = '#0d6efd'
-const EXTRA_COLOR = '#fd7e14'
-const ADAPTIVE_COLOR = '#6f42c1'
+const EXTRA_COLOR = '#6f42c1'
+const ADAPTIVE_COLOR = '#fd7e14'
 const CHART_HEIGHT = 320
 
 const logScale = ref(true)
@@ -70,8 +70,13 @@ const runs = computed(() => {
         (netOfTax.value ? run.finalLiquidDistribution : undefined) ?? run.finalDistribution,
     }
   }
+  // Both fixed runs are drawn dashed and the dynamic one solid. The dashes say
+  // what kind of line it is rather than which run it is: Minimum and Maximum are
+  // bounds the plan is read against, spending their amount whatever happens,
+  // while Dynamisk is the outcome between them. Colour still tells the three
+  // apart, so nothing is lost by the two bounds sharing a stroke style.
   return [
-    resolve(results.value.needRun, NEED_COLOR, false),
+    resolve(results.value.needRun, NEED_COLOR, true),
     resolve(results.value.adaptiveRun, ADAPTIVE_COLOR, false),
     resolve(results.value.extraRun, EXTRA_COLOR, true),
   ]
@@ -88,6 +93,10 @@ const summary = computed(() => {
     const final = entry.outcomes[entry.outcomes.length - 1]!
     return {
       label: entry.run.label,
+      // Carried so the table's column headers can be tied to the series they
+      // belong to, which is otherwise only findable via the chart legend.
+      color: entry.color,
+      dashed: entry.dashed,
       survival: (1 - final.ruinProbability) * 100,
       median: final.median,
       percentile10: final.percentile10,
@@ -433,7 +442,9 @@ const renderWithdrawals = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     (p) => p.need,
     (p) => p.age,
     1.5,
-  ).attr('stroke', NEED_COLOR)
+  )
+    .attr('stroke', NEED_COLOR)
+    .attr('stroke-dasharray', '6 4')
 }
 
 // --- Final capital distribution ---------------------------------------
@@ -657,7 +668,13 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                 <thead>
                   <tr>
                     <th></th>
-                    <th v-for="row in summary" :key="row.label" class="text-end">
+                    <th
+                      v-for="row in summary"
+                      :key="row.label"
+                      class="text-end series"
+                      :class="{ dashed: row.dashed }"
+                      :style="{ '--line-color': row.color }"
+                    >
                       {{ row.label }}
                     </th>
                   </tr>
@@ -719,7 +736,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
             </div>
             <p class="form-text mt-3 mb-0">
               Det planerade uttaget är vad planen begär över hela tidsperioden, inte vad en plan som
-              spruckit hann ta ut. För den anpassade körningen är det dessutom bara ett tak: det
+              spruckit hann ta ut. För den dynamiska körningen är det dessutom bara ett tak: det
               extra tas i den mån överskottet över behovets reserv räcker till. Det förväntade
               faktiska uttaget väger in båda sakerna — uteblivna extrauttag och år som aldrig
               inträffar för att planen sprack — och är därför måttet som går att jämföra mellan
@@ -728,7 +745,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
               spricker överstiger 10&nbsp;%.
               <template v-if="bequestTarget > 0">
                 Arvsmålet mäts i dagens penningvärde och efter eventuell latent skatt — det är vad
-                som faktiskt blir kvar till någon annan. Bara den anpassade körningen siktar på det:
+                som faktiskt blir kvar till någon annan. Bara den dynamiska körningen siktar på det:
                 målet reserveras vid sidan av behovet, så det är det extra uttaget som betalar för
                 det. Att missa målet är inte att planen spricker; det är fortfarande behovet som
                 avgör den saken.
@@ -765,22 +782,26 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       <div class="card-header">Uttag per år (dagens penningvärde)</div>
       <div class="card-body">
         <D3Chart :render-chart="renderWithdrawals" :data="chartData" />
+        <!-- Minimum, Dynamisk, Maximum — the order `runs` puts them in, so
+             every legend on the page reads the same way even though this one
+             names planned lines rather than runs and cannot be driven from
+             `runs` directly. -->
         <div class="d-flex flex-wrap gap-3 small text-muted mt-2">
           <span>
-            <span class="line" :style="{ '--line-color': ADAPTIVE_COLOR }"></span>
-            Anpassad: median, med 10–90-percentilen som band
+            <span class="line dashed" :style="{ '--line-color': NEED_COLOR }"></span>
+            Planerat minimum
           </span>
           <span>
-            <span class="line" :style="{ '--line-color': NEED_COLOR }"></span>
-            Planerat behov
+            <span class="line" :style="{ '--line-color': ADAPTIVE_COLOR }"></span>
+            Dynamisk: median, med 10–90-percentilen som band
           </span>
           <span>
             <span class="line dashed" :style="{ '--line-color': EXTRA_COLOR }"></span>
-            Planerat behov + extra
+            Planerat maximum
           </span>
         </div>
         <p class="form-text mt-3 mb-0">
-          Vad den anpassade regeln faktiskt betalar ut, mot vad planen bett om. Avståndet upp till
+          Vad den dynamiska regeln faktiskt betalar ut, mot vad planen bett om. Avståndet upp till
           den streckade linjen är extra som avstods för att överskottet inte räckte; avståndet ned
           under behovslinjen är år planen inte nådde fram till. Percentilerna är ovillkorade — ett
           år i en plan som redan spruckit räknas som noll kronor, inte som bortfall — så det undre
@@ -821,7 +842,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                  Without this the reader is left to guess at a peak that stands
                  clear of an otherwise smooth density. -->
             <p v-if="bequestTarget > 0" class="form-text mt-2 mb-0">
-              Den anpassade körningen har en topp vid arvsmålet: har avkastningen varit svag sänks
+              Den dynamiska körningen har en topp vid arvsmålet: har avkastningen varit svag sänks
               extrauttaget precis så mycket att målet ändå nås, så ett helt band av utfall hamnar på
               exakt den summan. Har det gått ännu sämre missas målet och utfallet hamnar under.
             </p>
@@ -841,6 +862,35 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
 .summary-table td {
   padding-left: 0.5rem;
   padding-right: 0.5rem;
+}
+
+/* Ties each column to the series it is, using the same colour and the same
+   3px rule as the chart legend — and the same dashes for the run the charts
+   draw dashed, so the whole encoding survives the move into the table.
+
+   An underline rather than coloured label text: the series palette is chosen to
+   be told apart as strokes on white, and two of the three fall below the
+   contrast a body-text colour needs (#fd7e14 is about 2.2:1). A rule carries
+   the colour without asking anyone to read through it.
+
+   Both rules are painted as backgrounds, and neither as a border. Mixing the
+   two cannot line up: the table collapses its borders, so a border is centred
+   on the grid line and hangs half its width below the cell edge, while a
+   background stops at the edge. At 3px that left the dashed column's rule
+   sitting 1.5px above the solid ones — its middle on their top edge. With no
+   border in play the padding box and the border box coincide, and `bottom`
+   means the same thing for both. */
+.summary-table thead th.series {
+  border-bottom: 0;
+  padding-bottom: calc(0.25rem + 3px);
+  background-image: linear-gradient(var(--line-color), var(--line-color));
+  background-repeat: no-repeat;
+  background-position: bottom;
+  background-size: 100% 3px;
+}
+
+.summary-table thead th.series.dashed {
+  background-image: repeating-linear-gradient(90deg, var(--line-color) 0 6px, transparent 6px 10px);
 }
 
 /* The row header and the column headers wrap; the figures never do. Breaking

@@ -1535,21 +1535,18 @@ export function adaptiveSurvival(params: PlannerParameters): number {
 export function runPlanner(params: PlannerParameters): PlannerResults {
   const { portfolio, quad, spec, basis, reserveReturn, bequestReturn, schedule } = setup(params)
 
+  // Names, not descriptions. They are column headers in a narrow table and
+  // entries in four chart legends, so they have to be short — and what a reader
+  // needs from them there is which of the three brackets this is, not a restated
+  // formula. Minimum and Maximum say what the pair are for: they bracket the
+  // plan, spending the need alone and the need plus the whole extra whatever
+  // happens, so every outcome the household could actually have lies between
+  // them. Dynamisk is the one inside, and the only one whose spending moves.
+  // The prose under each chart carries what they actually do.
   return {
-    needRun: propagate(params, spec, basis, quad, portfolio, 'need', 'Behov', schedule),
-    extraRun: propagate(params, spec, basis, quad, portfolio, 'extra', 'Behov + extra', schedule),
-    adaptiveRun: propagate(
-      params,
-      spec,
-      basis,
-      quad,
-      portfolio,
-      'adaptive',
-      // Short because it is a column header in a table that shares its row with
-      // the fan chart; the chart legend carries the full description.
-      'Behov + anpassat',
-      schedule,
-    ),
+    needRun: propagate(params, spec, basis, quad, portfolio, 'need', 'Minimum', schedule),
+    extraRun: propagate(params, spec, basis, quad, portfolio, 'extra', 'Maximum', schedule),
+    adaptiveRun: propagate(params, spec, basis, quad, portfolio, 'adaptive', 'Dynamisk', schedule),
     portfolio,
     reserveReturn,
     bequestReturn,

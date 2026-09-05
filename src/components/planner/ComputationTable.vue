@@ -59,7 +59,7 @@ const columns = computed<Column[]>(() => {
     {
       label: 'Extra',
       formula: 'extra[t]',
-      note: 'Taket för det frivilliga uttaget, som du angett det. Den anpassade körningen tar det bara i den mån överskottet räcker, och aldrig mer än så här.',
+      note: 'Taket för det frivilliga uttaget, som du angett det. Den dynamiska körningen tar det bara i den mån överskottet räcker, och aldrig mer än så här.',
       cell: (t) => formatKrExact(Math.max(0, flow[t]!.extra)),
       input: true,
     },
@@ -84,7 +84,7 @@ const columns = computed<Column[]>(() => {
     {
       label: 'Uttag, median',
       formula: 'behov[t] + min(extra[t], (kapital − reserv − arvsreserv) / annuitetsfaktor)',
-      note: 'Vad den anpassade körningen betalar ut, medianen över alla utfall. Ovillkorad: ett år som en redan sprucken plan aldrig nådde räknas som noll, inte som bortfall.',
+      note: 'Vad den dynamiska körningen betalar ut, medianen över alla utfall. Ovillkorad: ett år som en redan sprucken plan aldrig nådde räknas som noll, inte som bortfall.',
       cell: (t) => formatKr(run.withdrawals[t]!.median),
     },
     {

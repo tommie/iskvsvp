@@ -95,34 +95,39 @@ onMounted(() => {
             </p>
             <p>
               Planen räknas tre gånger: med enbart behovsuttaget, med behov plus hela det extra
-              uttaget, och med behov plus så mycket av det extra som går att bära. Bandet mellan de
-              två fasta körningarna visar vad det extra uttaget kostar i slutkapital och risk. En
-              plan räknas som sprucken det år portföljen inte klarar hela behovsuttaget, och det
-              tillståndet är absorberande: en senare insättning räddar den inte. Percentilerna är
-              ovillkorade, så spruckna utfall ligger kvar som noll kronor i fördelningen. Det är
-              därför 10:e percentilen kan vara noll så snart risken att planen spricker överstiger
-              10&nbsp;%.
+              uttaget, och — den dynamiska körningen — med behov plus så mycket av det extra som går
+              att bära. Bandet mellan de två fasta körningarna visar vad det extra uttaget kostar i
+              slutkapital och risk. En plan räknas som sprucken det år portföljen inte klarar hela
+              behovsuttaget, och det tillståndet är absorberande: en senare insättning räddar den
+              inte. Percentilerna är ovillkorade, så spruckna utfall ligger kvar som noll kronor i
+              fördelningen. Det är därför 10:e percentilen kan vara noll så snart risken att planen
+              spricker överstiger 10&nbsp;%.
             </p>
             <p>
-              Den anpassade körningen rör aldrig behovet och tar aldrig mer än det extra hushållet
+              Den dynamiska körningen rör aldrig behovet och tar aldrig mer än det extra hushållet
               angett — uttagen styrs alltså fortfarande av vad man faktiskt behöver, och saldot
               verkar bara som broms på den valfria delen. Varje år beräknas vad de återstående
-              behovsuttagen kräver i reserv, och överskottet däröver fördelas jämnt över de år som
-              återstår; det beloppet, begränsat till det extra, är vad som tas. Reserven diskonteras
-              inte till förväntad avkastning utan till 25:e percentilen av den ackumulerade
-              avkastningen över tidsperioden, eftersom en median­ränta bara innebär att behovet är
-              finansierat i hälften av utfallen. Regeln behöver inget minne av tidigare år, till
-              skillnad från intervallregler av Guyton–Klinger-typ, vars hysteres är just ett minne.
+              behovsuttagen kräver i reserv, och överskottet däröver fördelas över det extra som
+              återstår i den form hushållet ritat den — ett år som begär dubbelt så mycket som sina
+              grannar betjänas dubbelt så fort. Det beloppet, begränsat till det extra, är vad som
+              tas. Reserven diskonteras inte till förväntad avkastning utan till 25:e percentilen av
+              avkastningen, eftersom en median­ränta bara innebär att behovet är finansierat i
+              hälften av utfallen. Varje åtagande diskonteras dessutom med räntan för sitt eget
+              avstånd, inte för hela tidsperioden: spridningen krymper med tiden, så ett uttag några
+              år bort förtjänar en betydligt lägre ränta än ett fyrtio år bort. Regeln behöver inget
+              minne av tidigare år, till skillnad från intervallregler av Guyton–Klinger-typ, vars
+              hysteres är just ett minne.
             </p>
             <p>
               Ett arvsmål läggs in som ytterligare ett åtagande i samma reserv: en andel av
               startkapitalet som ska finnas kvar realt vid periodens slut, diskonterad till i dag
-              med samma försiktiga ränta som behovet. Därmed är det bara det extra uttaget som
-              betalar för arvet — behovet rörs inte, och de två fasta körningarna påverkas inte
-              alls. Målet mäts efter latent skatt, alltså det som faktiskt blir kvar till någon
-              annan, vilket också är det enda sätt på vilket samma mål betyder samma sak i ett ISK
-              och i ett AF-konto. Att missa målet räknas inte som att planen spricker; den frågan
-              avgörs fortfarande av behovet ensamt.
+              med planens medianavkastning — inte med behovets 25:e percentil, eftersom att missa
+              arvet inte är att planen spricker och ett mål därför inte prissätts som ett golv.
+              Därmed är det bara det extra uttaget som betalar för arvet — behovet rörs inte, och de
+              två fasta körningarna påverkas inte alls. Målet mäts efter latent skatt, alltså det
+              som faktiskt blir kvar till någon annan, vilket också är det enda sätt på vilket samma
+              mål betyder samma sak i ett ISK och i ett AF-konto. Att missa målet räknas inte som
+              att planen spricker; den frågan avgörs fortfarande av behovet ensamt.
             </p>
             <p class="mb-0">
               Modellen förutsätter att portföljen ombalanseras till sina målvikter varje år och att
