@@ -153,15 +153,12 @@ export function bequestTarget(params: PlannerParameters): number {
  * and short ones last, so the deeply negative one-year rates near the end
  * compound into commitments decades away. A stream weighted to the near term
  * barely notices (it puts the default plan's need reserve 8% high), but a
- * single far-dated lump is the worst case, and the bequest target is exactly
- * that: on a 45-year plan chaining values a 30 mkr target at 17.5 mkr to be
- * held back today, against the 10.3 mkr its own 45-year rate implies. With the
- * need reserve on top that exceeds the whole starting capital, leaving no
- * surplus at all — the plan pays the need alone for years and ramps the extra
- * in only as the portfolio outgrows a reserve it should never have carried.
- * Pricing by distance instead puts that plan's first-year median payout at
- * 676 000 rather than 500 000, and reaches the full request fifteen years
- * earlier.
+ * single far-dated lump is the worst case. On a 45-year plan, chaining values a
+ * commitment worth 10.3 mkr at its own 45-year rate at 17.5 mkr instead — and
+ * a bequest target is exactly such a lump, which is how this was found: the
+ * inflated reserve exceeded the plan's whole starting capital, so it paid the
+ * need alone for years and ramped the extra in only as the portfolio outgrew a
+ * reserve it should never have carried.
  *
  * Being right here is also close to free: against the chain it is worth +0.4
  * points of survival on the default plan and +0.9 on the AF one at unchanged
@@ -174,24 +171,26 @@ export function bequestTarget(params: PlannerParameters): number {
  * O(years²), which is a few thousand operations against a propagation of
  * hundreds of millions.
  *
- * `keep[t]` is the bequest target discounted the same way. It is held apart
- * from the need reserve because the two are in different units: the need is
- * **cash delivered to the household**, while the bequest is capital that is
- * never sold at all. On an AF those convert differently — raising a krona
- * realises gain and costs more than a krona of balance, whereas leaving a krona
- * behind costs the deferred tax on it — so `step()` converts each at the node's
- * own cost basis, which it knows and this schedule cannot.
+ * `keep[t]` is the bequest target, and it is held apart from the need reserve
+ * for two reasons. They are in different units: the need is **cash delivered to
+ * the household**, while the bequest is capital that is never sold at all. On
+ * an AF those convert differently — raising a krona realises gain and costs
+ * more than a krona of balance, whereas leaving a krona behind costs the
+ * deferred tax on it — so `step()` converts each at the node's own cost basis,
+ * which it knows and this schedule cannot.
  *
- * Discounting the bequest at the same 25th-percentile rate as the need is what
- * makes it a commitment rather than a hope: the surplus is measured over what
- * the target needs to be worth today if the portfolio does poorly, not on the
- * median path.
+ * And they are discounted at different rates: the need at `rateFor`, the
+ * bequest at `keepRate`. See `bequestReturnFor`.
  *
  * The reserve is floored at zero. A schedule whose future deposits outweigh its
  * withdrawals would otherwise produce a negative requirement, manufacturing
  * surplus out of money not yet paid in.
  */
-function reserveSchedule(params: PlannerParameters, rateFor: (horizon: number) => number) {
+function reserveSchedule(
+  params: PlannerParameters,
+  rateFor: (horizon: number) => number,
+  keepRate: number,
+) {
   const years = params.years
   const reserve = new Float64Array(years + 1)
   const annuity = new Float64Array(years + 1)
@@ -205,6 +204,11 @@ function reserveSchedule(params: PlannerParameters, rateFor: (horizon: number) =
   const factor = new Float64Array(years + 1)
   factor[0] = 1
   for (let k = 1; k <= years; k++) factor[k] = Math.pow(1 + rateFor(k), -k)
+
+  // The bequest's rate is a single number rather than a curve: a median has no
+  // quantile spread to shrink with the horizon, so there is nothing for the
+  // distance to change.
+  const keepDiscount = 1 / (1 + keepRate)
 
   for (let t = 0; t <= years; t++) {
     let needPV = 0
@@ -222,7 +226,7 @@ function reserveSchedule(params: PlannerParameters, rateFor: (horizon: number) =
     // A year that wants nothing discretionary is capped at zero anyway, so the
     // factor is never read; one keeps it out of the way of a 0/0.
     annuity[t] = extra > 0 ? extraSum / extra : 1
-    keep[t] = target * factor[years - t]!
+    keep[t] = target * Math.pow(keepDiscount, years - t)
   }
 
   return { reserve, annuity, keep }
@@ -269,26 +273,67 @@ const RESERVE_QUANTILE_Z = -0.6744897501960817 // 25th percentile
  * `k` years. Chaining one-year steps down the curve instead is a different and
  * much harsher thing; see there.
  *
- * Only the schablonintäkt is subtracted for AF, and that is the whole of it:
- * the schablon is a drag on the balance and so belongs in the rate, while the
- * tax on realised gains is a cost of *raising* cash and is priced into the
- * amount instead, by `step()` dividing the reserve through the node's payable
- * share. Charging it twice would reserve a plan into never spending.
+ * Net of `proportionalTaxDrag`, which is the only tax that belongs in a rate.
  */
 function reserveReturnFor(
   params: PlannerParameters,
   moments: PortfolioMoments,
   horizon: number,
 ): number {
-  const taxDrag =
-    params.accountType === 'AF'
-      ? params.afSchablonRate * params.capitalGainsTaxRate
-      : params.iskTaxRate * params.capitalGainsTaxRate
   const annualised =
     Math.exp(
       moments.logMean + (RESERVE_QUANTILE_Z * moments.logStdDev) / Math.sqrt(Math.max(1, horizon)),
     ) - 1
-  return Math.max(-0.99, annualised - taxDrag)
+  return Math.max(-0.99, annualised - proportionalTaxDrag(params))
+}
+
+/**
+ * The rate the bequest target is discounted at: the plan's own **median**
+ * compound return, net of the same proportional tax drag.
+ *
+ * Deliberately not the 25th percentile the need uses, and the asymmetry is the
+ * point. Ruin is defined as failing to fund the *need*, so the need is a hard
+ * floor and safety-first pricing is what a hard floor deserves. **Missing the
+ * bequest is not ruin** — it is reported as `bequestProbability` and nothing
+ * else happens — so pricing it as though it were a floor reserves against a
+ * failure the model does not treat as one, and the whole cost of that is paid
+ * by the living household's discretionary spending. Reserving a wish at a
+ * commitment's rate transfers consumption from the household to the estate.
+ *
+ * The quantile is also the larger of the two haircuts, which is easy to miss:
+ * on a 45-year plan with a 90/10 portfolio the median real return of 5.0% loses
+ * 1.06 points to the ISK schablon and a further **1.54** to the 25th
+ * percentile. A 30 mkr target reserves 10.3 mkr at p25 against 5.3 mkr at the
+ * median — the quantile alone was doubling it, and with the need reserve on top
+ * that exceeded the plan's whole starting capital, so it paid the need alone
+ * for years.
+ *
+ * The target does not become a coin flip at the median, because the quantile is
+ * not what protects it: the extra is capped at what the household asked for, so
+ * a plan cannot spend its surplus away fast enough to land on the target. On
+ * the plan above the bequest is still reached 72% of the time, against 77% at
+ * p25, for 0.4 points of survival and roughly 2 mkr more spending.
+ *
+ * Being a median, it has no quantile spread to shrink with the horizon, so
+ * unlike `reserveReturnFor` it is one number rather than a curve.
+ */
+function bequestReturnFor(params: PlannerParameters, moments: PortfolioMoments): number {
+  return Math.max(-0.99, Math.exp(moments.logMean) - 1 - proportionalTaxDrag(params))
+}
+
+/**
+ * The account's annual drag on the balance, as a proportion.
+ *
+ * Only the schablonintäkt, for either account type. The schablon is levied on
+ * the balance and so belongs in a discount rate; the tax on realised gains is a
+ * cost of *raising* cash and is priced into the amount instead, by `step()`
+ * dividing the reserve through the node's payable share. Charging it in both
+ * places would reserve a plan into never spending.
+ */
+function proportionalTaxDrag(params: PlannerParameters): number {
+  return params.accountType === 'AF'
+    ? params.afSchablonRate * params.capitalGainsTaxRate
+    : params.iskTaxRate * params.capitalGainsTaxRate
 }
 
 /** Which of the three bracketing runs a propagation represents. */
@@ -1451,16 +1496,17 @@ function setup(params: PlannerParameters) {
   const basis = buildBasisGrid(params.accountType === 'AF' ? params.basisNodes : 1)
 
   const rateFor = (horizon: number) => reserveReturnFor(params, portfolio, horizon)
+  const bequestReturn = bequestReturnFor(params, portfolio)
   return {
     portfolio,
     quad,
     spec,
     basis,
-    // Reported as the rate at the start of the plan, which is the whole horizon
-    // and the least conservative point on the curve. The years after it discount
-    // at progressively lower rates.
+    // Reported at the plan's full horizon, which is the least conservative point
+    // on the curve: a commitment nearer than that discounts lower.
     reserveReturn: rateFor(params.years),
-    schedule: reserveSchedule(params, rateFor),
+    bequestReturn,
+    schedule: reserveSchedule(params, rateFor, bequestReturn),
   }
 }
 
@@ -1478,7 +1524,7 @@ export function adaptiveSurvival(params: PlannerParameters): number {
 }
 
 export function runPlanner(params: PlannerParameters): PlannerResults {
-  const { portfolio, quad, spec, basis, reserveReturn, schedule } = setup(params)
+  const { portfolio, quad, spec, basis, reserveReturn, bequestReturn, schedule } = setup(params)
 
   return {
     needRun: propagate(params, spec, basis, quad, portfolio, 'need', 'Behov', schedule),
@@ -1497,5 +1543,6 @@ export function runPlanner(params: PlannerParameters): PlannerResults {
     ),
     portfolio,
     reserveReturn,
+    bequestReturn,
   }
 }

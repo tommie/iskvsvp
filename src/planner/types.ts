@@ -293,8 +293,23 @@ export interface PlannerResults {
   portfolio: PortfolioMoments
   /**
    * Real return used to discount the need commitments when sizing the
-   * reserve. Derived from the plan's own portfolio and tax drag rather than
-   * asked for, so the adaptive rule introduces no forecast of its own.
+   * reserve, at the plan's full horizon. Derived from the plan's own portfolio
+   * and tax drag rather than asked for, so the adaptive rule introduces no
+   * forecast of its own.
+   *
+   * The 25th percentile of the compound return: the need is a hard floor, and
+   * failing it is what the model calls ruin. Nearer commitments discount at
+   * lower rates still, since the quantile spread widens as the horizon shortens.
    */
   reserveReturn: number
+  /**
+   * Real return used to discount the bequest target — the plan's **median**
+   * compound return, net of the same drag, and so always above `reserveReturn`.
+   *
+   * The two differ because the outcomes differ: missing the bequest is not
+   * ruin, so it is not priced as a floor. Reported alongside the reserve rate
+   * rather than left implicit, because a plan that discounts two commitments at
+   * two rates should say so.
+   */
+  bequestReturn: number
 }

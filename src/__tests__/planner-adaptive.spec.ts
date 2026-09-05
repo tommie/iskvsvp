@@ -363,20 +363,50 @@ describe('adaptive extra withdrawals', () => {
       ).adaptiveRun
 
     it('does not let a far-dated bequest smother the early extra', () => {
-      // Chaining put the 30 mkr target at 17.5 mkr to hold back today, which
-      // with the need reserve exceeded the starting capital outright: no
-      // surplus at all, so year one paid the need alone and the extra only
-      // ramped in over two decades as the portfolio outgrew a reserve it never
-      // should have carried. At the target's own 45-year rate it is 10.3 mkr,
-      // and the plan can afford some of the extra from the start.
+      // Two things used to hold this plan to the need alone for years, and both
+      // were about how the 30 mkr target reaches today. Chaining one-year
+      // factors down the rate curve put it at 17.5 mkr; its own 45-year p25 rate
+      // puts it at 10.3 mkr; the median rate it now discounts at puts it at
+      // 5.3 mkr. The need reserve is 15.8 mkr against 30 mkr of capital, so the
+      // first of those left no surplus at all.
       const withdrawals = withBequest(1).withdrawals
-      expect(withdrawals[0]!.median).toBeGreaterThan(600_000)
+      expect(withdrawals[0]!.median).toBeGreaterThan(800_000)
       // Still short of the full request — the target is real and is being paid
       // for out of the extra, which is the whole design.
       expect(withdrawals[0]!.median).toBeLessThan(1_000_000)
-      // And it reaches the full request well inside the plan rather than at the
+      // And it reaches the full request early in the plan rather than at the
       // far end of it.
-      expect(withdrawals[20]!.median).toBeCloseTo(1_000_000, -3)
+      expect(withdrawals[10]!.median).toBeCloseTo(1_000_000, -3)
+    })
+
+    it('discounts the target at the median and the need below it', () => {
+      const result = runPlanner(
+        plan({
+          years,
+          bequestRatio: 1,
+          initialCapital: 30_000_000,
+          iskTaxRate: 0.0355,
+          cashflow: buildCashflow(years, 500_000, 500_000),
+          ...singleAsset(0.0615, 0.1565),
+        }),
+      )
+      const drag = 0.0355 * 0.3
+      // The median compound return net of the schablon, with no quantile
+      // haircut: missing the bequest is not ruin, so it is not priced as a floor.
+      expect(result.bequestReturn).toBeCloseTo(Math.exp(result.portfolio.logMean) - 1 - drag, 12)
+      // Measured: 3.95% against the need's 2.41% at the full horizon, and the
+      // need discounts lower still as its commitments come closer.
+      expect(result.bequestReturn).toBeGreaterThan(result.reserveReturn)
+    })
+
+    it('prices both the same when there is no quantile spread to speak of', () => {
+      // A median and a 25th percentile coincide when the return law is a point
+      // mass, so the two rates are one number and the split cannot be observed.
+      // That is what makes the deterministic tests below meaningful for both.
+      const result = runPlanner(
+        plan({ years: 10, cashflow: buildCashflow(10, 50_000, 100_000), ...singleAsset(0.04, 0) }),
+      )
+      expect(result.bequestReturn).toBeCloseTo(result.reserveReturn, 12)
     })
 
     it('still charges the target to the extra and not to the need', () => {
