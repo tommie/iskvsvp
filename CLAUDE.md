@@ -41,6 +41,7 @@ src/
 ├── components/
 │   ├── planner/
 │   │   ├── PlannerInputs.vue    - Capital, taxes, portfolio, correlations
+│   │   ├── ComputationTable.vue - Year-by-year working, with a formula bar
 │   │   ├── CashflowEditor.vue   - Click/drag-editable cashflow bar chart
 │   │   ├── ExtraSolver.vue      - Scales the extra to a survival target
 │   │   └── PlannerOutcome.vue   - Fan chart, survival curve, final distribution
@@ -254,6 +255,16 @@ Bisects for the multiple of the drawn extra curve that meets a survival target. 
 - **A multiplier within `NEGLIGIBLE_SCALE_CHANGE` (5%) of 1 is not offered** — the link is disabled and the card says the plan is already there. That flooring to two significant digits often writes back the identical schedule, and what does move, moves by less than the grid's error in the survival probability it was solved for. The predicate lives in `solve.ts` rather than the component because the justification is the model's precision, not the layout.
 - The multiplier is shown as the change it makes (`+11 %`, `−9 %`), not as `1,11×`: the household reads its own amounts in the cash flow editor above, so what it needs from the solver is how far they have to move.
 - **The slider solves itself**, debounced 400 ms via `useDebounced` (`src/composables/`), and clears the previous answer the moment it moves so a multiplier is never shown against a target it was not solved for. Driven from the input event, not a watcher on the value: the ceiling watcher clamps the target programmatically when results arrive, and a watcher would start a search on load. Plan edits deliberately do *not* auto-solve — ~13 propagations is seconds of main thread on an AF plan, and every drag in the cash flow editor would pay it — so the button remains for that case.
+
+### The computation table (`ComputationTable.vue`)
+
+A collapsed card between the results and *Om metoden*, showing the adaptive rule's own working year by year: the three reserve figures it is assembled from beside the payout and capital they produce. `PlannerResults.schedule` exists for it — without `reserve`, `keep` and `annuity` the payout cannot be explained from the outputs alone.
+
+- **Native `<details>`, not Bootstrap collapse.** Only Bootstrap's CSS is imported (`main.ts`); the collapse plugin needs the JS bundle, which the project does not load.
+- **A formula bar, not a tooltip.** The table scrolls sideways, so anything absolutely positioned inside that container is clipped by it — and the explanations run to two or three sentences, which is more than a tooltip holds comfortably. A spreadsheet puts the formula in a bar anyway. The same text rides along in `title`, which is what reaches touch and assistive technology; both `mouseenter` and `focus` drive the bar, so a keyboard gets the same thing.
+- **The formula strings are written by hand beside the functions that evaluate them**, using the names `propagate.ts` uses rather than the ones TypeScript spells. They are documentation, so they are allowed to drift from the code in notation but not in meaning.
+- **Inputs are echoed exactly (`formatKrExact`), computed figures rounded (`formatKr`)** — the same split as everywhere else. Input columns are also greyed, so a reader can see at a glance which side of the model a column is on.
+- **The capital column is the one to be careful with.** Percentiles are marginals of the joint distribution, not a path, so a row cannot be derived from the row above it and the column is not an outcome any single plan follows. Its own note says so; a spreadsheet layout invites exactly that misreading.
 
 ### The payout chart (`WithdrawalOutcome`, `renderWithdrawals`)
 

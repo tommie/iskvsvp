@@ -8,6 +8,7 @@ import PlannerInputs from '../components/planner/PlannerInputs.vue'
 import CashflowEditor from '../components/planner/CashflowEditor.vue'
 import PlannerOutcome from '../components/planner/PlannerOutcome.vue'
 import ExtraSolver from '../components/planner/ExtraSolver.vue'
+import ComputationTable from '../components/planner/ComputationTable.vue'
 
 const store = usePlannerStore()
 const { error } = storeToRefs(store)
@@ -48,6 +49,12 @@ onMounted(() => {
            nothing to offer until those results exist. -->
       <ExtraSolver />
     </template>
+
+    <!-- Between the results and the prose about the method: it is the working
+         behind the former and the worked example of the latter, so it belongs
+         to neither on its own. Closed by default so it does not stand between
+         them for a reader who does not want it. -->
+    <ComputationTable v-if="!error" />
 
     <div class="card mt-4 mb-3">
       <div class="card-header">Om metoden</div>

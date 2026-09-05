@@ -1553,5 +1553,6 @@ export function runPlanner(params: PlannerParameters): PlannerResults {
     portfolio,
     reserveReturn,
     bequestReturn,
+    schedule,
   }
 }

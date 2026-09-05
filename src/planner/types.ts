@@ -277,6 +277,23 @@ export interface PropagationRun {
   clippedMass: number
 }
 
+/**
+ * The per-year quantities the adaptive rule is assembled from.
+ *
+ * Deterministic — they depend on the cash flow, the horizon and the return law,
+ * but not on the balance — which is what makes them tabulable beside the
+ * distributional results. Every array is length `years + 1`; only `0 .. years-1`
+ * is ever read by a step.
+ */
+export interface ReserveSchedule {
+  /** Present value of the need commitments still to come, at the start of year t. */
+  reserve: Float64Array
+  /** Surplus needed per krona of year t's extra; `surplus / annuity[t]` is what it can pay. */
+  annuity: Float64Array
+  /** The bequest target discounted back to year t. Zero when the plan sets none. */
+  keep: Float64Array
+}
+
 export interface PlannerResults {
   /** Withdrawing only the need each year. */
   needRun: PropagationRun
@@ -312,4 +329,13 @@ export interface PlannerResults {
    * two rates should say so.
    */
   bequestReturn: number
+  /**
+   * The reserve, annuity and bequest figures the adaptive run used, year by
+   * year.
+   *
+   * Reported so the rule can be shown its own working rather than only its
+   * conclusions: these are the three numbers that decide what a year pays, and
+   * without them the payout is unexplainable from the outputs alone.
+   */
+  schedule: ReserveSchedule
 }
