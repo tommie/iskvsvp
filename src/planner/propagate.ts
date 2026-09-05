@@ -90,7 +90,14 @@ interface YearPolicy {
    * after-tax value it has to be worth at the horizon, discounted to this year.
    */
   keep: number
-  /** Adaptive only: the payment count the surplus is spread over. */
+  /**
+   * Adaptive only: surplus needed per krona of *this* year's extra.
+   *
+   * The surplus is spread over the remaining extra commitments in the shape the
+   * household drew them, so a year that asks for twice as much as its
+   * neighbours is served twice as fast. A flat extra makes it the plain count
+   * of discounted remaining payments.
+   */
   annuityFactor: number
 }
 
@@ -110,8 +117,27 @@ export function bequestTarget(params: PlannerParameters): number {
  * recursion.
  *
  * `reserve[t]` is what the remaining need commitments are worth at the start
- * of year t; `annuity[t]` is the number of payments the surplus has to stretch
- * over.
+ * of year t; `annuity[t]` is how much surplus one krona of year t's extra
+ * costs, so `surplus / annuity[t]` is what the year can pay.
+ *
+ * The surplus is spread over the remaining extra **in the shape the household
+ * drew it**, not as a level amount. `extraPV[t]` is the discounted value of
+ * every extra still to come, and dividing by the year's own extra turns it into
+ * that year's share of it: a go-go decade asking 200 000 a year against 25 000
+ * later is served eight times as fast, and a plan whose extra is flat gets the
+ * plain count of discounted remaining payments the rule always used.
+ *
+ * Levelling it instead — one annuity factor for every year regardless of what
+ * was asked for — quietly overrode the schedule. On a 9 mkr plan asking 400 000
+ * for ten years then tapering, the median payout in the first year was 283 000
+ * of the 400 000 requested and did not reach the request until the tapered
+ * years, which is the opposite of the profile that was drawn. Following the
+ * shape pays 363 000 in year one and the full 400 000 from year four. It costs
+ * survival — 86.4% to 84.2% on that plan, for 0.33 mkr more expected spending —
+ * and that price is real rather than an artefact: kronor taken at 60 are
+ * exposed to sequence risk that kronor taken at 90 are not. But it is the
+ * household's price to pay, and the extra solver is the lever for it, because
+ * scaling the extra preserves the shape while the level does not.
  *
  * Each fold discounts one year at `rateFor(years - t)`, the rate for the
  * horizon still left at that point, so the discount curve tightens as the plan
@@ -147,13 +173,18 @@ function reserveSchedule(params: PlannerParameters, rateFor: (horizon: number) =
   const years = params.years
   const reserve = new Float64Array(years + 1)
   const annuity = new Float64Array(years + 1)
+  const extraPV = new Float64Array(years + 1)
   const keep = new Float64Array(years + 1)
 
   keep[years] = bequestTarget(params)
   for (let t = years - 1; t >= 0; t--) {
     const discount = 1 / (1 + rateFor(years - t))
+    const extra = Math.max(0, params.cashflow[t]!.extra)
     reserve[t] = params.cashflow[t]!.need + reserve[t + 1]! * discount
-    annuity[t] = 1 + annuity[t + 1]! * discount
+    extraPV[t] = extra + extraPV[t + 1]! * discount
+    // A year that wants nothing discretionary is capped at zero anyway, so the
+    // factor is never read; one keeps it out of the way of a 0/0.
+    annuity[t] = extra > 0 ? extraPV[t]! / extra : 1
     keep[t] = keep[t + 1]! * discount
   }
   for (let t = 0; t <= years; t++) {
@@ -747,10 +778,10 @@ function step(
 
         let flow = baseFlow
         if (adaptive) {
-          // Spend the need, then whatever level amount the surplus over the
-          // reserve would support for the rest of the plan — never more than
-          // the extra the household actually asked for, and never more than
-          // can be paid for. Two things bound the last one: a schedule whose
+          // Spend the need, then this year's share of what the surplus over
+          // the reserve would support across the extra still to come — never
+          // more than the extra the household actually asked for, and never
+          // more than can be paid for. Two things bound the last one: a schedule whose
           // future deposits push the reserve below the current need can ask
           // for more than the balance holds, and on an AF the sale that funds
           // the withdrawal is taxed.

@@ -272,6 +272,72 @@ describe('adaptive extra withdrawals', () => {
     })
   })
 
+  describe('the shape of the extra the household drew', () => {
+    // No return, no volatility, no tax and no need, so the reserve is zero and
+    // the whole balance is surplus: what is left is purely how the rule shares
+    // that surplus out across the years. The plan asks for three times as much
+    // in its first year as in each of the three after it.
+    const front = [300_000, 100_000, 100_000, 100_000]
+    const run = (initialCapital: number) =>
+      runPlanner(
+        plan({
+          years: front.length,
+          initialCapital,
+          iskTaxRate: 0,
+          cashflow: front.map((extra) => ({ need: 0, extra })),
+          ...singleAsset(0, 0),
+        }),
+      ).adaptiveRun
+
+    it('serves each year in proportion to what it asked for', () => {
+      // 300 000 against 600 000 of extra still to come is half of it, so every
+      // year is paid half of its own request: 150/50/50/50, not the 75/75/75/75
+      // a level annuity over four payments would hand out. The shape is the
+      // household's statement about *when* it wants the money, and the rule has
+      // no business flattening it.
+      //
+      // To a per cent, and deliberately not tighter: the payment is convex in
+      // the balance, so mass spread across two grid nodes spends slightly more
+      // than the exact path, the same quantisation the bequest target converges
+      // through below.
+      const withdrawals = run(300_000).withdrawals
+      for (let year = 0; year < front.length; year++) {
+        expect(withdrawals[year]!.mean / front[year]!).toBeGreaterThan(0.5 * 0.99)
+        expect(withdrawals[year]!.mean / front[year]!).toBeLessThan(0.5 * 1.01)
+      }
+    })
+
+    it('still stops at the extra the year asked for', () => {
+      // Enough capital that proportional sharing would pay the first year more
+      // than it wants. The cap is what makes the rule safe, and following the
+      // shape must not reach past it.
+      const withdrawals = run(2_000_000).withdrawals
+      expect(withdrawals[0]!.mean).toBeLessThanOrEqual(300_000 + 1e-6)
+      expect(withdrawals[0]!.mean).toBeGreaterThan(300_000 * 0.99)
+    })
+
+    it('leaves a flat extra exactly where it was', () => {
+      // A flat schedule makes the shape weights equal, so the factor collapses
+      // to the plain count of discounted remaining payments and the rule is the
+      // level annuity it always was. Hand-checked: zero return means the
+      // reserve is the remaining needs undiscounted and the annuity the count
+      // of payments, so 1 mkr over ten years of 50 000 need pays 50 000 of need
+      // and 50 000 of extra every year.
+      const flat = runPlanner(
+        plan({
+          years: 10,
+          initialCapital: 1_000_000,
+          iskTaxRate: 0,
+          cashflow: buildCashflow(10, 50_000, 100_000),
+          ...singleAsset(0, 0),
+        }),
+      ).adaptiveRun
+      for (const year of flat.withdrawals) {
+        expect(year.mean).toBeCloseTo(100_000, 2)
+      }
+    })
+  })
+
   describe('the bequest target', () => {
     // No return, no volatility and no tax, so the reserve rate is zero: the
     // need reserve is the remaining needs undiscounted, the bequest reserve is
