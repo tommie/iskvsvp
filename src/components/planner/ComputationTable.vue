@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 
 import { usePlannerStore } from '../../stores/planner'
 import { formatKr, formatKrExact, formatPercent } from '../../planner/format'
+import CollapsibleCard from './CollapsibleCard.vue'
 
 const store = usePlannerStore()
 const { results, cashflow, startAge } = storeToRefs(store)
@@ -128,72 +129,63 @@ function describe(column: Column): string {
 </script>
 
 <template>
-  <!-- Native <details>, because only Bootstrap's CSS is loaded and its collapse
-       needs the JS bundle. Closed by default: this is the working, not the
-       answer, and the page already leads with the answer. -->
-  <details v-if="results" class="card mt-4 mb-3">
-    <summary class="card-header">Beräkningen, år för år</summary>
-    <div class="card-body">
-      <p class="form-text mt-0">
-        De tre reservtalen är deterministiska — de beror på kassaflödet, tidsperioden och
-        avkastningsantagandet, men inte på hur portföljen faktiskt gått. Det är de som avgör vad ett
-        år får betala ut.
-      </p>
+  <!-- Closed by default: this is the working, not the answer, and the page
+       already leads with the answer. -->
+  <CollapsibleCard
+    v-if="results"
+    title="Beräkningen, år för år"
+    body-id="planner-computation-body"
+    class="mt-4 mb-3"
+  >
+    <p class="form-text mt-0">
+      De tre reservtalen är deterministiska — de beror på kassaflödet, tidsperioden och
+      avkastningsantagandet, men inte på hur portföljen faktiskt gått. Det är de som avgör vad ett
+      år får betala ut.
+    </p>
 
-      <p class="formula-bar" :class="{ empty: !active }">
-        <template v-if="active">
-          <code>{{ active.formula }}</code>
-          <span class="note">{{ active.note }}</span>
-        </template>
-        <template v-else
-          >Håll muspekaren över en kolumnrubrik för att se hur den räknas ut.</template
-        >
-      </p>
+    <p class="formula-bar" :class="{ empty: !active }">
+      <template v-if="active">
+        <code>{{ active.formula }}</code>
+        <span class="note">{{ active.note }}</span>
+      </template>
+      <template v-else>Håll muspekaren över en kolumnrubrik för att se hur den räknas ut.</template>
+    </p>
 
-      <div class="table-responsive computation-scroll">
-        <table class="table table-sm table-hover computation mb-0">
-          <thead>
-            <tr>
-              <th
-                v-for="column in columns"
-                :key="column.label"
-                scope="col"
-                tabindex="0"
-                :title="describe(column)"
-                @mouseenter="active = column"
-                @focus="active = column"
-                @mouseleave="active = null"
-                @blur="active = null"
-              >
-                {{ column.label }}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="t in years" :key="t">
-              <td
-                v-for="column in columns"
-                :key="column.label"
-                :class="{ input: column.input }"
-                v-text="column.cell(t - 1)"
-              />
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    <div class="table-responsive computation-scroll">
+      <table class="table table-sm table-hover computation mb-0">
+        <thead>
+          <tr>
+            <th
+              v-for="column in columns"
+              :key="column.label"
+              scope="col"
+              tabindex="0"
+              :title="describe(column)"
+              @mouseenter="active = column"
+              @focus="active = column"
+              @mouseleave="active = null"
+              @blur="active = null"
+            >
+              {{ column.label }}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="t in years" :key="t">
+            <td
+              v-for="column in columns"
+              :key="column.label"
+              :class="{ input: column.input }"
+              v-text="column.cell(t - 1)"
+            />
+          </tr>
+        </tbody>
+      </table>
     </div>
-  </details>
+  </CollapsibleCard>
 </template>
 
 <style scoped>
-/* The card header is the disclosure control, so it has to look like one. The
-   default marker is kept rather than replaced: it is the only thing on the card
-   that says it opens. */
-summary {
-  cursor: pointer;
-  user-select: none;
-}
-
 /* Two lines' worth of room reserved whether or not anything is hovered, so the
    table does not jump up and down as the pointer crosses the header row. */
 .formula-bar {

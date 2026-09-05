@@ -34,8 +34,8 @@ describe('ComputationTable', () => {
     // It is the working, not the answer. A card that opens itself would push
     // the results the reader came for off the screen.
     const { wrapper } = mountTable(plan())
-    const details = wrapper.get('details')
-    expect(details.attributes('open')).toBeUndefined()
+    expect(wrapper.get('button[aria-controls]').attributes('aria-expanded')).toBe('false')
+    expect(wrapper.get('#planner-computation-body').classes()).not.toContain('show')
   })
 
   it('gives every cash-flow year exactly one row', () => {
@@ -98,6 +98,6 @@ describe('ComputationTable', () => {
     setActivePinia(pinia)
     usePlannerStore()
     const wrapper = mount(ComputationTable, { global: { plugins: [pinia] } })
-    expect(wrapper.find('details').exists()).toBe(false)
+    expect(wrapper.find('.card').exists()).toBe(false)
   })
 })

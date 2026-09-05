@@ -2,10 +2,10 @@ import { describe, it, expect } from 'vitest'
 
 import {
   SIGNIFICANT_DIGITS,
-  floorToSignificant,
   formatKr,
   formatPercent,
   formatRelative,
+  formatPointChange,
   toSignificant,
 } from '../planner/format'
 
@@ -56,6 +56,25 @@ describe('formatPercent', () => {
   })
 })
 
+describe('formatPointChange', () => {
+  it('states the gap between two shares in points, not as a ratio', () => {
+    // The distinction the function exists for: 87% against 65% is a fall of 22
+    // points, and reporting it as a quarter is a different claim.
+    expect(formatPointChange(0.65, 0.87)).toBe('\u221222\u00a0p.e.')
+    expect(formatPointChange(0.9, 0.87)).toBe('+3\u00a0p.e.')
+  })
+
+  it('signs both directions and leaves no gap unsigned', () => {
+    expect(formatPointChange(0.87, 0.87)).toBe('0\u00a0p.e.')
+    expect(formatPointChange(0.874, 0.87)).toBe('+0,4\u00a0p.e.')
+  })
+
+  it('gives up on figures it cannot state', () => {
+    expect(formatPointChange(Number.NaN, 0.5)).toBe('–')
+    expect(formatPointChange(0.5, Number.POSITIVE_INFINITY)).toBe('–')
+  })
+})
+
 describe('formatRelative', () => {
   it('signs a change in both directions', () => {
     expect(readable(formatRelative(111, 100))).toBe('+11 %')
@@ -79,30 +98,5 @@ describe('formatRelative', () => {
   it('reports a drop to nothing as a total loss rather than a dash', () => {
     // A ruined plan really is −100%, and it is a figure worth printing.
     expect(readable(formatRelative(0, 6_000_000))).toBe('−100 %')
-  })
-})
-
-describe('floorToSignificant', () => {
-  it('rounds down rather than to nearest', () => {
-    // 28 320 would round to 28 000 either way; 28 900 is where they differ.
-    expect(floorToSignificant(28_320)).toBe(28_000)
-    expect(floorToSignificant(28_900)).toBe(28_000)
-    expect(toSignificant(28_900)).toBe(29_000)
-  })
-
-  it('never returns more than it was given', () => {
-    for (const value of [1, 7, 47, 99, 101, 999, 1234, 98_765, 1_234_567]) {
-      expect(floorToSignificant(value)).toBeLessThanOrEqual(value)
-    }
-  })
-
-  it('leaves an exact two-digit value alone', () => {
-    expect(floorToSignificant(28_000)).toBe(28_000)
-    expect(floorToSignificant(50)).toBe(50)
-  })
-
-  it('leaves zero and non-finite values alone', () => {
-    expect(floorToSignificant(0)).toBe(0)
-    expect(floorToSignificant(Number.NaN)).toBeNaN()
   })
 })

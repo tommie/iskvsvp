@@ -7,7 +7,7 @@ import { usePlannerStore } from '../stores/planner'
 import PlannerInputs from '../components/planner/PlannerInputs.vue'
 import CashflowEditor from '../components/planner/CashflowEditor.vue'
 import PlannerOutcome from '../components/planner/PlannerOutcome.vue'
-import ExtraSolver from '../components/planner/ExtraSolver.vue'
+import SensitivityCard from '../components/planner/SensitivityCard.vue'
 import ComputationTable from '../components/planner/ComputationTable.vue'
 
 const store = usePlannerStore()
@@ -44,10 +44,11 @@ onMounted(() => {
       <h2 class="section-title">Resultat</h2>
       <PlannerOutcome />
       <!-- Last, because it answers a question the outcome raises: you read what
-           the plan does, then ask what it would take to make it hold. It also
-           takes its own upper bound from the need run's survival, so it has
-           nothing to offer until those results exist. -->
-      <ExtraSolver />
+           the plan does, then ask how much of that depends on having judged the
+           amounts right. Behind a button rather than computed with the rest —
+           nine propagations is seconds of main thread on an AF plan, and paying
+           that on every edit would make the cash flow editor unusable. -->
+      <SensitivityCard />
     </template>
 
     <!-- Between the results and the prose about the method: it is the working

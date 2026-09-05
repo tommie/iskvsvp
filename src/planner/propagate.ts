@@ -1519,17 +1519,37 @@ function setup(params: PlannerParameters) {
   }
 }
 
+/** What a plan is worth, reduced to the three figures a comparison needs. */
+export interface AdaptiveSummary {
+  /** Probability of funding every need withdrawal to the horizon. */
+  survival: number
+  /** Expected real cash actually handed over, probability-weighted. */
+  expectedWithdrawn: number
+  /** Median real capital at the horizon, net of deferred tax where there is any. */
+  finalMedian: number
+}
+
 /**
- * Survival probability of the adaptive run alone.
+ * The adaptive run alone, summarised.
  *
- * The scale solver evaluates this many times over, and the other two runs would
- * be pure waste there — the need run does not depend on the extra at all,
- * and the unconditional run is not what is being solved for.
+ * Exists so a caller that compares many variants of a plan pays for one
+ * propagation each rather than three. The other two runs would be waste there:
+ * the need run does not depend on the extra at all, and the unconditional run
+ * is not the behaviour being compared.
+ *
+ * The median is taken net of deferred tax when the account has any, matching
+ * the Slutkapital table's default — an AF balance owes its heirs' bill, and
+ * only after that is it comparable with an ISK's.
  */
-export function adaptiveSurvival(params: PlannerParameters): number {
+export function adaptiveSummary(params: PlannerParameters): AdaptiveSummary {
   const { portfolio, quad, spec, basis, schedule } = setup(params)
   const run = propagate(params, spec, basis, quad, portfolio, 'adaptive', '', schedule)
-  return 1 - run.finalDistribution.ruinProbability
+  const outcomes = run.liquidOutcomes ?? run.outcomes
+  return {
+    survival: 1 - run.finalDistribution.ruinProbability,
+    expectedWithdrawn: run.expectedWithdrawn,
+    finalMedian: outcomes[outcomes.length - 1]!.median,
+  }
 }
 
 export function runPlanner(params: PlannerParameters): PlannerResults {
