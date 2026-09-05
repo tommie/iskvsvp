@@ -8,9 +8,20 @@ import CollapsibleCard from './CollapsibleCard.vue'
 import {
   sensitivityGrid,
   SENSITIVITY_FACTORS,
+  type SensitivityAxis,
   type SensitivityCell,
 } from '../../planner/sensitivity'
 import { formatKr, formatPercent, formatPointChange, formatRelative } from '../../planner/format'
+
+const props = defineProps<{
+  title: string
+  /** Ties the disclosure button to its region. Unique per page. */
+  bodyId: string
+  /** Varied down the grid. */
+  rowAxis: SensitivityAxis
+  /** Varied across it. */
+  colAxis: SensitivityAxis
+}>()
 
 const { parameters, results } = storeToRefs(usePlannerStore())
 
@@ -45,7 +56,7 @@ function compute() {
   // thread; an AF plan spends a couple of seconds here.
   window.setTimeout(() => {
     try {
-      grid.value = sensitivityGrid(parameters.value)
+      grid.value = sensitivityGrid(parameters.value, props.rowAxis, props.colAxis)
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
       grid.value = null
@@ -183,23 +194,17 @@ function factorLabel(factor: number): string {
 </script>
 
 <template>
-  <CollapsibleCard
-    v-if="results"
-    v-model:open="open"
-    title="Känslighet"
-    body-id="planner-sensitivity-body"
-    class="mb-3"
-  >
+  <CollapsibleCard v-if="results" v-model:open="open" :title="title" :body-id="bodyId" class="mb-3">
     <template #header>
       <div class="form-check form-switch mb-0">
         <input
-          id="planner-sensitivity-relative"
+          :id="`${bodyId}-relative`"
           v-model="relative"
           class="form-check-input"
           type="checkbox"
           role="switch"
         />
-        <label class="form-check-label small" for="planner-sensitivity-relative"
+        <label class="form-check-label small" :for="`${bodyId}-relative`"
           >Förändring från mitten</label
         >
       </div>
@@ -215,14 +220,17 @@ function factorLabel(factor: number): string {
     <div v-if="grid" class="matrix">
       <div class="axis-corner" aria-hidden="true"></div>
       <div v-for="factor in SENSITIVITY_FACTORS" :key="`col-${factor}`" class="axis axis-col">
-        Extra {{ factorLabel(factor) }}
+        {{ colAxis.label }} {{ factorLabel(factor) }}
       </div>
 
-      <template v-for="(row, needIndex) in grid" :key="needIndex">
-        <div class="axis axis-row">Behov {{ factorLabel(SENSITIVITY_FACTORS[needIndex]!) }}</div>
-        <div v-for="cell in row" :key="cell.extraScale" class="tile" :class="{ base: cell.base }">
+      <template v-for="(row, rowIndex) in grid" :key="rowIndex">
+        <div class="axis axis-row">
+          {{ rowAxis.label }} {{ factorLabel(SENSITIVITY_FACTORS[rowIndex]!) }}
+        </div>
+        <div v-for="cell in row" :key="cell.colScale" class="tile" :class="{ base: cell.base }">
           <p class="eyebrow">
-            Behov {{ factorLabel(cell.needScale) }} · Extra {{ factorLabel(cell.extraScale) }}
+            {{ rowAxis.label }} {{ factorLabel(cell.rowScale) }} · {{ colAxis.label }}
+            {{ factorLabel(cell.colScale) }}
           </p>
           <span v-if="cell.base" class="badge text-bg-primary tag">Din plan</span>
           <dl class="metrics mb-0">

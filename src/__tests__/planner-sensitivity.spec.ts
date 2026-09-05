@@ -4,7 +4,14 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import SensitivityCard from '../components/planner/SensitivityCard.vue'
 import { usePlannerStore } from '../stores/planner'
-import { sensitivityGrid, SENSITIVITY_FACTORS } from '../planner/sensitivity'
+import {
+  sensitivityGrid,
+  SENSITIVITY_FACTORS,
+  EXTRA_AXIS,
+  INFLATION_AXIS,
+  NEED_AXIS,
+  RETURN_AXIS,
+} from '../planner/sensitivity'
 import { adaptiveSummary, runPlanner } from '../planner/propagate'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
 import type { PlannerParameters } from '../planner/types'
@@ -20,9 +27,12 @@ function plan(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
   }
 }
 
+/** The pair every case here varies, unless it says otherwise. */
+const cashflowGrid = (params: PlannerParameters) => sensitivityGrid(params, NEED_AXIS, EXTRA_AXIS)
+
 describe('sensitivityGrid', () => {
   it('covers every combination of the two axes', () => {
-    const grid = sensitivityGrid(plan())
+    const grid = cashflowGrid(plan())
     expect(grid).toHaveLength(SENSITIVITY_FACTORS.length)
     for (const row of grid) expect(row).toHaveLength(SENSITIVITY_FACTORS.length)
 
@@ -31,19 +41,19 @@ describe('sensitivityGrid', () => {
     // question and look entirely plausible.
     for (let n = 0; n < grid.length; n++) {
       for (let e = 0; e < grid[n]!.length; e++) {
-        expect(grid[n]![e]!.needScale).toBe(SENSITIVITY_FACTORS[n])
-        expect(grid[n]![e]!.extraScale).toBe(SENSITIVITY_FACTORS[e])
+        expect(grid[n]![e]!.rowScale).toBe(SENSITIVITY_FACTORS[n])
+        expect(grid[n]![e]!.colScale).toBe(SENSITIVITY_FACTORS[e])
       }
     }
   })
 
   it('marks exactly one cell as the plan as entered, and it is the plan as entered', () => {
     const params = plan()
-    const grid = sensitivityGrid(params)
+    const grid = cashflowGrid(params)
     const base = grid.flat().filter((cell) => cell.base)
     expect(base).toHaveLength(1)
-    expect(base[0]!.needScale).toBe(1)
-    expect(base[0]!.extraScale).toBe(1)
+    expect(base[0]!.rowScale).toBe(1)
+    expect(base[0]!.colScale).toBe(1)
 
     // The middle cell has to be the plan itself, not a near miss — it is the
     // reference every other cell is read against.
@@ -58,7 +68,7 @@ describe('sensitivityGrid', () => {
     // on the same plan the reader would have no way to tell which was wrong.
     const params = plan()
     const full = runPlanner(params).adaptiveRun
-    const base = sensitivityGrid(params)
+    const base = cashflowGrid(params)
       .flat()
       .find((cell) => cell.base)!
     expect(base.survival).toBeCloseTo(1 - full.finalDistribution.ruinProbability, 12)
@@ -66,7 +76,7 @@ describe('sensitivityGrid', () => {
   })
 
   it('makes a bigger need strictly worse and a bigger extra weakly worse', () => {
-    const grid = sensitivityGrid(plan())
+    const grid = cashflowGrid(plan())
     const survival = (n: number, e: number) => grid[n]![e]!.survival
 
     // More need is more that must be funded, and the need is what ruin is
@@ -91,7 +101,7 @@ describe('sensitivityGrid', () => {
       years: 10,
       cashflow: [...buildCashflow(4, -100_000, 0), ...buildCashflow(6, 300_000, 50_000)],
     })
-    const grid = sensitivityGrid(params)
+    const grid = cashflowGrid(params)
     // Halving both the deposits and the withdrawals leaves a plan that pays in
     // less but also takes out less; what must not happen is the halved-need
     // column being read as a plan that saves *more*.
@@ -100,10 +110,57 @@ describe('sensitivityGrid', () => {
 
   it('leaves the bequest target alone, since it is a share of the capital', () => {
     const params = plan({ bequestRatio: 0.5 })
-    const grid = sensitivityGrid(params)
+    const grid = cashflowGrid(params)
     // Neither axis touches initialCapital, so the target is the same amount in
     // all nine cells; a plan spending twice as much simply reaches it less often.
     expect(grid[2]![2]!.finalMedian).toBeLessThan(grid[0]![0]!.finalMedian)
+  })
+})
+
+describe('the market axes', () => {
+  it('moves survival hard on the return axis', () => {
+    const grid = sensitivityGrid(plan(), RETURN_AXIS, INFLATION_AXIS)
+    // Halving what the portfolio earns and doubling it are the two ends of the
+    // plan's viability, so this axis has to dominate every other one on offer.
+    // Measured on this plan: 81%, 93%, 100% as the return is halved, kept and
+    // doubled. Asserted loosely, since the point is the size of the effect
+    // against the other axes, not these three numbers.
+    expect(grid[0]![1]!.survival).toBeLessThan(grid[1]![1]!.survival - 0.05)
+    expect(grid[2]![1]!.survival).toBeGreaterThan(grid[1]![1]!.survival + 0.03)
+  })
+
+  it('scales the means without touching the spread', () => {
+    // "What if I am wrong about what this earns", not "what if it is a
+    // different asset". Confounding the two would make the answer
+    // unattributable.
+    const params = plan()
+    const doubled = RETURN_AXIS.scale(params, 2)
+    for (let i = 0; i < params.assets.length; i++) {
+      expect(doubled.assets[i]!.expectedRealReturn).toBeCloseTo(
+        params.assets[i]!.expectedRealReturn * 2,
+        12,
+      )
+      expect(doubled.assets[i]!.volatility).toBe(params.assets[i]!.volatility)
+    }
+  })
+
+  it('leaves an ISK almost untouched by inflation, and an AF not', () => {
+    // The whole model is real, so inflation only reaches the result where the
+    // tax code is written in nominal kronor. For an ISK that is the fribelopp
+    // alone; for an AF it is also the acquisition cost, which is not indexed,
+    // so a rising price level is taxed as gain. An axis that barely moves is a
+    // finding, not a fault — but the AF column is what earns it its place.
+    const spread = (params: PlannerParameters) => {
+      const grid = sensitivityGrid(params, INFLATION_AXIS, NEED_AXIS)
+      return grid[0]![1]!.survival - grid[2]![1]!.survival
+    }
+    const isk = spread(plan())
+    const af = spread(plan({ accountType: 'AF', initialCostBasisRatio: 0.5 }))
+
+    // This plan sets iskAllowance to 0, so the ISK has no nominal threshold at
+    // all and the axis is exactly inert; the AF still moves several points.
+    expect(isk).toBeLessThan(0.005)
+    expect(af).toBeGreaterThan(0.02)
   })
 })
 
@@ -113,7 +170,18 @@ function mountCard(params: PlannerParameters) {
   const store = usePlannerStore()
   store.$patch({ ...params })
   store.run()
-  return { wrapper: mount(SensitivityCard, { global: { plugins: [pinia] } }), store }
+  return {
+    wrapper: mount(SensitivityCard, {
+      props: {
+        title: 'Känslighet',
+        bodyId: 'test-sensitivity',
+        rowAxis: NEED_AXIS,
+        colAxis: EXTRA_AXIS,
+      },
+      global: { plugins: [pinia] },
+    }),
+    store,
+  }
 }
 
 describe('SensitivityCard', () => {

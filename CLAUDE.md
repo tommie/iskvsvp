@@ -34,7 +34,7 @@ src/
 │   ├── cadence.ts               - Yearly amounts as monthly/weekly/daily
 │   ├── format.ts                - Two-significant-digit kronor and percent
 │   ├── income.ts                - Withdrawals placed on SCB's income percentiles
-│   ├── sensitivity.ts           - Nine runs across the need and extra axes
+│   ├── sensitivity.ts           - Nine runs across a pair of what-if axes
 │   └── url.ts                   - Compact plan encoding (RLE cashflow)
 ├── composables/
 │   └── useDebounced.ts          - Collapse a burst of calls into one, with a pending flag
@@ -44,6 +44,7 @@ src/
 │   │   ├── ComputationTable.vue - Year-by-year working, with a formula bar
 │   │   ├── CashflowEditor.vue   - Click/drag-editable cashflow bar chart
 │   │   ├── SensitivityCard.vue  - Two-axis grid of what-if tiles
+│   │   ├── CollapsibleCard.vue  - Card that folds away, on Bootstrap collapse
 │   │   └── PlannerOutcome.vue   - Fan chart, survival curve, final distribution
 │   ├── InputParameters.vue      - Input form with fund presets
 │   ├── FundPresetSelector.vue   - Fund database selector with correlations
@@ -243,17 +244,29 @@ The AF cross-check runs with **non-zero inflation** and in nominal terms on purp
 
 Two AF tolerances are deliberately loose and should not be tightened without understanding why. The zero-volatility AF recursion is ~0.5% off at default resolution because there is no averaging over returns to smooth the basis interpolation; the test asserts convergence under refinement instead. And a Monte Carlo median is meaningless when ruin approaches 50%, since the median is then the smallest surviving outcome — compare quantiles well clear of the ruin mass.
 
-### The sensitivity grid (`sensitivity.ts`, `SensitivityCard.vue`)
+### The sensitivity grids (`sensitivity.ts`, `SensitivityCard.vue`)
 
-Nine runs of the plan, with the need and the extra each halved, left alone and doubled — a two-axis answer to "what if I have misjudged the amounts", and to which of the two the plan is actually sensitive to, which is rarely the one a household expects.
+Two two-axis grids, each nine runs of the plan with a pair of assumptions halved, left alone and doubled. **Uttag** varies the need against the extra; **marknad** varies the portfolio's expected real return against inflation. One component, parameterised by a `SensitivityAxis` pair, so a third pair costs a mount rather than a card.
+
+Split in two rather than swept four ways because the pairs ask for different responses: the household controls what it spends and does not control what the market does.
 
 - **Halved and doubled, not a fine sweep.** A few per cent either way would report the grid's own quantisation as sensitivity. Factors of two are outside the model's error and read without a legend.
 - **Only the adaptive run**, via `adaptiveSummary` — one propagation per cell rather than three. The other two do not answer the question: the need run ignores the extra axis entirely, and the unconditional run is not the behaviour being compared.
-- **Behind a button.** Nine propagations is ~0,2 s for an ISK plan and a couple of seconds for an AF one. It clears whenever the plan changes, so nine figures can never sit beside a plan they no longer describe. `compute()` yields once before starting so the button paints its busy state first.
-- **A deposit scales with the need**, not against it. A negative need doubled is a doubled deposit: the axis asks "what if this is wrong by a factor of two", and flipping the sign for deposits would ask something else. The bequest target is untouched — it is a share of the starting capital, which neither axis moves.
-- **Indexed `[need][extra]`.** Transposing it would put every answer under the wrong question and look entirely plausible, so the axes are pinned by a test rather than by the layout.
+- **Computes only while open**, then follows the rest of the page. Keyed off `results` rather than the parameters — the store publishes a new results object exactly when something the engine reads has changed, which is the same trigger already debounced, and it excludes `consumptionUnits`, which relabels one line and must not cost nine propagations. Eighteen propagations is a few seconds of main thread on an AF plan, which is why neither grid opens by itself.
+- **`RETURN_AXIS` scales the means and leaves the volatilities alone.** That makes it "what if I am wrong about what this portfolio earns" rather than "what if the market is a different market"; scaling both would confound the two and the answer would be unattributable.
+- **`INFLATION_AXIS` barely moves an ISK, and that is the finding.** Everything is real and the schablon is proportional, so inflation only reaches the result where the tax code is written in nominal kronor. Doubling it costs the default ISK plan 0,3 points of survival and nothing measurable in capital; the same move costs an AF **4 points and a fifth of its final capital**, because the omkostnadsbelopp is not indexed and a rising price level is therefore taxed as gain. A test pins both halves of that asymmetry — an inert axis is a claim about the model, and a regression that made it move would otherwise pass unnoticed.
+- **A deposit scales with the need**, not against it. A negative need doubled is a doubled deposit: the axis asks "what if this is wrong by a factor of two", and flipping the sign for deposits would ask something else. The bequest target is untouched by either cash-flow axis — it is a share of the starting capital, which neither moves.
+- **Indexed `[row][col]`.** Transposing it would put every answer under the wrong question and look entirely plausible, so the axes are pinned by a test rather than by the layout.
 - **Tiles, not a table**, and the middle one gets the treatment a pricing grid gives its featured column, because every other tile is only meaningful read against it. The axes are labelled along the top and side from `lg` up; below that the tiles stack one per row and carry their own coordinates, which is the only thing that survives losing the columns.
-- **The relative switch leaves the middle tile in its own units.** It is the reference the other eight are stated against, and three zeroes there would delete the anchor — the same reasoning that keeps the Slutkapital table's planned total in kronor. Note the changes are *relative*, so a survival figure of −25% means the probability fell by a quarter, not by 25 points.
+- **The relative switch leaves the middle tile in its own units.** It is the reference the other eight are stated against, and three zeroes there would delete the anchor — the same reasoning that keeps the Slutkapital table's planned total in kronor. Survival moves in **percentage points** (`formatPointChange`) while the two money figures are relative: reporting a probability as a ratio invites "fell by a quarter" to be read as "fell by 25 points".
+
+### Collapsible cards (`CollapsibleCard.vue`)
+
+The sensitivity grids, the computation table and *Om metoden* all fold away behind their headers, all closed by default, all on this one component.
+
+- **Bootstrap's own collapse plugin**, imported as `bootstrap/js/dist/collapse` rather than pulling in `bootstrap.bundle.min.js` globally: it is the only thing on the page that needs JavaScript from Bootstrap, the single module is a fraction of the bundle, and constructing it explicitly means it works wherever a component is mounted — a global `data-bs-toggle` wiring in `main.ts` would not reach a component under test. `@types/bootstrap` supplies the types; Bootstrap itself ships none.
+- **A button in the header, not `<details>`/`<summary>`.** The sensitivity cards carry a switch in the header beside the title, and a control nested inside a `<summary>` swallows its own clicks into the disclosure and reads as one interactive thing to a screen reader.
+- **`open` is a model, not internal state**, because a card may need to know: a sensitivity grid computes only while open, and closing it has to stop the work rather than merely hide it. It tracks `show.bs.collapse`/`hide.bs.collapse`, which fire when the animation *starts*, so the work begins as the card opens rather than a third of a second later.
 
 ### The computation table (`ComputationTable.vue`)
 
