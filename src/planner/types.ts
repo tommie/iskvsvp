@@ -232,6 +232,16 @@ export interface WithdrawalOutcome {
 
 export interface PropagationRun {
   label: string
+  /**
+   * What this run sets out to hand over over the whole plan: the need alone for
+   * the need run, need plus extra for the other two — a ceiling rather than an
+   * intention in the adaptive one's case.
+   *
+   * Reported by the engine rather than recomputed by whoever displays it, so
+   * there is one definition of the planned total and it is the one the
+   * propagation actually used.
+   */
+  plannedWithdrawn: number
   /** Length `years + 1`; index 0 is the deterministic starting position. */
   outcomes: YearOutcome[]
   /** Length `years`; one entry per cash-flow year. */

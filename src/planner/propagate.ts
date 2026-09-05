@@ -349,6 +349,23 @@ function proportionalTaxDrag(params: PlannerParameters): number {
 type SpendingMode = 'need' | 'extra' | 'adaptive'
 
 /**
+ * What a run sets out to hand over across the whole plan.
+ *
+ * The need run plans the need alone; the other two plan the need plus the
+ * extra, which for the adaptive run is a ceiling rather than an intention. A
+ * negative extra is clamped away here as it is everywhere else the engine reads
+ * one — the type says non-negative but a hand-edited URL does not have to
+ * agree, and a planned total that disagrees with what the engine plans is worse
+ * than a clamped one.
+ */
+function plannedTotal(params: PlannerParameters, includeExtra: boolean): number {
+  return params.cashflow.reduce(
+    (sum, year) => sum + year.need + (includeExtra ? Math.max(0, year.extra) : 0),
+    0,
+  )
+}
+
+/**
  * Number of bins the year's payout is collected into.
  *
  * The payout spans at most `need + extra`, so a few hundred bins put the
@@ -1464,6 +1481,7 @@ function propagate(
 
   return {
     label,
+    plannedWithdrawn: plannedTotal(params, mode !== 'need'),
     outcomes,
     withdrawals,
     finalDistribution,
@@ -1554,10 +1572,7 @@ export function adaptiveSummary(params: PlannerParameters): AdaptiveSummary {
   const final = outcomes[outcomes.length - 1]!
   return {
     survival: 1 - run.finalDistribution.ruinProbability,
-    plannedWithdrawn: params.cashflow.reduce(
-      (sum, year) => sum + year.need + Math.max(0, year.extra),
-      0,
-    ),
+    plannedWithdrawn: run.plannedWithdrawn,
     expectedWithdrawn: run.expectedWithdrawn,
     finalPercentile10: final.percentile10,
     finalMedian: final.median,

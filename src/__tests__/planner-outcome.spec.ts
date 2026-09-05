@@ -129,3 +129,33 @@ describe('PlannerOutcome relative view', () => {
     expect(row(wrapper, 'Sannolikhet att planen håller')).toEqual(before)
   })
 })
+
+describe('the planned total', () => {
+  it("is the engine's figure, not a second count of the same cash flow", () => {
+    // A negative extra is clamped away everywhere the engine reads one, but the
+    // table used to sum the cash flow itself and did not clamp — so a
+    // hand-edited URL could print a planned total the plan never planned.
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = usePlannerStore()
+    store.$patch({
+      ...defaultPlannerParameters(),
+      years: 3,
+      cashflow: [
+        { need: 100_000, extra: 50_000 },
+        { need: 100_000, extra: -20_000 },
+        { need: 100_000, extra: 50_000 },
+      ],
+    })
+    store.run()
+
+    expect(store.results!.extraRun.plannedWithdrawn).toBe(400_000)
+    // The need run plans the need alone, whatever the extra says.
+    expect(store.results!.needRun.plannedWithdrawn).toBe(300_000)
+
+    const wrapper = mount(PlannerOutcome, { global: { plugins: [pinia] } })
+    const cells = wrapper.findAll('tbody tr')[0]!
+    expect(cells.text()).toContain('Totalt planerat uttag')
+    expect(cells.findAll('td')[2]!.text()).toBe(formatKr(400_000))
+  })
+})

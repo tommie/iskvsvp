@@ -82,14 +82,9 @@ const runs = computed(() => {
   ]
 })
 
-/** Total real cash taken out over the horizon, for context on the trade-off. */
-function totalWithdrawn(includeExtra: boolean): number {
-  return cashflow.value.reduce((sum, year) => sum + year.need + (includeExtra ? year.extra : 0), 0)
-}
-
 const summary = computed(() => {
   if (!results.value) return null
-  const build = (entry: (typeof runs.value)[number], includeExtra: boolean) => {
+  const build = (entry: (typeof runs.value)[number]) => {
     const final = entry.outcomes[entry.outcomes.length - 1]!
     return {
       label: entry.run.label,
@@ -101,12 +96,12 @@ const summary = computed(() => {
       median: final.median,
       percentile10: final.percentile10,
       percentile90: final.percentile90,
-      withdrawn: totalWithdrawn(includeExtra),
+      withdrawn: entry.run.plannedWithdrawn,
       actualWithdrawn: entry.run.expectedWithdrawn,
       bequest: entry.run.bequestProbability,
     }
   }
-  return [build(runs.value[0]!, false), build(runs.value[1]!, true), build(runs.value[2]!, true)]
+  return runs.value.map(build)
 })
 
 /** Whether any run actually carries deferred tax, i.e. whether the toggle does anything. */
