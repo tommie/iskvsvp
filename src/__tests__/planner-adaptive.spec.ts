@@ -338,6 +338,75 @@ describe('adaptive extra withdrawals', () => {
     })
   })
 
+  describe('discounting a commitment at the rate for its own distance', () => {
+    // 30 mkr, 45 years of 500 000 need and 500 000 extra, and the whole
+    // starting capital asked for as a bequest — a single commitment 45 years
+    // out, which is the worst case for any scheme that reaches it by chaining
+    // one-year factors down the rate curve.
+    const years = 45
+    const withBequest = (bequestRatio: number) =>
+      runPlanner(
+        plan({
+          years,
+          bequestRatio,
+          startAge: 45,
+          initialCapital: 30_000_000,
+          iskTaxRate: 0.0355,
+          cashflow: buildCashflow(years, 500_000, 500_000),
+          // A 70/20/10 equity-heavy portfolio, collapsed to the single
+          // lognormal the engine fits it to anyway. The default mix returns
+          // 5.4% and simply cannot carry both this need and this target, so it
+          // would pass the test by being unaffordable rather than by
+          // discounting correctly.
+          ...singleAsset(0.0615, 0.1565),
+        }),
+      ).adaptiveRun
+
+    it('does not let a far-dated bequest smother the early extra', () => {
+      // Chaining put the 30 mkr target at 17.5 mkr to hold back today, which
+      // with the need reserve exceeded the starting capital outright: no
+      // surplus at all, so year one paid the need alone and the extra only
+      // ramped in over two decades as the portfolio outgrew a reserve it never
+      // should have carried. At the target's own 45-year rate it is 10.3 mkr,
+      // and the plan can afford some of the extra from the start.
+      const withdrawals = withBequest(1).withdrawals
+      expect(withdrawals[0]!.median).toBeGreaterThan(600_000)
+      // Still short of the full request — the target is real and is being paid
+      // for out of the extra, which is the whole design.
+      expect(withdrawals[0]!.median).toBeLessThan(1_000_000)
+      // And it reaches the full request well inside the plan rather than at the
+      // far end of it.
+      expect(withdrawals[20]!.median).toBeCloseTo(1_000_000, -3)
+    })
+
+    it('still charges the target to the extra and not to the need', () => {
+      const none = withBequest(0)
+      const all = withBequest(1)
+      expect(all.expectedWithdrawn).toBeLessThan(none.expectedWithdrawn)
+      expect(all.bequestProbability!).toBeGreaterThan(0.7)
+      for (const year of all.withdrawals) {
+        expect(year.median).toBeGreaterThanOrEqual(500_000 - 1e-6)
+      }
+    })
+
+    it('agrees with any other scheme when the rate curve is flat', () => {
+      // Zero volatility makes every horizon's quantile the same number, so
+      // distance and remaining-horizon discounting coincide and the schedule is
+      // the textbook annuity. 1 mkr, no return and no tax against ten years of
+      // 50 000 need pays 50 000 of need and 50 000 of extra every year.
+      const flat = runPlanner(
+        plan({
+          years: 10,
+          initialCapital: 1_000_000,
+          iskTaxRate: 0,
+          cashflow: buildCashflow(10, 50_000, 100_000),
+          ...singleAsset(0, 0),
+        }),
+      ).adaptiveRun
+      for (const year of flat.withdrawals) expect(year.mean).toBeCloseTo(100_000, 2)
+    })
+  })
+
   describe('the bequest target', () => {
     // No return, no volatility and no tax, so the reserve rate is zero: the
     // need reserve is the remaining needs undiscounted, the bequest reserve is

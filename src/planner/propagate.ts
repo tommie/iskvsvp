@@ -113,17 +113,16 @@ export function bequestTarget(params: PlannerParameters): number {
 }
 
 /**
- * Reserve, bequest reserve and annuity factor for every year, by backward
- * recursion.
+ * Reserve, bequest reserve and annuity factor for every year.
  *
  * `reserve[t]` is what the remaining need commitments are worth at the start
  * of year t; `annuity[t]` is how much surplus one krona of year t's extra
  * costs, so `surplus / annuity[t]` is what the year can pay.
  *
  * The surplus is spread over the remaining extra **in the shape the household
- * drew it**, not as a level amount. `extraPV[t]` is the discounted value of
- * every extra still to come, and dividing by the year's own extra turns it into
- * that year's share of it: a go-go decade asking 200 000 a year against 25 000
+ * drew it**, not as a level amount. The factor is the discounted value of
+ * every extra still to come over the year's own extra, which turns it into
+ * that year's share of the whole: a go-go decade asking 200 000 a year against 25 000
  * later is served eight times as fast, and a plan whose extra is flat gets the
  * plain count of discounted remaining payments the rule always used.
  *
@@ -139,18 +138,41 @@ export function bequestTarget(params: PlannerParameters): number {
  * household's price to pay, and the extra solver is the lever for it, because
  * scaling the extra preserves the shape while the level does not.
  *
- * Each fold discounts one year at `rateFor(years - t)`, the rate for the
- * horizon still left at that point, so the discount curve tightens as the plan
- * runs out of room to recover. See `reserveReturnFor` for why a single
- * full-horizon rate was the rule's main source of aggression.
+ * **Every commitment is discounted at the rate for its own distance**, which is
+ * what `reserveReturnFor` computes: one `k` years away is worth
+ * `(1 + rateFor(k))^-k` today. As the plan advances a commitment moves closer
+ * and its rate hardens, so the reserve still tightens towards the horizon —
+ * that is what keeps the final year's failure step down to 1.37x its
+ * predecessor (AF 1.38x) rather than the 1.67x a single full-horizon rate
+ * leaves.
  *
- * A commitment therefore reaches year 0 through a product of one-year factors
- * spanning long horizons at the start and short ones at the end, rather than
- * being discounted at the rate for its own distance. That alternative — a
- * stationary term structure along the path that sits at the 25th percentile at
- * every horizon at once — is more conservative again, chiefly about the next
- * few years, and is the obvious next thing to try if the rule still looks too
- * aggressive. It was not measured.
+ * The tempting cheaper alternative — a backward recursion folding one year at a
+ * time at `rateFor(years - t)`, the horizon remaining at the fold — is a
+ * different and much harsher thing, and is wrong. It makes a commitment reach
+ * year 0 through a product of factors spanning *every* horizon, long ones first
+ * and short ones last, so the deeply negative one-year rates near the end
+ * compound into commitments decades away. A stream weighted to the near term
+ * barely notices (it puts the default plan's need reserve 8% high), but a
+ * single far-dated lump is the worst case, and the bequest target is exactly
+ * that: on a 45-year plan chaining values a 30 mkr target at 17.5 mkr to be
+ * held back today, against the 10.3 mkr its own 45-year rate implies. With the
+ * need reserve on top that exceeds the whole starting capital, leaving no
+ * surplus at all — the plan pays the need alone for years and ramps the extra
+ * in only as the portfolio outgrows a reserve it should never have carried.
+ * Pricing by distance instead puts that plan's first-year median payout at
+ * 676 000 rather than 500 000, and reaches the full request fifteen years
+ * earlier.
+ *
+ * Being right here is also close to free: against the chain it is worth +0.4
+ * points of survival on the default plan and +0.9 on the AF one at unchanged
+ * expected spending, because what it gives back in the distance it takes in the
+ * next few years — a commitment one year out is discounted at `rateFor(1)`, not
+ * at the whole horizon's rate. Zero volatility collapses the rate curve to a
+ * constant and the two agree exactly, which is what the deterministic tests
+ * pin.
+ *
+ * O(years²), which is a few thousand operations against a propagation of
+ * hundreds of millions.
  *
  * `keep[t]` is the bequest target discounted the same way. It is held apart
  * from the need reserve because the two are in different units: the need is
@@ -173,22 +195,34 @@ function reserveSchedule(params: PlannerParameters, rateFor: (horizon: number) =
   const years = params.years
   const reserve = new Float64Array(years + 1)
   const annuity = new Float64Array(years + 1)
-  const extraPV = new Float64Array(years + 1)
   const keep = new Float64Array(years + 1)
 
-  keep[years] = bequestTarget(params)
-  for (let t = years - 1; t >= 0; t--) {
-    const discount = 1 / (1 + rateFor(years - t))
-    const extra = Math.max(0, params.cashflow[t]!.extra)
-    reserve[t] = params.cashflow[t]!.need + reserve[t + 1]! * discount
-    extraPV[t] = extra + extraPV[t + 1]! * discount
+  const target = bequestTarget(params)
+
+  // What a krona `k` years away is worth today, at the quantile rate for that
+  // distance. Hoisted out of the double loop: it depends on the distance alone,
+  // not on which year is looking at it.
+  const factor = new Float64Array(years + 1)
+  factor[0] = 1
+  for (let k = 1; k <= years; k++) factor[k] = Math.pow(1 + rateFor(k), -k)
+
+  for (let t = 0; t <= years; t++) {
+    let needPV = 0
+    let extraSum = 0
+    for (let s = t; s < years; s++) {
+      const discount = factor[s - t]!
+      needPV += params.cashflow[s]!.need * discount
+      extraSum += Math.max(0, params.cashflow[s]!.extra) * discount
+    }
+    // Floored at zero: a schedule whose future deposits outweigh its
+    // withdrawals would otherwise produce a negative requirement, manufacturing
+    // surplus out of money not yet paid in.
+    reserve[t] = Math.max(0, needPV)
+    const extra = t < years ? Math.max(0, params.cashflow[t]!.extra) : 0
     // A year that wants nothing discretionary is capped at zero anyway, so the
     // factor is never read; one keeps it out of the way of a 0/0.
-    annuity[t] = extra > 0 ? extraPV[t]! / extra : 1
-    keep[t] = keep[t + 1]! * discount
-  }
-  for (let t = 0; t <= years; t++) {
-    if (reserve[t]! < 0) reserve[t] = 0
+    annuity[t] = extra > 0 ? extraSum / extra : 1
+    keep[t] = target * factor[years - t]!
   }
 
   return { reserve, annuity, keep }
@@ -216,20 +250,24 @@ const RESERVE_QUANTILE_Z = -0.6744897501960817 // 25th percentile
  * percentile of the annualised compound return over that horizon, less the
  * proportional tax drag.
  *
- * **The horizon is the one actually remaining, not the plan's original one.**
+ * **The horizon is the distance to the commitment, not the plan's own length.**
  * Quantile dispersion shrinks as 1/sqrt(T), so a single full-horizon rate is
- * only about 1.7 points below the median on a forty-year plan — and it stays
- * 1.7 points below in year 38, when the honest figure for two years left is
- * nearer 7. That made the reserve most optimistic exactly where a bad sequence
- * can no longer be recovered from, and it was the whole of the rule's
- * aggression: measured on the default plan, discounting each year at its own
- * remaining horizon buys 2.4 points of survival for 0.9% of the expected
- * spending, and takes the final year's failure step from 1.67x its predecessor
- * to 1.44x (AF: 1.76x to 1.51x). No other adjustment tried came close on that
- * exchange rate — a lower quantile at the full horizon costs twice as much
- * spending per point, and scaling the extra costs fifteen times as much,
- * because it cuts discretionary spending in the good states too, where it
- * buys no safety at all.
+ * only about 1.7 points below the median on a forty-year plan — and applying
+ * that same rate to a payment two years out, which deserves nearer 7, made the
+ * reserve most optimistic exactly where a bad sequence can no longer be
+ * recovered from. It was the whole of the rule's aggression: pricing each
+ * commitment at its own distance buys 2.4 points of survival on the default
+ * plan for 0.9% of the expected spending, and takes the final year's failure
+ * step from 1.67x its predecessor to 1.37x (AF: 1.76x to 1.38x). No other
+ * adjustment tried came close on that exchange rate — a lower quantile at the
+ * full horizon costs twice as much spending per point, and scaling the extra
+ * costs fifteen times as much, because it cuts discretionary spending in the
+ * good states too, where it buys no safety at all.
+ *
+ * Read across distances these rates are a term structure, and `reserveSchedule`
+ * uses it as one: a commitment `k` years off is discounted at `rateFor(k)` for
+ * `k` years. Chaining one-year steps down the curve instead is a different and
+ * much harsher thing; see there.
  *
  * Only the schablonintäkt is subtracted for AF, and that is the whole of it:
  * the schablon is a drag on the balance and so belongs in the rate, while the

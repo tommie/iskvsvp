@@ -20,7 +20,11 @@ function plan(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
 describe('solveExtraScale', () => {
   it('finds a multiplier that meets the target', () => {
     const params = plan()
-    const target = 0.65
+    // Above what the plan survives at full extra (65.1%) and below what the
+    // need alone reaches (68.4%), so the answer has to be a genuine cut. The
+    // band is narrow on this plan, so the target is stated against those two
+    // rather than picked round.
+    const target = 0.66
     const solution = solveExtraScale(params, target)
 
     expect(solution.status).toBe('solved')

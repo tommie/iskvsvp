@@ -71,11 +71,11 @@ describe('ExtraSolver', () => {
   it('shows the multiplier as a signed percentage change', async () => {
     const params = plan()
     const { wrapper } = mountSolver(params)
-    await setTarget(wrapper, 65)
+    await setTarget(wrapper, 66)
 
-    // The target is well above what this plan survives at full extra, so the
-    // answer has to be a cut.
-    const expected = solveExtraScale(params, 0.65)
+    // Above what this plan survives at full extra (65.1%), so the answer has to
+    // be a cut.
+    const expected = solveExtraScale(params, 0.66)
     expect(expected.scale).toBeLessThan(0.95)
     const percent = Math.round((expected.scale - 1) * 100)
     // Two significant digits and a Swedish minus sign, via formatPercent.
