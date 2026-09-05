@@ -45,7 +45,8 @@ src/
 │   │   ├── CashflowEditor.vue   - Click/drag-editable cashflow bar chart
 │   │   ├── StressCard.vue       - Stress sliders and their three scenarios
 │   │   ├── CollapsibleCard.vue  - Card that folds away, on Bootstrap collapse
-│   │   └── PlannerOutcome.vue   - Fan chart, survival curve, final distribution
+│   │   ├── PlannerOutcome.vue   - Slutkapital table; owns the shared view toggles
+│   │   └── charts/              - One component per chart, plus their shared axes
 │   ├── InputParameters.vue      - Input form with fund presets
 │   ├── FundPresetSelector.vue   - Fund database selector with correlations
 │   ├── SummaryStatistics.vue    - Statistical results table
@@ -277,6 +278,14 @@ A collapsed card between the results and *Om metoden*, showing the adaptive rule
 - **The formula strings are written by hand beside the functions that evaluate them**, using the names `propagate.ts` uses rather than the ones TypeScript spells. They are documentation, so they are allowed to drift from the code in notation but not in meaning.
 - **Inputs are echoed exactly (`formatKrExact`), computed figures rounded (`formatKr`)** — the same split as everywhere else. Input columns are also greyed, so a reader can see at a glance which side of the model a column is on.
 - **The capital column is the one to be careful with.** Percentiles are marginals of the joint distribution, not a path, so a row cannot be derived from the row above it and the column is not an outcome any single plan follows. Its own note says so; a spreadsheet layout invites exactly that misreading.
+
+### The outcome charts (`components/planner/charts/`)
+
+One component per chart — fan, survival, payout, final distribution — with `PlannerOutcome` left as the Slutkapital table and the orchestrator above them. It was a single 941-line component with four D3 renderers in it.
+
+- **The view toggles stay on the page, not in the charts.** `netOfTax` lives in the table's header and the fan chart follows it, so the two cannot disagree about which basis they are on; `logScale` is a `defineModel` on the fan chart for the same reason. `runs` is resolved once against the toggle and passed down as `RunSeries[]`, so no chart resolves it a second time.
+- **`charts/shared.ts` holds only what more than one chart needs**: the three colours, `axes()`, and `spreadLabels`. Anything used by one chart lives in that chart.
+- **The renderers are untested.** `planner-outcome.spec.ts` deliberately stubs `IntersectionObserver` so `D3Chart` never draws — its subject is the table. Nothing here is covered by a rendering assertion, so changes to a renderer have to be checked in a browser.
 
 ### The payout chart (`WithdrawalOutcome`, `renderWithdrawals`)
 

@@ -1,24 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import * as d3 from 'd3'
 import { storeToRefs } from 'pinia'
 
 import { usePlannerStore } from '../../stores/planner'
 import type { PropagationRun } from '../../planner/types'
-import { densityAt, densityBins } from '../../planner/density'
+import FanChart from './charts/FanChart.vue'
+import SurvivalChart from './charts/SurvivalChart.vue'
+import WithdrawalChart from './charts/WithdrawalChart.vue'
+import FinalDistributionChart from './charts/FinalDistributionChart.vue'
+import { ADAPTIVE_COLOR, EXTRA_COLOR, NEED_COLOR } from './charts/shared'
 import { formatKr, formatPercent, formatRelative } from '../../planner/format'
-import D3Chart from '../D3Chart.vue'
 
 const store = usePlannerStore()
 const { results, cashflow, initialCapital, bequestRatio } = storeToRefs(store)
 
 /** The bequest target as an amount; 0 when the plan sets none. */
 const bequestTarget = computed(() => Math.max(0, bequestRatio.value) * initialCapital.value)
-
-const NEED_COLOR = '#0d6efd'
-const EXTRA_COLOR = '#6f42c1'
-const ADAPTIVE_COLOR = '#fd7e14'
-const CHART_HEIGHT = 320
 
 const logScale = ref(true)
 
@@ -49,13 +46,6 @@ const relative = ref(false)
 function amount(value: number, reference: number): string {
   return relative.value ? formatRelative(value, reference) : formatKr(value)
 }
-
-/**
- * Svenska skrivregler puts a space before the percent sign, and a non-breaking
- * one so the number and its unit never split across a line. This matches what
- * Intl's own sv-SE percent style emits.
- */
-const NBSP = '\u00a0'
 
 const runs = computed(() => {
   if (!results.value) return []
@@ -118,469 +108,6 @@ const gridWarning = computed(() => {
   const worst = Math.max(results.value.needRun.clippedMass, results.value.extraRun.clippedMass)
   return worst > 1e-6 ? worst : null
 })
-
-function axes(
-  svgEl: SVGSVGElement,
-  container: HTMLDivElement,
-  margin: { top: number; right: number; bottom: number; left: number },
-) {
-  const width = Math.max(320, container.clientWidth)
-  const height = CHART_HEIGHT
-  const svg = d3.select(svgEl)
-  svg.selectAll('*').remove()
-  svg.attr('width', width).attr('height', height).attr('viewBox', `0 0 ${width} ${height}`)
-  const plot = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`)
-  return {
-    plot,
-    innerWidth: width - margin.left - margin.right,
-    innerHeight: height - margin.top - margin.bottom,
-  }
-}
-
-// --- Fan chart --------------------------------------------------------
-
-const chartData = computed(() => ({
-  results: results.value,
-  logScale: logScale.value,
-  netOfTax: netOfTax.value,
-  bequestTarget: bequestTarget.value,
-}))
-
-const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value) return
-  const { plot, innerWidth, innerHeight } = axes(svgEl, container, {
-    top: 12,
-    right: 16,
-    bottom: 36,
-    left: 84,
-  })
-
-  const outcomes = runs.value[0]!.outcomes
-  const x = d3
-    .scaleLinear()
-    .domain([outcomes[0]!.age, outcomes[outcomes.length - 1]!.age])
-    .range([0, innerWidth])
-
-  const upper = d3.max(runs.value, (entry) => d3.max(entry.outcomes, (o) => o.percentile90)) ?? 1
-
-  // A log axis cannot show ruin, which sits at exactly zero. The bottom is set
-  // to a small fraction of the top of the range so a collapsing plan still
-  // reads as "falls off the chart" rather than being clipped invisibly.
-  const lowerBound = Math.max(1, upper * 1e-4)
-  const y = logScale.value
-    ? d3.scaleLog().domain([lowerBound, upper]).range([innerHeight, 0]).clamp(true)
-    : d3.scaleLinear().domain([0, upper]).range([innerHeight, 0])
-
-  plot
-    .append('g')
-    .attr('transform', `translate(0,${innerHeight})`)
-    .call(d3.axisBottom(x).ticks(8).tickFormat(d3.format('d')))
-
-  // A log scale ignores ticks() and emits every minor tick, which collapses
-  // into an unreadable block of overlapping labels over four decades. Pin the
-  // ticks to the decades instead.
-  const leftAxis = d3.axisLeft(y).tickFormat((value) => formatKr(Number(value)))
-  if (logScale.value) {
-    leftAxis.tickValues(
-      d3
-        .range(Math.ceil(Math.log10(lowerBound)), Math.floor(Math.log10(upper)) + 1)
-        .map((exponent) => Math.pow(10, exponent)),
-    )
-  } else {
-    leftAxis.ticks(6)
-  }
-  plot.append('g').call(leftAxis)
-
-  // The target the adaptive run holds back for, so the fan can be read against
-  // it: where the band sits at the horizon *is* the answer to whether it holds.
-  // Drawn only when it is on the scale — a target above the 90th percentile
-  // would otherwise pin itself to the top of the chart and misreport itself.
-  if (bequestTarget.value > 0 && bequestTarget.value <= upper) {
-    const at = y(Math.max(lowerBound, bequestTarget.value))
-    plot
-      .append('line')
-      .attr('x1', 0)
-      .attr('x2', innerWidth)
-      .attr('y1', at)
-      .attr('y2', at)
-      .attr('stroke', '#6c757d')
-      .attr('stroke-width', 1)
-      .attr('stroke-dasharray', '4 4')
-    plot
-      .append('text')
-      .attr('x', 4)
-      .attr('y', at - 4)
-      .attr('font-size', 11)
-      .style('fill', '#6c757d')
-      .text('Arvsmål')
-  }
-
-  for (const { outcomes: series, color, dashed } of runs.value) {
-    const band = d3
-      .area<(typeof series)[number]>()
-      .x((o) => x(o.age))
-      .y0((o) => y(Math.max(lowerBound, o.percentile10)))
-      .y1((o) => y(Math.max(lowerBound, o.percentile90)))
-
-    plot.append('path').datum(series).attr('d', band).attr('fill', color).attr('fill-opacity', 0.15)
-
-    const line = d3
-      .line<(typeof series)[number]>()
-      .x((o) => x(o.age))
-      .y((o) => y(Math.max(lowerBound, o.median)))
-
-    plot
-      .append('path')
-      .datum(series)
-      .attr('d', line)
-      .attr('fill', 'none')
-      .attr('stroke', color)
-      .attr('stroke-width', 2)
-      .attr('stroke-dasharray', dashed ? '6 4' : null)
-  }
-}
-
-// --- Survival probability ---------------------------------------------
-
-const renderSurvival = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value) return
-  // The wider right margin holds the end-of-horizon labels.
-  const { plot, innerWidth, innerHeight } = axes(svgEl, container, {
-    top: 12,
-    right: 58,
-    bottom: 36,
-    left: 60,
-  })
-
-  const outcomes = results.value.needRun.outcomes
-  const x = d3
-    .scaleLinear()
-    .domain([outcomes[0]!.age, outcomes[outcomes.length - 1]!.age])
-    .range([0, innerWidth])
-  // The full probability scale, not a zoomed one: truncating the axis would
-  // exaggerate the distance between two plans that both mostly hold.
-  const y = d3.scaleLinear().domain([0, 1]).range([innerHeight, 0])
-
-  plot
-    .append('g')
-    .attr('transform', `translate(0,${innerHeight})`)
-    .call(d3.axisBottom(x).ticks(8).tickFormat(d3.format('d')))
-  plot.append('g').call(
-    d3
-      .axisLeft(y)
-      .ticks(5)
-      .tickFormat((value) => `${Math.round(Number(value) * 100)}${NBSP}%`),
-  )
-
-  const survival = (outcome: { ruinProbability: number }) => 1 - outcome.ruinProbability
-  const endLabels: { y: number; text: string; color: string }[] = []
-
-  for (const { outcomes: series, color, dashed } of runs.value) {
-    const line = d3
-      .line<(typeof series)[number]>()
-      .x((o) => x(o.age))
-      .y((o) => y(survival(o)))
-    plot
-      .append('path')
-      .datum(series)
-      .attr('d', line)
-      .attr('fill', 'none')
-      .attr('stroke', color)
-      .attr('stroke-width', 2)
-      .attr('stroke-dasharray', dashed ? '6 4' : null)
-
-    const final = survival(series[series.length - 1]!)
-    endLabels.push({ y: y(final), text: formatPercent(final * 100), color })
-  }
-
-  // Two plans that both hold would otherwise print their labels on top of each
-  // other, so separate them once they come within a line height.
-  const MIN_LABEL_GAP = 13
-  endLabels.sort((a, b) => a.y - b.y)
-  for (let i = 1; i < endLabels.length; i++) {
-    const gap = endLabels[i]!.y - endLabels[i - 1]!.y
-    if (gap < MIN_LABEL_GAP) endLabels[i]!.y = endLabels[i - 1]!.y + MIN_LABEL_GAP
-  }
-
-  for (const label of endLabels) {
-    plot
-      .append('text')
-      .attr('x', innerWidth + 6)
-      .attr('y', label.y)
-      .attr('dy', '0.32em')
-      .attr('font-size', 12)
-      .attr('font-weight', 600)
-      // A style, not an attribute: D3Chart's stylesheet forces text to
-      // currentColor, and a presentation attribute would lose to it.
-      .style('fill', label.color)
-      .text(label.text)
-  }
-}
-
-// --- Withdrawals over time --------------------------------------------
-
-/**
- * What the adaptive run actually pays out, year by year, against the schedule
- * that was asked for.
- *
- * Only the adaptive run is drawn as a band: a fixed schedule pays its amount or
- * has failed, so its spread carries nothing the survival chart does not already
- * say. The two planned amounts are drawn as the envelope instead, which is what
- * the band has to be read against — the distance to the upper line is extra
- * that was declined, and the distance below the lower one is a failed plan.
- */
-const renderWithdrawals = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value) return
-  const series = results.value.adaptiveRun.withdrawals
-  if (series.length === 0) return
-
-  const { plot, innerWidth, innerHeight } = axes(svgEl, container, {
-    top: 12,
-    right: 16,
-    bottom: 36,
-    left: 84,
-  })
-
-  const planned = series.map((entry) => {
-    const year = cashflow.value[entry.index]
-    const need = year?.need ?? 0
-    return { age: entry.age, need, total: need + Math.max(0, year?.extra ?? 0) }
-  })
-
-  // A year's amount covers the year, so the axis runs to the end of the last
-  // one. Without the extra unit the final step would have no width to stand on.
-  const x = d3
-    .scaleLinear()
-    .domain([series[0]!.age, series[series.length - 1]!.age + 1])
-    .range([0, innerWidth])
-
-  const highest = Math.max(
-    d3.max(series, (o) => o.percentile90) ?? 0,
-    d3.max(planned, (p) => p.total) ?? 0,
-  )
-  // Zero is always on the scale: it is what a failed year pays, and the lower
-  // band reaching it is the whole point of looking at this chart.
-  const lowest = Math.min(0, d3.min(series, (o) => o.percentile10) ?? 0)
-  const y = d3
-    .scaleLinear()
-    .domain([lowest, highest === lowest ? lowest + 1 : highest])
-    .nice()
-    .range([innerHeight, 0])
-
-  plot
-    .append('g')
-    .attr('transform', `translate(0,${innerHeight})`)
-    .call(d3.axisBottom(x).ticks(8).tickFormat(d3.format('d')))
-  plot.append('g').call(
-    d3
-      .axisLeft(y)
-      .ticks(6)
-      .tickFormat((value) => formatKr(Number(value))),
-  )
-
-  // Step curves, not smooth ones: the amount is constant through a year and
-  // changes at its boundary, so an interpolated slope would draw payments that
-  // were never scheduled.
-  const band = d3
-    .area<(typeof series)[number]>()
-    .x((o) => x(o.age))
-    .y0((o) => y(o.percentile10))
-    .y1((o) => y(o.percentile90))
-    .curve(d3.curveStepAfter)
-
-  plot
-    .append('path')
-    .datum(series)
-    .attr('d', band)
-    .attr('fill', ADAPTIVE_COLOR)
-    .attr('fill-opacity', 0.15)
-
-  const stroke = <T,>(
-    data: T[],
-    value: (entry: T) => number,
-    age: (entry: T) => number,
-    width: number,
-  ) => {
-    const line = d3
-      .line<T>()
-      .x((entry) => x(age(entry)))
-      .y((entry) => y(value(entry)))
-      .curve(d3.curveStepAfter)
-    return plot
-      .append('path')
-      .datum(data)
-      .attr('d', line)
-      .attr('fill', 'none')
-      .attr('stroke-width', width)
-  }
-
-  stroke(
-    series,
-    (o) => o.median,
-    (o) => o.age,
-    2,
-  ).attr('stroke', ADAPTIVE_COLOR)
-
-  // The planned envelope goes on top, and thinner. A plan that can afford its
-  // extra has a median sitting exactly on the upper line for decades, and drawn
-  // underneath it would be a legend entry with nothing on the chart to find.
-  stroke(
-    planned,
-    (p) => p.total,
-    (p) => p.age,
-    1.5,
-  )
-    .attr('stroke', EXTRA_COLOR)
-    .attr('stroke-dasharray', '6 4')
-  stroke(
-    planned,
-    (p) => p.need,
-    (p) => p.age,
-    1.5,
-  )
-    .attr('stroke', NEED_COLOR)
-    .attr('stroke-dasharray', '6 4')
-}
-
-// --- Final capital distribution ---------------------------------------
-
-const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
-  if (!results.value) return
-  const { plot, innerWidth, innerHeight } = axes(svgEl, container, {
-    top: 12,
-    // Wide enough for the peak labels in the right margin.
-    right: 66,
-    bottom: 36,
-    left: 60,
-  })
-
-  const series = runs.value.map(({ distribution, outcomes, color, dashed }) => ({
-    color,
-    dashed,
-    bins: densityBins(distribution, 160),
-    // The same median the Slutkapital table prints, on the same net-of-tax
-    // basis, so the chart's marker and the table's row cannot disagree.
-    median: outcomes[outcomes.length - 1]!.median,
-  }))
-
-  const all = series.flatMap((s) => s.bins).filter((bin) => bin.density > 0)
-  if (all.length === 0) return
-
-  const x = d3
-    .scaleLog()
-    .domain([d3.min(all, (bin) => bin.value)!, d3.max(all, (bin) => bin.value)!])
-    .range([0, innerWidth])
-  const y = d3
-    .scaleLinear()
-    .domain([0, d3.max(all, (bin) => bin.density)!])
-    .range([innerHeight, 0])
-
-  plot
-    .append('g')
-    .attr('transform', `translate(0,${innerHeight})`)
-    .call(
-      d3
-        .axisBottom(x)
-        .ticks(6)
-        .tickFormat((value) => formatKr(Number(value))),
-    )
-  plot.append('g').call(
-    d3
-      .axisLeft(y)
-      .ticks(5)
-      .tickFormat((value) => `${Math.round(Number(value) * 100)}${NBSP}%`),
-  )
-
-  // The target, marked the same way the fan chart marks it. The adaptive run
-  // leaves a point mass here — a whole band of balances is spent down to
-  // exactly this number — so the spike beside this line is the thing the note
-  // under the chart describes, and the line is what saves the note from having
-  // to name an amount. Drawn only when it is on the scale.
-  const [lowerValue, upperValue] = x.domain()
-  if (bequestTarget.value >= lowerValue! && bequestTarget.value <= upperValue!) {
-    const at = x(bequestTarget.value)
-    plot
-      .append('line')
-      .attr('x1', at)
-      .attr('x2', at)
-      .attr('y1', 0)
-      .attr('y2', innerHeight)
-      .attr('stroke', '#6c757d')
-      .attr('stroke-width', 1)
-      .attr('stroke-dasharray', '4 4')
-    plot
-      .append('text')
-      .attr('x', at + 4)
-      .attr('y', 10)
-      .attr('font-size', 11)
-      .style('fill', '#6c757d')
-      .text('Arvsmål')
-  }
-
-  const labels: { y: number; text: string; color: string }[] = []
-
-  for (const s of series) {
-    const line = d3
-      .line<(typeof s.bins)[number]>()
-      .x((bin) => x(bin.value))
-      .y((bin) => y(bin.density))
-      .curve(d3.curveMonotoneX)
-    plot
-      .append('path')
-      .datum(s.bins.filter((bin) => bin.value > 0))
-      .attr('d', line)
-      .attr('fill', 'none')
-      .attr('stroke', s.color)
-      .attr('stroke-width', 2)
-      .attr('stroke-dasharray', s.dashed ? '6 4' : null)
-
-    // The median, not the tallest bin.
-    //
-    // A mode is only a summary while the density is smooth, and this one is
-    // not: the dynamic run leaves a point mass exactly on the bequest target,
-    // because its final year pays `need + clamp(w − need − target, 0, extra)`
-    // and maps a whole band of balances onto the target. That atom is the
-    // tallest thing on the chart whenever a target is set, so marking the peak
-    // labelled the target itself — a property of the rule rather than of the
-    // outcome — and did so however unlikely the plan was to land there.
-    //
-    // Off the scale below when the plan is ruined or depleted more than half
-    // the time: the median is then zero, which a log axis has no room for. No
-    // marker is the honest answer, and the survival curve already says why.
-    const density = densityAt(s.bins, s.median)
-    if (density === null) continue
-
-    plot
-      .append('circle')
-      .attr('cx', x(s.median))
-      .attr('cy', y(density))
-      .attr('r', 3)
-      .attr('fill', s.color)
-
-    labels.push({ y: y(density), text: formatKr(s.median), color: s.color })
-  }
-
-  const MIN_LABEL_GAP = 13
-  labels.sort((a, b) => a.y - b.y)
-  for (let i = 1; i < labels.length; i++) {
-    const gap = labels[i]!.y - labels[i - 1]!.y
-    if (gap < MIN_LABEL_GAP) labels[i]!.y = labels[i - 1]!.y + MIN_LABEL_GAP
-  }
-
-  for (const label of labels) {
-    plot
-      .append('text')
-      .attr('x', innerWidth + 6)
-      .attr('y', label.y)
-      .attr('dy', '0.32em')
-      .attr('font-size', 11)
-      .attr('font-weight', 600)
-      // A style, not an attribute: D3Chart's stylesheet forces text to
-      // currentColor, and a presentation attribute would lose to it.
-      .style('fill', label.color)
-      .text(label.text)
-  }
-}
 </script>
 
 <template>
@@ -594,43 +121,12 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     -->
     <div class="row g-3 mb-3">
       <div class="col-12 col-lg-6">
-        <div class="card h-100">
-          <div
-            class="card-header d-flex justify-content-between align-items-center flex-wrap gap-3"
-          >
-            <span>Kapital över tid i dagens penningvärde</span>
-            <div class="form-check form-switch mb-0">
-              <input
-                id="planner-log-scale"
-                v-model="logScale"
-                class="form-check-input"
-                type="checkbox"
-                role="switch"
-              />
-              <label class="form-check-label small" for="planner-log-scale"
-                >Logaritmisk skala</label
-              >
-            </div>
-          </div>
-          <div class="card-body">
-            <D3Chart :render-chart="renderFan" :data="chartData" />
-            <!-- Named, coloured and dashed from the runs themselves, so a curve
-                 here and a column in the table beside it can never end up with
-                 different names for the same run. The class marks it as that
-                 legend specifically: other charts on the page label series of
-                 their own, which are not runs and must not be held to it. -->
-            <div class="run-legend d-flex flex-wrap gap-3 small text-muted mt-2">
-              <span v-for="entry in runs" :key="entry.run.label">
-                <span
-                  class="line"
-                  :class="{ dashed: entry.dashed }"
-                  :style="{ '--line-color': entry.color }"
-                ></span>
-                {{ entry.run.label }}
-              </span>
-            </div>
-          </div>
-        </div>
+        <FanChart
+          v-model:log-scale="logScale"
+          :runs="runs"
+          :bequest-target="bequestTarget"
+          class="h-100"
+        />
       </div>
 
       <div class="col-12 col-lg-6">
@@ -788,76 +284,17 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
          same subject year by year: the table says how much the plan expects to
          hand over, this says when. Full width — forty yearly amounts need the
          room, and the band is only a few per cent of the axis tall. -->
-    <div class="card mb-3">
-      <div class="card-header">Uttag per år (dagens penningvärde)</div>
-      <div class="card-body">
-        <D3Chart :render-chart="renderWithdrawals" :data="chartData" />
-        <!-- Minimum, Dynamisk, Maximum — the order `runs` puts them in, so
-             every legend on the page reads the same way even though this one
-             names planned lines rather than runs and cannot be driven from
-             `runs` directly. -->
-        <div class="d-flex flex-wrap gap-3 small text-muted mt-2">
-          <span>
-            <span class="line dashed" :style="{ '--line-color': NEED_COLOR }"></span>
-            Planerat minimum
-          </span>
-          <span>
-            <span class="line" :style="{ '--line-color': ADAPTIVE_COLOR }"></span>
-            Dynamisk: median, med 10–90-percentilen som band
-          </span>
-          <span>
-            <span class="line dashed" :style="{ '--line-color': EXTRA_COLOR }"></span>
-            Planerat maximum
-          </span>
-        </div>
-        <p class="form-text mt-3 mb-0">
-          Vad den dynamiska regeln faktiskt betalar ut, mot vad planen bett om. Avståndet upp till
-          den streckade linjen är extra som avstods för att överskottet inte räckte; avståndet ned
-          under behovslinjen är år planen inte nådde fram till. Percentilerna är ovillkorade — ett
-          år i en plan som redan spruckit räknas som noll kronor, inte som bortfall — så det undre
-          bandet når noll när risken att planen spruckit passerat 10&nbsp;%. Beloppen är reala.
-        </p>
-      </div>
-    </div>
+    <WithdrawalChart v-if="results" :adaptive="results.adaptiveRun" :cashflow="cashflow" />
 
     <!-- Every block on the page carries its own bottom margin rather than
          relying on what follows it, so the sections keep an even rhythm whatever
          order they are in. -->
     <div class="row g-3 mb-3">
       <div class="col-12 col-lg-6">
-        <div class="card h-100">
-          <div class="card-header">Sannolikhet att planen håller</div>
-          <div class="card-body">
-            <D3Chart :render-chart="renderSurvival" :data="chartData" />
-            <p class="form-text mt-3 mb-0">
-              Sannolikheten att portföljen fortfarande klarar hela behovsuttaget. Tillståndet är
-              absorberande — en senare insättning räddar inte en plan som redan spruckit.
-            </p>
-          </div>
-        </div>
+        <SurvivalChart :runs="runs" class="h-100" />
       </div>
       <div class="col-12 col-lg-6">
-        <div class="card h-100">
-          <div class="card-header">Fördelning av slutkapital (dagens penningvärde)</div>
-          <div class="card-body">
-            <D3Chart :render-chart="renderFinal" :data="chartData" />
-            <p class="form-text mt-3 mb-0">
-              Markeringen visar medianen, samma tal som i tabellen ovan. Massan som hamnat i ruin
-              ritas inte ut, och saknas markeringen är medianen noll.
-            </p>
-            <!-- The spike is a real point mass, not a rendering artefact, so it
-                 is worth a line: the adaptive rule's last year pays
-                 `need + clamp(balance − need − target, 0, extra)`, which maps a
-                 whole band of balances one `extra` wide onto the target exactly.
-                 Without this the reader is left to guess at a peak that stands
-                 clear of an otherwise smooth density. -->
-            <p v-if="bequestTarget > 0" class="form-text mt-2 mb-0">
-              Den dynamiska körningen har en topp vid arvsmålet: har avkastningen varit svag sänks
-              extrauttaget precis så mycket att målet ändå nås, så ett helt band av utfall hamnar på
-              exakt den summan. Har det gått ännu sämre missas målet och utfallet hamnar under.
-            </p>
-          </div>
-        </div>
+        <FinalDistributionChart :runs="runs" :bequest-target="bequestTarget" class="h-100" />
       </div>
     </div>
   </div>
