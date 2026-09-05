@@ -476,6 +476,34 @@ describe('adaptive extra withdrawals', () => {
       expect(run.finalDistribution.depletedProbability).toBeCloseTo(0, 10)
     })
 
+    it('lands on the target when the portfolio actually grows', () => {
+      // The check above runs on a zero-return portfolio, where every discount
+      // factor is 1 and the bequest reserve is the target whatever horizon it is
+      // discounted over. That hides an off-by-one completely, so pin the same
+      // property against a rate that makes the discounting visible.
+      //
+      // Deterministic and generous, so the rule aims squarely at the target and
+      // the answer is the target exactly — no convexity error, because the
+      // surplus never gets near its lower clamp.
+      for (const rate of [0.02, 0.04, 0.08]) {
+        const run = runPlanner(
+          plan({
+            years: 10,
+            bequestRatio: 0.5,
+            initialCapital: 1_000_000,
+            iskTaxRate: 0,
+            cashflow: buildCashflow(10, 50_000, 100_000),
+            ...singleAsset(rate, 0),
+          }),
+        ).adaptiveRun
+
+        // Reserving one return too many leaves `target / (1 + rate)` instead —
+        // 3.8% short at 4%, and enough to report a certainty as impossible.
+        expect(run.outcomes[10]!.mean).toBeCloseTo(500_000, -1)
+        expect(run.bequestProbability!).toBeCloseTo(1, 6)
+      }
+    })
+
     it('reports reaching a target it clears and missing one it does not', () => {
       // The deterministic plan above ends on half its starting capital, so a
       // target well inside that is certain and one well outside it impossible.

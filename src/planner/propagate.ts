@@ -226,7 +226,16 @@ function reserveSchedule(
     // A year that wants nothing discretionary is capped at zero anyway, so the
     // factor is never read; one keeps it out of the way of a 0/0.
     annuity[t] = extra > 0 ? extraSum / extra : 1
-    keep[t] = target * Math.pow(keepDiscount, years - t)
+    // `years - 1 - t` returns, not `years - t`. Every entry here is valued at
+    // the instant the year's withdrawal is taken, which is *after* that year's
+    // return — that is what makes `reserve` an annuity-due, with `need[t]`
+    // undiscounted. The horizon is the balance left once year `years - 1` has
+    // been paid, so the returns still to come from here are those of years
+    // `t + 1 .. years - 1`, and the final year's commitment is the undiscounted
+    // target itself. Counting one return too many reserves the target divided
+    // by one year of growth, and a plan aiming squarely at its target then
+    // lands that far under it every time.
+    keep[t] = target * Math.pow(keepDiscount, years - 1 - t)
   }
 
   return { reserve, annuity, keep }
