@@ -671,7 +671,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                     <th
                       v-for="row in summary"
                       :key="row.label"
-                      class="text-end series"
+                      class="text-center series"
                       :class="{ dashed: row.dashed }"
                       :style="{ '--line-color': row.color }"
                     >

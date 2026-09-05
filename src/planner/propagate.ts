@@ -1519,14 +1519,20 @@ function setup(params: PlannerParameters) {
   }
 }
 
-/** What a plan is worth, reduced to the three figures a comparison needs. */
+/** What a plan is worth, reduced to the figures a comparison needs. */
 export interface AdaptiveSummary {
   /** Probability of funding every need withdrawal to the horizon. */
   survival: number
+  /** Need plus extra over the whole plan: the ceiling, not what is taken. */
+  plannedWithdrawn: number
   /** Expected real cash actually handed over, probability-weighted. */
   expectedWithdrawn: number
-  /** Median real capital at the horizon, net of deferred tax where there is any. */
+  /** Real capital at the horizon, net of deferred tax where there is any. */
+  finalPercentile10: number
   finalMedian: number
+  finalPercentile90: number
+  /** Probability of leaving the target behind; `undefined` when none is set. */
+  bequestProbability?: number
 }
 
 /**
@@ -1545,10 +1551,18 @@ export function adaptiveSummary(params: PlannerParameters): AdaptiveSummary {
   const { portfolio, quad, spec, basis, schedule } = setup(params)
   const run = propagate(params, spec, basis, quad, portfolio, 'adaptive', '', schedule)
   const outcomes = run.liquidOutcomes ?? run.outcomes
+  const final = outcomes[outcomes.length - 1]!
   return {
     survival: 1 - run.finalDistribution.ruinProbability,
+    plannedWithdrawn: params.cashflow.reduce(
+      (sum, year) => sum + year.need + Math.max(0, year.extra),
+      0,
+    ),
     expectedWithdrawn: run.expectedWithdrawn,
-    finalMedian: outcomes[outcomes.length - 1]!.median,
+    finalPercentile10: final.percentile10,
+    finalMedian: final.median,
+    finalPercentile90: final.percentile90,
+    bequestProbability: run.bequestProbability,
   }
 }
 

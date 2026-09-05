@@ -7,8 +7,7 @@ import { usePlannerStore } from '../stores/planner'
 import PlannerInputs from '../components/planner/PlannerInputs.vue'
 import CashflowEditor from '../components/planner/CashflowEditor.vue'
 import PlannerOutcome from '../components/planner/PlannerOutcome.vue'
-import SensitivityCard from '../components/planner/SensitivityCard.vue'
-import { EXTRA_AXIS, INFLATION_AXIS, NEED_AXIS, RETURN_AXIS } from '../planner/sensitivity'
+import StressCard from '../components/planner/StressCard.vue'
 import CollapsibleCard from '../components/planner/CollapsibleCard.vue'
 import ComputationTable from '../components/planner/ComputationTable.vue'
 
@@ -45,26 +44,15 @@ onMounted(() => {
            otherwise unlabelled cards leaves the reader to infer. -->
       <h2 class="section-title">Resultat</h2>
       <PlannerOutcome />
-      <!-- Last, because they answer a question the outcome raises: you read
+      <!-- Last, because it answers a question the outcome raises: you read
            what the plan does, then ask how much of it depends on having judged
-           the inputs right. Two grids rather than one four-way sweep, because
-           the pairs are answerable separately — the household controls what it
-           spends and does not control what the market does, so the two ask for
-           different responses. Both compute only while open: nine propagations
-           is seconds of main thread on an AF plan, and eighteen on every edit
-           would make the cash flow editor unusable. -->
-      <SensitivityCard
-        title="Känslighet: uttag"
-        body-id="planner-sensitivity-cashflow"
-        :row-axis="NEED_AXIS"
-        :col-axis="EXTRA_AXIS"
-      />
-      <SensitivityCard
-        title="Känslighet: marknad"
-        body-id="planner-sensitivity-market"
-        :row-axis="RETURN_AXIS"
-        :col-axis="INFLATION_AXIS"
-      />
+           the assumptions right. Every stressed dimension is pushed the same
+           way at once, which is the thing a per-dimension grid could not show —
+           plans rarely fail because one assumption was wrong. Collapsed, and
+           computing only while open: three propagations is most of a second on
+           an AF plan, and paying that on every edit would make the cash flow
+           editor unusable. -->
+      <StressCard />
     </template>
 
     <!-- Between the results and the prose about the method: it is the working
