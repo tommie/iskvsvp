@@ -482,6 +482,32 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       .tickFormat((value) => `${Math.round(Number(value) * 100)}${NBSP}%`),
   )
 
+  // The target, marked the same way the fan chart marks it. The adaptive run
+  // leaves a point mass here — a whole band of balances is spent down to
+  // exactly this number — so the spike beside this line is the thing the note
+  // under the chart describes, and the line is what saves the note from having
+  // to name an amount. Drawn only when it is on the scale.
+  const [lowerValue, upperValue] = x.domain()
+  if (bequestTarget.value >= lowerValue! && bequestTarget.value <= upperValue!) {
+    const at = x(bequestTarget.value)
+    plot
+      .append('line')
+      .attr('x1', at)
+      .attr('x2', at)
+      .attr('y1', 0)
+      .attr('y2', innerHeight)
+      .attr('stroke', '#6c757d')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '4 4')
+    plot
+      .append('text')
+      .attr('x', at + 4)
+      .attr('y', 10)
+      .attr('font-size', 11)
+      .style('fill', '#6c757d')
+      .text('Arvsmål')
+  }
+
   const labels: { y: number; text: string; color: string }[] = []
 
   for (const s of series) {
@@ -795,10 +821,9 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
                  Without this the reader is left to guess at a peak that stands
                  clear of an otherwise smooth density. -->
             <p v-if="bequestTarget > 0" class="form-text mt-2 mb-0">
-              Den anpassade körningen har en topp vid arvsmålet ({{ formatKr(bequestTarget) }}): har
-              avkastningen varit svag sänks extrauttaget precis så mycket att målet ändå nås, så ett
-              helt band av utfall hamnar på exakt den summan. Har det gått ännu sämre missas målet
-              och utfallet hamnar under.
+              Den anpassade körningen har en topp vid arvsmålet: har avkastningen varit svag sänks
+              extrauttaget precis så mycket att målet ändå nås, så ett helt band av utfall hamnar på
+              exakt den summan. Har det gått ännu sämre missas målet och utfallet hamnar under.
             </p>
           </div>
         </div>
