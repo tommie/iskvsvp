@@ -5,7 +5,7 @@ import { storeToRefs } from 'pinia'
 import { usePlannerStore } from '../../stores/planner'
 import type { PlannerAsset } from '../../planner/types'
 import { ASSET_CLASS_PRESETS } from '../../planner/assets'
-import { formatKr, formatPercent } from '../../planner/format'
+import { formatPercent } from '../../planner/format'
 
 const store = usePlannerStore()
 const {
@@ -27,12 +27,6 @@ const {
 } = storeToRefs(store)
 
 const isAF = computed(() => accountType.value === 'AF')
-
-/** The cost basis in kronor that the ratio implies, which is what a tax return states. */
-const costBasisAmount = computed(() => initialCapital.value * initialCostBasisRatio.value)
-
-/** The share the household entered, as the amount it is a share of. */
-const bequestAmount = computed(() => initialCapital.value * bequestRatio.value)
 
 const weightSum = computed(() => assets.value.reduce((sum, asset) => sum + asset.weight, 0))
 
@@ -159,11 +153,9 @@ const portfolioSummary = computed(() => {
               />
               <div class="form-text">
                 <template v-if="bequestRatio > 0">
-                  {{ formatKr(bequestAmount) }} kvar vid slutet i dagens penningvärde<template
-                    v-if="isAF"
-                  >
-                    efter latent skatt</template
-                  >. Bara det extra uttaget bromsas.
+                  Andel av startkapitalet som ska finnas kvar vid slutet, i dagens
+                  penningvärde<template v-if="isAF"> och efter latent skatt</template>. Bara det
+                  extra uttaget bromsas.
                 </template>
                 <template v-else>Planen får tömmas helt.</template>
               </div>
@@ -192,7 +184,7 @@ const portfolioSummary = computed(() => {
                 @change="onNumber($event, (v) => (initialCostBasisRatio = v), 100)"
               />
               <div class="form-text">
-                {{ formatKr(costBasisAmount) }} av startkapitalet. 100&nbsp;% betyder att inget är
+                Andel av startkapitalet som är omkostnadsbelopp. 100&nbsp;% betyder att inget är
                 orealiserad vinst.
               </div>
             </div>

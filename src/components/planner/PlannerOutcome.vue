@@ -727,17 +727,17 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
               inte som bortfall. Därför kan 10:e percentilen vara noll när risken att planen
               spricker överstiger 10&nbsp;%.
               <template v-if="bequestTarget > 0">
-                Arvsmålet är {{ formatKr(bequestTarget) }} i dagens penningvärde, mätt efter
-                eventuell latent skatt — det är vad som faktiskt blir kvar till någon annan. Bara
-                den anpassade körningen siktar på det: målet reserveras vid sidan av behovet, så det
-                är det extra uttaget som betalar för det. Att missa målet är inte att planen
-                spricker; det är fortfarande behovet som avgör den saken.
+                Arvsmålet mäts i dagens penningvärde och efter eventuell latent skatt — det är vad
+                som faktiskt blir kvar till någon annan. Bara den anpassade körningen siktar på det:
+                målet reserveras vid sidan av behovet, så det är det extra uttaget som betalar för
+                det. Att missa målet är inte att planen spricker; det är fortfarande behovet som
+                avgör den saken.
               </template>
               <template v-if="relative">
                 Uttaget visas som förändring mot kolumnens planerade uttag, kapitalet som förändring
-                mot startkapitalet ({{ formatKr(initialCapital) }}) — båda i dagens penningvärde, så
-                förändringen är real. Det planerade uttaget står kvar i kronor: det är vad du själv
-                angett, och det de andra räknas mot.
+                mot startkapitalet — båda i dagens penningvärde, så förändringen är real. Det
+                planerade uttaget står kvar i kronor: det är vad du själv angett, och det de andra
+                räknas mot.
               </template>
               <template v-if="hasDeferredTax">
                 Beloppen är
