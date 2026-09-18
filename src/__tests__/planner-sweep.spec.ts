@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import SweepCard from '../components/planner/SweepCard.vue'
 import SweepChart from '../components/planner/charts/SweepChart.vue'
+import SweepWithdrawalChart from '../components/planner/charts/SweepWithdrawalChart.vue'
 import { usePlannerStore } from '../stores/planner'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
 import { adaptiveSummary, runPlanner } from '../planner/propagate'
@@ -628,6 +629,41 @@ describe('SweepCard', () => {
     // has to recompute rather than relabel: the switch changes the model, not
     // the presentation.
     expect(drawn(wrapper)[sweepLength() - 1]!.survival).toBeLessThan(withRule)
+  })
+
+  it('keeps the peak mark and the note explaining it in step, mid-sweep too', async () => {
+    // Both are conclusions of the same finished sweep, so they have to appear
+    // and disappear together. Gating the mark on the card being busy split
+    // them: it blinked out the moment a sweep started while the sentence
+    // describing it waited for the sweep to end.
+    const { wrapper } = mountCard(short())
+    await openCard(wrapper)
+    await until(wrapper, 'the table', () => wrapper.findAll('tbody tr').length > 0)
+
+    const note = () => wrapper.text().includes('Markeringen visar nivån')
+    const mark = () => wrapper.findComponent(SweepWithdrawalChart).props('peak')
+
+    expect(note()).toBe(mark() !== null)
+    const before = mark()
+
+    // Sampled through the resweep and asserted afterwards, rather than asserted
+    // inside the poll: an expectation that only runs under a condition can stop
+    // running without anyone noticing.
+    const samples: { busy: boolean; mark: SweepPoint | null; note: boolean }[] = []
+    await wrapper.get('#planner-sweep-adaptive').setValue(false)
+    await until(wrapper, 'the sweep to settle', () => {
+      const busy = wrapper.find('.overlay').exists()
+      samples.push({ busy, mark: mark() as SweepPoint | null, note: note() })
+      return !busy && wrapper.findAll('tbody tr').length > 0
+    })
+
+    const during = samples.filter((sample) => sample.busy)
+    expect(during.length).toBeGreaterThan(0)
+    // The previous answer, held rather than dropped — like the table it sits
+    // under, and unlike the curve being redrawn above it.
+    expect(during.every((sample) => sample.mark === before)).toBe(true)
+    expect(during.every((sample) => sample.note === (before !== null))).toBe(true)
+    expect(note()).toBe(mark() !== null)
   })
 
   it('abandons a sweep in flight when the card is closed', async () => {

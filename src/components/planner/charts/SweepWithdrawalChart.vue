@@ -33,16 +33,27 @@ const props = defineProps<{
   max: number
   /** The plan's own extra, when it is a constant rate; otherwise no marker. */
   planRate: number | null
+  /**
+   * The points the vertical scale is sized from.
+   *
+   * The last finished sweep, where there is one, rather than the points being
+   * drawn. A curve that grows a rung at a time would otherwise drag the axis up
+   * with it — and every annotation placed by value would move under the reader
+   * while it did, so a mark from the finished sweep could not stay on screen
+   * during the next one without pointing somewhere false.
+   */
+  scalePoints: SweepPoint[]
   /** Starting capital, for the withdrawal-rate axis on the right. */
   capital: number
   /**
-   * The level that delivers the most, or `null` for none.
+   * The rung that delivers the most, or `null` for none.
    *
-   * Passed in rather than derived here, because it belongs to a *finished*
-   * sweep: a mark on a curve that is still being drawn would be pointing at a
-   * line that is about to move. The card withholds it until the sweep settles.
+   * The point itself, not just its level, so the mark can be placed without
+   * looking it up among the points being drawn — which is what lets it belong
+   * to the finished sweep, like every other conclusion on the card, instead of
+   * blinking out the moment the next one starts.
    */
-  peak: number | null
+  peak: SweepPoint | null
   /**
    * Levels at which one of the probability curves passes its thresholds, so
    * what the plan delivers can be read off against the risk it carries. One
@@ -67,6 +78,9 @@ const chartData = computed(() => ({
   capital: props.capital,
   peak: props.peak,
   marks: props.marks,
+  // The scale is sized from the settled sweep, so a redraw is due when that
+  // changes even though the points being drawn have not.
+  scale: props.scalePoints.length,
 }))
 
 /** The two series' mid-lines, per year; the shaded ranges come off the points. */
@@ -109,8 +123,8 @@ const renderWithdrawn = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   // construction: the gap under it is the quantity the chart exists to show, so
   // it must not be scaled away. The floor goes below zero only if a deposit
   // year drags the envelope there.
-  const top = d3.max(props.points, (point) => point.plannedMax) ?? 1
-  const bottom = Math.min(0, d3.min(props.points, (point) => point.minWithdrawal) ?? 0)
+  const top = d3.max(props.scalePoints, (point) => point.plannedMax) ?? 1
+  const bottom = Math.min(0, d3.min(props.scalePoints, (point) => point.minWithdrawal) ?? 0)
   const y = d3
     .scaleLinear()
     .domain([bottom, top || 1])
@@ -300,10 +314,9 @@ const renderWithdrawn = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   // because the extra spending costs more years than it buys. Absent under the
   // adaptive rule, whose curve is still climbing at the end of the range — that
   // rule declines rather than overspends, so there is no level to stay under.
-  const peakPoint = props.points.find((point) => point.rate === props.peak)
-  if (peakPoint) {
-    const at = x(peakPoint.rate)
-    const height = y(expected(peakPoint))
+  if (props.peak) {
+    const at = x(props.peak.rate)
+    const height = y(expected(props.peak))
     plot
       .append('line')
       .attr('x1', at)
@@ -326,7 +339,7 @@ const renderWithdrawn = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       .attr('font-size', 11)
       .attr('font-weight', 600)
       .style('fill', ADAPTIVE_COLOR)
-      .text(formatPercent(peakPoint.rate * 100))
+      .text(formatPercent(props.peak.rate * 100))
   }
 }
 </script>

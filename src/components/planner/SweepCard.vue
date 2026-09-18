@@ -38,12 +38,17 @@ const points = ref<SweepPoint[]>([])
 /**
  * The points of the last sweep that actually finished.
  *
- * Everything stated in words or numbers reads from here rather than from
- * `points`: the table, its footnote, the note about the peak, and the chart's
- * own annotations. A curve growing a point at a time reads as progress, but a
- * table rewriting its figures seventeen times reads as flicker — and the early
- * rungs genuinely do give different answers, because a target the sweep has not
- * reached down to yet is reported as a bound and then firms up into a crossing.
+ * Every conclusion reads from here rather than from `points`: the table, its
+ * footnote, the note about the peak, and the charts' own annotations. A curve
+ * growing a point at a time reads as progress, but a conclusion rewriting
+ * itself seventeen times reads as flicker — and the early rungs genuinely do
+ * give different answers, because a target the sweep has not reached down to
+ * yet is reported as a bound and firms up into a crossing several rungs later.
+ *
+ * One source for all of them, so they change together at the instant the sweep
+ * finishes. Gating the chart marks on `busy` instead left the marker vanishing
+ * the moment a sweep started while the note explaining it stayed until the
+ * sweep ended, which is the same fact told twice at two different times.
  *
  * Kept across a recompute rather than cleared, so a reader dragging a slider
  * keeps the figures they were comparing against; the block is dimmed and marked
@@ -196,20 +201,24 @@ const rows = computed(() =>
 
 const missesSome = computed(() => rows.value.some((row) => row.crossing === null))
 
-/** Whether the chart has a peak to point at, which decides if its note shows. */
-const peak = computed(() => peakDeliveryLevel(settled.value))
+/**
+ * The settled rung that delivers the most, or `null`.
+ *
+ * The point rather than the level, because the chart places its mark by value
+ * and looking that up among the points being drawn would tie the mark to the
+ * sweep in flight instead of the finished one.
+ */
+const peak = computed(() => {
+  const rate = peakDeliveryLevel(settled.value)
+  return rate === null ? null : (settled.value.find((point) => point.rate === rate) ?? null)
+})
 
 /**
- * The chart's annotations, withheld while a sweep is in flight.
- *
- * Dots and a marked level belong to a finished answer, and the curve under them
- * is being redrawn from the first rung — a dot left sitting on the previous
- * sweep's crossing would be pointing at a line that is no longer there. The
- * table can afford to go stale under a dim because it is read as text; a mark on
- * a moving curve cannot.
+ * What the payout chart sizes its vertical scale from: the finished sweep where
+ * there is one, so the axis holds still while the next curve grows into it and
+ * the marks placed by value stay where they belong.
  */
-const chartCrossings = computed(() => (busy.value ? [] : crossings.value))
-const chartPeak = computed(() => (busy.value ? null : peak.value))
+const scalePoints = computed(() => (settled.value.length > 0 ? settled.value : points.value))
 
 /**
  * The levels the payout chart rules off, and the name of the curve they came
@@ -218,12 +227,11 @@ const chartPeak = computed(() => (busy.value ? null : peak.value))
  * Both probability curves fall monotonically in the level, so a threshold on
  * either names a level — which is what lets the payout chart be read against
  * the risk: *at the level where this holds 90% of the time, here is what you
- * get*. `levelMarks` picks one family; the label here is what the chart's
- * legend needs to say which, and it reuses `keepLabel` so the two charts cannot
+ * get*. `levelMarks` picks one family; the label is what the chart's legend
+ * needs to say which, and it reuses `keepLabel` so the two charts cannot
  * disagree about what the kept-capital curve is.
  */
 const levels = computed(() => levelMarks(settled.value))
-const chartMarks = computed(() => (busy.value ? [] : levels.value.marks))
 
 /**
  * The legend's whole phrase for those marks.
@@ -285,7 +293,7 @@ const marksLabel = computed(() => {
             :points="points"
             :max="SWEEP_MAX"
             :targets="SURVIVAL_TARGETS"
-            :crossings="chartCrossings"
+            :crossings="crossings"
             :plan-rate="planRate"
             :keep-label="keepLabel"
           />
@@ -300,127 +308,118 @@ const marksLabel = computed(() => {
             :max="SWEEP_MAX"
             :plan-rate="planRate"
             :capital="parameters.initialCapital"
-            :peak="chartPeak"
-            :marks="chartMarks"
+            :peak="peak"
+            :scale-points="scalePoints"
+            :marks="levels.marks"
             :marks-label="marksLabel"
           />
         </div>
       </div>
 
-      <!-- Determinate, unlike the stress card's spinner: here the work really
-           is countable — one propagation per rung — so the bar can say where it
-           has got to instead of inventing progress. The count rides on
-           aria-valuenow/valuemax, which is where a screen reader looks for it,
-           leaving the label to name the control and stay put. -->
-      <div v-if="running" class="progress mt-3" style="height: 0.35rem">
-        <div
-          class="progress-bar progress-bar-striped progress-bar-animated"
-          role="progressbar"
-          :style="{ width: `${(points.length / total) * 100}%` }"
-          :aria-valuenow="points.length"
-          aria-valuemin="0"
-          :aria-valuemax="total"
-          aria-label="Räknar uttagsnivåer"
-        ></div>
+      <!-- The table and the space it will occupy, as one positioned block, so
+           the progress indicator can sit over it instead of between the charts
+           and the table where it would push everything down each time a sweep
+           starts. The block keeps a floor height for the first sweep, when
+           there is no table under the overlay yet. -->
+      <div class="results mt-4" :class="{ busy }" :aria-busy="busy">
+        <!-- Determinate, unlike the stress card's spinner, because here the
+             work really is countable — one propagation per rung — so the bar
+             reports rather than invents. The count rides on
+             aria-valuenow/valuemax, which is where a screen reader looks for
+             it, leaving the label to name the control and stay put. -->
+        <div v-if="busy" class="overlay">
+          <div
+            class="progress"
+            role="progressbar"
+            :aria-valuenow="points.length"
+            aria-valuemin="0"
+            :aria-valuemax="total"
+            aria-label="Räknar uttagsnivåer"
+          >
+            <div
+              class="progress-bar progress-bar-striped progress-bar-animated"
+              :style="{ width: `${(points.length / total) * 100}%` }"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Only once a sweep has finished, and dimmed while the next one runs.
+             There is nothing truthful to print from a half-finished sweep: a
+             target it has not reached down to yet reads as a bound and would
+             firm up into a crossing a second later. -->
+        <div v-if="settled.length > 0" class="table-responsive">
+          <table class="table table-sm align-middle mb-0 sweep-table">
+            <thead>
+              <tr>
+                <th>Planen håller</th>
+                <th class="text-end">Nivå</th>
+                <th class="text-end">Extrauttag per år</th>
+                <th class="text-end">Totalt uttag per år, förväntat</th>
+                <th class="text-end">Totalt uttag per år, planerat</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in rows" :key="row.target">
+                <th>{{ formatPercent(row.target * 100) }}</th>
+                <template v-if="row.crossing">
+                  <td class="text-end">
+                    <span v-if="row.crossing.atLeast" class="bound">≥&nbsp;</span
+                    >{{ formatPercent(row.crossing.rate * 100) }}
+                  </td>
+                  <td class="text-end">
+                    <span v-if="row.crossing.atLeast" class="bound">≥&nbsp;</span
+                    >{{ formatKr(row.crossing.extra) }}
+                  </td>
+                  <td class="text-end">{{ formatKr(row.crossing.expectedPerYear) }}</td>
+                  <td class="text-end planned">{{ formatKr(row.crossing.plannedPerYear) }}</td>
+                </template>
+                <template v-else>
+                  <td v-for="column in 4" :key="column" class="text-end">–</td>
+                </template>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p v-if="settled.length > 0" class="form-text mt-2 mb-0">
+          Den högsta uttagsnivå som når respektive sannolikhet, interpolerad mellan de räknade
+          punkterna. De två sista kolumnerna är behov plus extra per år: vad nivån ber om, och vad
+          den väntas ge.
+          <template v-if="missesSome">
+            Ett streck betyder att behovsuttaget ensamt ligger under nivån; inget extrauttag köper
+            tillbaka den.
+          </template>
+          <template v-else-if="rows.some((row) => row.crossing?.atLeast)">
+            Ett ≥-tecken betyder att kurvan aldrig föll under nivån inom det räknade intervallet.
+          </template>
+        </p>
       </div>
 
-      <!-- Only once a sweep has finished, and dimmed while the next one runs.
-           There is nothing truthful to print from a half-finished sweep: a
-           target it has not reached down to yet reads as a bound and would
-           firm up into a crossing a second later. -->
-      <div v-if="settled.length > 0" class="table-responsive mt-4" :aria-busy="busy">
-        <table class="table table-sm align-middle mb-0 sweep-table" :class="{ stale: busy }">
-          <thead>
-            <tr>
-              <th>Planen håller</th>
-              <th class="text-end">Nivå</th>
-              <th class="text-end">Extrauttag per år</th>
-              <th class="text-end">Totalt uttag per år, förväntat</th>
-              <th class="text-end">Totalt uttag per år, planerat</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="row in rows" :key="row.target">
-              <th>{{ formatPercent(row.target * 100) }}</th>
-              <template v-if="row.crossing">
-                <td class="text-end">
-                  <span v-if="row.crossing.atLeast" class="bound">≥&nbsp;</span
-                  >{{ formatPercent(row.crossing.rate * 100) }}
-                </td>
-                <td class="text-end">
-                  <span v-if="row.crossing.atLeast" class="bound">≥&nbsp;</span
-                  >{{ formatKr(row.crossing.extra) }}
-                </td>
-                <td class="text-end">{{ formatKr(row.crossing.expectedPerYear) }}</td>
-                <td class="text-end planned">{{ formatKr(row.crossing.plannedPerYear) }}</td>
-              </template>
-              <template v-else>
-                <td v-for="column in 4" :key="column" class="text-end">–</td>
-              </template>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <p v-if="settled.length > 0" class="form-text mt-2 mb-0">
-        Den högsta uttagsnivå som fortfarande når respektive sannolikhet, interpolerad mellan de
-        räknade punkterna. De två sista kolumnerna är behov plus extra per år — vad nivån ber om,
-        och vad den faktiskt väntas ge — och är alltså direkt jämförbara med tumregler av typen
-        ”fyra procent av startkapitalet”.
-        <template v-if="missesSome">
-          Ett streck betyder att behovsuttaget ensamt ligger under nivån, och då finns inget
-          extrauttag som köper tillbaka den; kurvans vänstra ände visar var behovet hamnar.
-        </template>
-        <template v-else-if="rows.some((row) => row.crossing?.atLeast)">
-          Ett ≥-tecken betyder att kurvan aldrig föll under nivån inom det räknade intervallet.
-        </template>
-      </p>
-
+      <!-- Only what this card adds. What ruin means, what the dynamiska
+           körningen does and what the runs are named are all established by the
+           cards above and by Om metoden; repeating them here buries the one
+           thing a reader has to know to read these two charts. -->
       <div class="mt-4">
         <p class="form-text mb-0">
-          Kurvorna sätter extrauttaget till en fast andel av startkapitalet, bestämd vid start och
-          därefter konstant realt genom hela planen — samma fråga som ligger bakom tumreglerna om
-          ”fyra procent”. Behovsuttaget är planens eget, med sin form och sina insättningsår; det
-          extrauttag du matat in används däremot inte här, utan ersätts av nivån på x-axeln. Vid
-          0&nbsp;% är kurvan därför Minimum-körningen: enbart behovet. Att planen håller betyder som
-          vanligt att hela behovsuttaget kunnat betalas varje år; att missa arvsmålet räknas inte
-          som att planen spricker. X-axeln är genomgående <em>extrauttaget</em>, medan den högra
-          grafens y-axel är behov plus extra — det totala uttaget per år, så att det går att läsa
-          mot tumreglerna direkt. Dess andra axel visar samma belopp som andel av startkapitalet.
-        </p>
-        <p v-if="peak !== null" class="form-text mb-0 mt-2">
-          Markeringen i den högra grafen visar den nivå som ger <em>mest</em> utbetalt. Över den får
-          hushållet mindre, inte mer — det större uttaget kostar fler år än det köper, eftersom en
-          plan som spruckit slutar betala ut helt. Att uttaget aldrig kan överstiga det planerade
-          gäller år för år, så snittkurvan ligger under den streckade av konstruktion och bandets
-          undre kant under snittet; bara bandets övre kant kan nå upp till den.
-        </p>
-        <p class="form-text mb-0 mt-2">
-          Den andra kurvan i vänstra grafen är
-          <template v-if="hasBequest"
-            >sannolikheten att nå arvsmålet, alltså hushållets eget mål</template
-          ><template v-else
-            >sannolikheten att startkapitalet finns kvar realt vid periodens slut — samma mått som
-            arvsmålet, med tröskeln satt vid hela startkapitalet eftersom planen inte angett
-            något</template
-          >. Måttet är efter latent skatt, som allt annat slutkapital här.
+          Extrauttaget sätts här till en fast andel av startkapitalet, bestämd vid start och
+          konstant realt resten av planen — tumregeln om ”fyra procent” ställd som fråga.
+          Behovsuttaget är planens eget; det extrauttag du matat in ersätts av nivån på x-axeln.
         </p>
         <p v-if="rule === 'adaptive'" class="form-text mb-0 mt-2">
-          <strong>Med den dynamiska regeln är nivån ett tak, inte ett fast uttag.</strong> Ett år
-          betalar bara så mycket av den som överskottet över det reserverade behovet — och ett
-          eventuellt arvsmål — räcker till. Att hålla den kurvan platt är just vad regeln är till
-          för, så sannolikheten att planen håller säger mest om behovsuttaget och nästan ingenting
-          om nivån. Vad nivån kostar syns i stället på de två andra ställena: i kurvan för
-          kvarvarande kapital, och i den högra grafen, där det förväntade uttaget slutar följa det
-          planerade. Slå av regeln för att i stället ta ut nivån varje år oavsett saldo, vilket är
-          den ursprungliga frågan bakom SAFEMAX.
+          <strong>Med den dynamiska regeln är nivån ett tak, inte ett fast uttag.</strong> Att hålla
+          sannolikheten att planen håller platt är just vad regeln är till för, så den kurvan säger
+          nästan ingenting om nivån. Vad nivån kostar syns i stället i den andra kurvan och i
+          avståndet mellan planerat och förväntat uttag. Slå av regeln för att i stället ta ut nivån
+          varje år oavsett saldo — Bengens ursprungliga fråga.
         </p>
         <p v-else class="form-text mb-0 mt-2">
           <strong>Utan den dynamiska regeln tas nivån ut varje år oavsett saldo</strong>, tills
           planen inte längre klarar behovsuttaget — Bengens ursprungliga fråga, och den som
-          tumreglerna om fyra procent besvarar. Sannolikhetskurvan faller därför hela vägen, och det
-          förväntade uttaget viker av från det planerade av en annan orsak än ovan: en plan som
-          spruckit slutar betala ut helt.
+          tumreglerna om fyra procent besvarar.
+        </p>
+        <p v-if="peak !== null" class="form-text mb-0 mt-2">
+          Markeringen visar nivån som ger <em>mest</em> utbetalt: över den får hushållet mindre,
+          inte mer, eftersom uttaget kostar fler år än det köper.
         </p>
       </div>
     </template>
@@ -446,13 +445,43 @@ const marksLabel = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 
+/* The figures and the space they will occupy, as one block the progress
+   indicator can be laid over. A floor height so the first sweep, which has no
+   table to overlay yet, does not hand the card a different height the moment
+   one arrives — the charts above must not move while a sweep runs. */
+.results {
+  position: relative;
+  /* Tall enough to hold the table and its footnote, so the first sweep does not
+     hand the card a different height the moment they arrive. The stress card
+     reserves its waiting box the same way and for the same reason. A little
+     over rather than under: extra sentences in the footnote are conditional, and
+     a floor that grows is a jump where slack is only a few pixels of air. */
+  min-height: 13rem;
+}
+
 /* The previous sweep's figures, while the next one is being computed. Dimmed
    rather than dropped, so a reader dragging a slider keeps what they were
    comparing against — and dimmed rather than left alone, because stale figures
    at full strength read as current. */
-.sweep-table.stale {
+.results.busy .table-responsive {
   opacity: 0.35;
   transition: opacity 0.15s ease-in-out;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Sized rather than full width: over a table it reads as an indicator, where a
+   rule spanning the card would read as part of the layout. */
+.overlay .progress {
+  width: 12rem;
+  height: 0.4rem;
 }
 
 /* The bound marker is a qualifier on the figure, not part of it. */
