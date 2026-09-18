@@ -3,14 +3,23 @@ import { computed } from 'vue'
 import * as d3 from 'd3'
 
 import D3Chart from '../../D3Chart.vue'
+import ChartLegend from './ChartLegend.vue'
 import { formatKr } from '../../../planner/format'
-import { axes, type RunSeries } from './shared'
+import { axes, MARKER_COLOR, type LegendEntry, type RunSeries } from './shared'
 
 const props = defineProps<{
   runs: RunSeries[]
   /** The target the dynamic run holds back for; 0 when the plan sets none. */
   bequestTarget: number
 }>()
+
+const legendEntries = computed<LegendEntry[]>(() =>
+  props.runs.map((entry) => ({
+    label: entry.run.label,
+    color: entry.color,
+    kind: entry.dashed ? 'dashed' : 'line',
+  })),
+)
 
 /** Owned by the page, because the axis basis is a property of the whole view. */
 const logScale = defineModel<boolean>('logScale', { required: true })
@@ -78,7 +87,7 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       .attr('x2', innerWidth)
       .attr('y1', at)
       .attr('y2', at)
-      .attr('stroke', '#6c757d')
+      .attr('stroke', MARKER_COLOR)
       .attr('stroke-width', 1)
       .attr('stroke-dasharray', '4 4')
     plot
@@ -86,7 +95,7 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       .attr('x', 4)
       .attr('y', at - 4)
       .attr('font-size', 11)
-      .style('fill', '#6c757d')
+      .style('fill', MARKER_COLOR)
       .text('Arvsmål')
   }
 
@@ -136,16 +145,9 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       <!-- Named, coloured and dashed from the runs themselves, so a curve here
            and a column in the table beside it can never end up with different
            names for the same run. -->
-      <div class="run-legend d-flex flex-wrap gap-3 small text-muted mt-2">
-        <span v-for="entry in runs" :key="entry.run.label">
-          <span
-            class="line"
-            :class="{ dashed: entry.dashed }"
-            :style="{ '--line-color': entry.color }"
-          ></span>
-          {{ entry.run.label }}
-        </span>
-      </div>
+      <!-- `run-legend` is a hook for the test that holds this legend and the
+           Slutkapital table's column headers to the same names. -->
+      <ChartLegend class="run-legend" :entries="legendEntries" />
     </div>
   </div>
 </template>

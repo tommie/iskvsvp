@@ -29,7 +29,33 @@ export const NEED_COLOR = '#0d6efd'
 export const EXTRA_COLOR = '#6f42c1'
 export const ADAPTIVE_COLOR = '#fd7e14'
 
+/**
+ * Reference furniture: a target the plan was given, a marker for where the plan
+ * itself sits, the shading behind what it asked for. Deliberately outside the
+ * series palette — these are things the reader supplied or the chart drew to
+ * measure against, not outcomes, and giving one of them a series colour would
+ * claim it was.
+ */
+export const MARKER_COLOR = '#6c757d'
+
 export const CHART_HEIGHT = 320
+
+/** How a legend entry's swatch is drawn; matches the stroke the chart uses. */
+export type SwatchKind = 'line' | 'dashed' | 'dotted' | 'band' | 'dot'
+
+/**
+ * One entry in a chart's legend.
+ *
+ * Here rather than in `ChartLegend.vue` because `<script setup>` cannot export
+ * types, and every chart that builds a list of these needs to name it.
+ */
+export interface LegendEntry {
+  label: string
+  /** Omit for the neutral colour, which is what reference marks use. */
+  color?: string
+  /** Defaults to a solid line. */
+  kind?: SwatchKind
+}
 
 /**
  * Svenska skrivregler puts a space before the percent sign, and a non-breaking

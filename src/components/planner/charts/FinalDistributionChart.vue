@@ -5,7 +5,7 @@ import * as d3 from 'd3'
 import D3Chart from '../../D3Chart.vue'
 import { formatKr } from '../../../planner/format'
 import { densityAt, densityBins } from '../../../planner/density'
-import { axes, spreadLabels, NBSP, type RunSeries } from './shared'
+import { axes, spreadLabels, MARKER_COLOR, NBSP, type RunSeries } from './shared'
 
 const props = defineProps<{
   runs: RunSeries[]
@@ -74,7 +74,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       .attr('x2', at)
       .attr('y1', 0)
       .attr('y2', innerHeight)
-      .attr('stroke', '#6c757d')
+      .attr('stroke', MARKER_COLOR)
       .attr('stroke-width', 1)
       .attr('stroke-dasharray', '4 4')
     plot
@@ -82,7 +82,7 @@ const renderFinal = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       .attr('x', at + 4)
       .attr('y', 10)
       .attr('font-size', 11)
-      .style('fill', '#6c757d')
+      .style('fill', MARKER_COLOR)
       .text('Arvsmål')
   }
 

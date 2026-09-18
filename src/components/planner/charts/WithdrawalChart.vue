@@ -3,9 +3,24 @@ import { computed } from 'vue'
 import * as d3 from 'd3'
 
 import D3Chart from '../../D3Chart.vue'
+import ChartLegend from './ChartLegend.vue'
 import { formatKr } from '../../../planner/format'
 import type { CashflowYear, PropagationRun } from '../../../planner/types'
-import { axes, ADAPTIVE_COLOR, EXTRA_COLOR, NEED_COLOR } from './shared'
+import { axes, ADAPTIVE_COLOR, EXTRA_COLOR, NEED_COLOR, type LegendEntry } from './shared'
+
+/**
+ * Minimum, Dynamisk, Maximum — the order `runs` puts them in, so every legend
+ * on the page reads the same way even though this one names planned lines
+ * rather than runs and cannot be driven from `runs` directly.
+ */
+const legendEntries: LegendEntry[] = [
+  { label: 'Planerat minimum', color: NEED_COLOR, kind: 'dashed' },
+  {
+    label: 'Dynamisk: median, med 10–90-percentilen som band',
+    color: ADAPTIVE_COLOR,
+  },
+  { label: 'Planerat maximum', color: EXTRA_COLOR, kind: 'dashed' },
+]
 
 const props = defineProps<{
   /** Only the dynamic run is drawn: a fixed schedule pays its amount or has failed. */
@@ -143,24 +158,7 @@ const renderWithdrawals = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
     <div class="card-header">Uttag per år (dagens penningvärde)</div>
     <div class="card-body">
       <D3Chart :render-chart="renderWithdrawals" :data="chartData" />
-      <!-- Minimum, Dynamisk, Maximum — the order `runs` puts them in, so every
-           legend on the page reads the same way even though this one names
-           planned lines rather than runs and cannot be driven from `runs`
-           directly. -->
-      <div class="d-flex flex-wrap gap-3 small text-muted mt-2">
-        <span>
-          <span class="line dashed" :style="{ '--line-color': NEED_COLOR }"></span>
-          Planerat minimum
-        </span>
-        <span>
-          <span class="line" :style="{ '--line-color': ADAPTIVE_COLOR }"></span>
-          Dynamisk: median, med 10–90-percentilen som band
-        </span>
-        <span>
-          <span class="line dashed" :style="{ '--line-color': EXTRA_COLOR }"></span>
-          Planerat maximum
-        </span>
-      </div>
+      <ChartLegend :entries="legendEntries" />
       <p class="form-text mt-3 mb-0">
         Vad den dynamiska regeln faktiskt betalar ut, mot vad planen bett om. Avståndet upp till den
         streckade linjen är extra som avstods för att överskottet inte räckte; avståndet ned under

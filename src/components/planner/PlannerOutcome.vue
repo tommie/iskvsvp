@@ -351,23 +351,4 @@ const gridWarning = computed(() => {
 .summary-table td {
   white-space: nowrap;
 }
-
-/* The series colour arrives as a custom property rather than as an inline
-   background, so the dashed variant can paint with it too: an inline background
-   shorthand would win over any stylesheet rule and flatten the dashes back to a
-   solid bar. */
-.line {
-  display: inline-block;
-  width: 1.5rem;
-  height: 3px;
-  vertical-align: 3px;
-  margin-right: 0.25rem;
-  background-color: var(--line-color);
-}
-
-/* Same 6-on, 4-off rhythm as the stroke-dasharray the chart draws with. */
-.line.dashed {
-  background-color: transparent;
-  background-image: repeating-linear-gradient(90deg, var(--line-color) 0 6px, transparent 6px 10px);
-}
 </style>

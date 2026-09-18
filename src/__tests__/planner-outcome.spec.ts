@@ -63,7 +63,7 @@ describe('PlannerOutcome layout', () => {
   it('names the curves exactly as it names the columns', () => {
     const { wrapper } = mountOutcome()
     const legend = wrapper
-      .findAll('.run-legend .line')
+      .findAll('.run-legend .swatch')
       .map((swatch) => swatch.element.parentElement!.textContent!.trim())
     // The header row leads with an empty corner cell for the row labels.
     const columns = wrapper
@@ -72,6 +72,25 @@ describe('PlannerOutcome layout', () => {
       .filter((text) => text !== '')
 
     expect(legend).toEqual(columns)
+  })
+
+  it('gives every legend swatch the colour and stroke of its curve', () => {
+    // The swatches are drawn by CSS on classes the component owns, and Vue
+    // scopes styles to the component that declares them. Splitting the charts
+    // out of this file moved the markup into the children and left the rules
+    // behind here, so for a while every swatch on the page rendered as an empty
+    // gap — visible to a reader, invisible to a test that only read the labels.
+    const { wrapper } = mountOutcome()
+    const swatches = wrapper.findAll('.run-legend .swatch')
+    expect(swatches.length).toBeGreaterThan(0)
+    for (const swatch of swatches) {
+      // The colour arrives as a custom property so the dashed variant can paint
+      // with it too; without it the swatch has nothing to draw.
+      expect(swatch.attributes('style')).toMatch(/--line-color:\s*#[0-9a-f]{6}/i)
+    }
+    // And the two runs the charts draw dashed are the two marked dashed here,
+    // so the encoding survives between the chart, the legend and the table.
+    expect(wrapper.findAll('.run-legend .swatch.dashed')).toHaveLength(2)
   })
 })
 
