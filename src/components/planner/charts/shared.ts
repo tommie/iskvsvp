@@ -38,6 +38,14 @@ export const ADAPTIVE_COLOR = '#fd7e14'
  */
 export const MARKER_COLOR = '#6c757d'
 
+/**
+ * Computed reference marks, which are neither furniture nor a series: the
+ * levels at which a probability curve passes a threshold are an answer the
+ * model worked out, so they earn a colour rather than the neutral grey. The
+ * palette's gold, which is unused by any series on these charts.
+ */
+export const MARK_COLOR = '#d1b101'
+
 export const CHART_HEIGHT = 320
 
 /** How a legend entry's swatch is drawn; matches the stroke the chart uses. */

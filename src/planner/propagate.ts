@@ -32,7 +32,7 @@ const BASIS_RATIO_MAX = 3
 const LOSS_CREDIT_THRESHOLD = 100_000
 const LOSS_CREDIT_UPPER_QUOTA = 0.7
 
-interface GridSpec {
+export interface GridSpec {
   grid: Float64Array
   logLow: number
   logStep: number
@@ -346,7 +346,7 @@ function proportionalTaxDrag(params: PlannerParameters): number {
 }
 
 /** Which of the three bracketing runs a propagation represents. */
-type SpendingMode = 'need' | 'extra' | 'adaptive'
+export type SpendingMode = 'need' | 'extra' | 'adaptive'
 
 /**
  * What a run sets out to hand over across the whole plan.
@@ -656,6 +656,11 @@ function buildBasisGrid(requestedNodes: number): BasisSpec {
  * portfolio cannot fund another year of spending and will be absorbed into
  * ruin on the next step anyway.
  */
+function buildGridFor(params: PlannerParameters, moments: PortfolioMoments): GridSpec {
+  const { low, high } = gridBounds(params, moments)
+  return buildGrid(low, high, params.gridNodes)
+}
+
 function gridBounds(params: PlannerParameters, moments: PortfolioMoments) {
   let deposits = 0
   let scale = Math.max(params.initialCapital, 1)
@@ -1511,13 +1516,15 @@ function propagate(
  * would need to be justified separately.
  */
 /** Everything a propagation needs that does not depend on which run it is. */
-function setup(params: PlannerParameters) {
+function setup(params: PlannerParameters, sharedSpec?: GridSpec) {
   validate(params)
 
   const portfolio = portfolioMoments(params.assets, params.correlations)
   const quad = normalQuadrature(params.quadratureNodes)
-  const { low, high } = gridBounds(params, portfolio)
-  const spec = buildGrid(low, high, params.gridNodes)
+  // A caller comparing a family of plans supplies one grid for all of them, so
+  // that they differ by what is being varied rather than also by where the
+  // nodes happen to fall. See `adaptiveSummaries`.
+  const spec = sharedSpec ?? buildGridFor(params, portfolio)
   // Only AF carries a cost basis; ISK collapses the dimension to one node and
   // pays none of its cost.
   const basis = buildBasisGrid(params.accountType === 'AF' ? params.basisNodes : 1)
@@ -1538,47 +1545,179 @@ function setup(params: PlannerParameters) {
 }
 
 /** What a plan is worth, reduced to the figures a comparison needs. */
-export interface AdaptiveSummary {
+export interface RunSummary {
   /** Probability of funding every need withdrawal to the horizon. */
   survival: number
   /** Need plus extra over the whole plan: the ceiling, not what is taken. */
   plannedWithdrawn: number
   /** Expected real cash actually handed over, probability-weighted. */
   expectedWithdrawn: number
+  /**
+   * Horizon the two totals above cover, so they can be annualised without the
+   * caller having to hold on to the parameters they came from.
+   *
+   * A total over a plan is not comparable with anything the withdrawal-rate
+   * literature states — those are all annual rates — and dividing by the wrong
+   * horizon is an easy mistake to make one level up.
+   */
+  years: number
+  /**
+   * Lowest and highest *expected* annual payout across the plan.
+   *
+   * Per year, and unconditional like every other figure here: a year the plan
+   * never reached counts as zero rather than being left out. Under a fixed
+   * schedule that makes the pair the first and last year, since the amount is
+   * constant and only survival erodes it; under the adaptive rule the payout
+   * also moves on its own, so the two are a genuine envelope rather than the
+   * ends of a monotone curve.
+   */
+  minWithdrawal: number
+  maxWithdrawal: number
+  /**
+   * Lowest and highest amount any single year *planned* to pay.
+   *
+   * The counterpart to `minWithdrawal`/`maxWithdrawal`, so a chart can compare
+   * an envelope against an envelope. Against the plan's mean instead, a shaped
+   * cash flow reads as though it were overpaying: a plan asking 400 000 for a
+   * go-go decade and 200 000 after averages 250 000, and its best delivered
+   * year sits far above that line through no fault of the model.
+   */
+  plannedMin: number
+  plannedMax: number
   /** Real capital at the horizon, net of deferred tax where there is any. */
   finalPercentile10: number
   finalMedian: number
   finalPercentile90: number
   /** Probability of leaving the target behind; `undefined` when none is set. */
   bequestProbability?: number
+  /**
+   * Probability of ending with at least the **starting capital** still there,
+   * in real terms and net of any deferred tax.
+   *
+   * The bequest probability's counterpart for a plan that sets no target, and
+   * on the same basis, so the two are the same measure at different thresholds.
+   * It exists because a survival curve alone is nearly flat under the adaptive
+   * rule — the rule's whole job is to keep it that way — and a sweep that
+   * reported only survival would look like a plan indifferent to how much it
+   * spends. What the spending actually costs shows up here and in what is
+   * delivered. `undefined` for a plan that starts from nothing.
+   */
+  preservationProbability?: number
 }
 
 /**
- * The adaptive run alone, summarised.
+ * One run of a plan, summarised.
  *
  * Exists so a caller that compares many variants of a plan pays for one
- * propagation each rather than three. The other two runs would be waste there:
- * the need run does not depend on the extra at all, and the unconditional run
- * is not the behaviour being compared.
+ * propagation each rather than three. Which run it is matters to the caller:
+ * the adaptive one is what the page reports, but a sweep over spending levels
+ * also wants the unconditional one, where the level is a schedule rather than a
+ * ceiling.
  *
  * The median is taken net of deferred tax when the account has any, matching
  * the Slutkapital table's default — an AF balance owes its heirs' bill, and
  * only after that is it comparable with an ISK's.
  */
-export function adaptiveSummary(params: PlannerParameters): AdaptiveSummary {
-  const { portfolio, quad, spec, basis, schedule } = setup(params)
-  const run = propagate(params, spec, basis, quad, portfolio, 'adaptive', '', schedule)
+export function runSummary(
+  params: PlannerParameters,
+  mode: SpendingMode = 'adaptive',
+  sharedSpec?: GridSpec,
+): RunSummary {
+  const { portfolio, quad, spec, basis, schedule } = setup(params, sharedSpec)
+  const run = propagate(params, spec, basis, quad, portfolio, mode, '', schedule)
   const outcomes = run.liquidOutcomes ?? run.outcomes
   const final = outcomes[outcomes.length - 1]!
+  // Over the per-year means, which are what `expectedWithdrawn` sums, so the
+  // envelope and the total cannot tell different stories.
+  let lowest = 0
+  let highest = 0
+  let plannedLow = 0
+  let plannedHigh = 0
+  for (let year = 0; year < run.withdrawals.length; year++) {
+    const mean = run.withdrawals[year]!.mean
+    if (year === 0 || mean < lowest) lowest = mean
+    if (year === 0 || mean > highest) highest = mean
+    // The need run plans no extra, so what a year set out to pay depends on the
+    // mode, exactly as `plannedTotal` does.
+    const entry = params.cashflow[year]!
+    const wanted = entry.need + (mode === 'need' ? 0 : Math.max(0, entry.extra))
+    if (year === 0 || wanted < plannedLow) plannedLow = wanted
+    if (year === 0 || wanted > plannedHigh) plannedHigh = wanted
+  }
   return {
     survival: 1 - run.finalDistribution.ruinProbability,
     plannedWithdrawn: run.plannedWithdrawn,
     expectedWithdrawn: run.expectedWithdrawn,
+    years: params.years,
+    minWithdrawal: lowest,
+    maxWithdrawal: highest,
+    plannedMin: plannedLow,
+    plannedMax: plannedHigh,
     finalPercentile10: final.percentile10,
     finalMedian: final.median,
     finalPercentile90: final.percentile90,
     bequestProbability: run.bequestProbability,
+    // Off the same distribution the bequest target is measured against — the
+    // after-tax one where there is one — so the two thresholds are read on one
+    // basis. Ruined and depleted outcomes are off the grid and cannot reach a
+    // positive threshold, so neither needs a term here.
+    preservationProbability:
+      params.initialCapital > 0
+        ? tailProbability(
+            spec.grid,
+            (run.finalLiquidDistribution ?? run.finalDistribution).mass,
+            params.initialCapital,
+          )
+        : undefined,
   }
+}
+
+/**
+ * The adaptive run alone, summarised. The common case, and the one the stress
+ * test compares plans on.
+ */
+export function adaptiveSummary(params: PlannerParameters, sharedSpec?: GridSpec): RunSummary {
+  return runSummary(params, 'adaptive', sharedSpec)
+}
+
+/**
+ * Summaries for a family of plans, over one shared wealth grid.
+ *
+ * A generator rather than an array, because only the caller knows how long it
+ * may hold the thread: a seventeen-point sweep is a third of a second on an ISK
+ * and five on an AF, and the card driving it yields to the event loop between
+ * `next()` calls so the page keeps answering while the curve fills in. Nothing
+ * is computed until it is pulled, so abandoning the iterator abandons the work.
+ *
+ * Every variant is validated up front rather than as it is reached, so a plan
+ * the engine will not accept fails before any of the propagations are paid for.
+ *
+ * **The grid is built once, wide enough for every variant, and reused.** Not
+ * for speed — building it is nothing against a propagation — but for
+ * comparability: a quantile can only land on a grid node and the ruin mass is
+ * counted against the same nodes, so variants each sized to their own bounds
+ * differ by that quantisation as well as by what is being varied. A curve that
+ * should be monotone then acquires wiggles that are purely an artefact of it.
+ */
+export function* runSummaries(
+  variants: PlannerParameters[],
+  mode: SpendingMode = 'adaptive',
+): Generator<RunSummary> {
+  if (variants.length === 0) return
+  for (const params of variants) validate(params)
+
+  let low = Infinity
+  let high = 0
+  let nodes = 0
+  for (const params of variants) {
+    const bounds = gridBounds(params, portfolioMoments(params.assets, params.correlations))
+    low = Math.min(low, bounds.low)
+    high = Math.max(high, bounds.high)
+    nodes = Math.max(nodes, params.gridNodes)
+  }
+  const spec = buildGrid(low, high, nodes)
+
+  for (const params of variants) yield runSummary(params, mode, spec)
 }
 
 export function runPlanner(params: PlannerParameters): PlannerResults {

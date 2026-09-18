@@ -7,6 +7,7 @@ import { usePlannerStore } from '../stores/planner'
 import PlannerInputs from '../components/planner/PlannerInputs.vue'
 import CashflowEditor from '../components/planner/CashflowEditor.vue'
 import PlannerOutcome from '../components/planner/PlannerOutcome.vue'
+import SweepCard from '../components/planner/SweepCard.vue'
 import StressCard from '../components/planner/StressCard.vue'
 import CollapsibleCard from '../components/planner/CollapsibleCard.vue'
 import ComputationTable from '../components/planner/ComputationTable.vue'
@@ -44,6 +45,12 @@ onMounted(() => {
            otherwise unlabelled cards leaves the reader to infer. -->
       <h2 class="section-title">Resultat</h2>
       <PlannerOutcome />
+      <!-- Before the stress test, because it is still about the plan's own
+           assumptions rather than about them being wrong: it asks how much
+           discretionary withdrawal the plan could carry, holding everything
+           else as entered. Collapsed for the same reason as the card below —
+           seventeen propagations is seconds on an AF plan. -->
+      <SweepCard />
       <!-- Last, because it answers a question the outcome raises: you read
            what the plan does, then ask how much of it depends on having judged
            the assumptions right. Every stressed dimension is pushed the same

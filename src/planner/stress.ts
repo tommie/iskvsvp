@@ -1,4 +1,4 @@
-import { adaptiveSummary, type AdaptiveSummary } from './propagate'
+import { adaptiveSummary, type RunSummary } from './propagate'
 import type { PlannerParameters } from './types'
 
 /**
@@ -205,7 +205,7 @@ export function stressedParams(
   }, params)
 }
 
-export interface StressResult extends AdaptiveSummary {
+export interface StressResult extends RunSummary {
   scenario: Scenario
 }
 
