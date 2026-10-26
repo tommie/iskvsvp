@@ -20,6 +20,21 @@ export interface SingleSimulationResult extends SimulationResult<number> {
 
 const ISK_TAX_RATE_MIN = 0.0125
 
+// Under schablonmetoden the acquisition cost may be taken as 20% of the sale
+// proceeds instead of the actual cost.
+const SCHABLON_BASIS_FRACTION = 0.2
+
+/**
+ * Capital gains tax on selling a VP position worth proceeds with actual acquisition
+ * cost basis. The taxpayer picks, per sale, whichever of the actual cost and the
+ * schablon cost is higher, which caps the taxable gain at 80% of the proceeds.
+ * Applying it unconditionally is therefore what a rational investor would do.
+ */
+export function capitalGainsTax(proceeds: number, basis: number, rate: number): number {
+  const effectiveBasis = Math.max(basis, SCHABLON_BASIS_FRACTION * proceeds)
+  return Math.max(0, proceeds - effectiveBasis) * rate
+}
+
 /**
  * Generate a random number from a normal distribution using Box-Muller transform.
  */
@@ -335,10 +350,11 @@ export function runSingleSimulation(
 
           if (!isISK) {
             const costBasisWithdrawn = position.costBasis * withdrawalFraction
-            const gainOnWithdrawal = excessAmount - costBasisWithdrawn
-            if (gainOnWithdrawal > 0) {
-              withdrawalTax += gainOnWithdrawal * params.capitalGainsTaxRate
-            }
+            withdrawalTax += capitalGainsTax(
+              excessAmount,
+              costBasisWithdrawn,
+              params.capitalGainsTaxRate,
+            )
           }
 
           position.value -= excessAmount
@@ -357,10 +373,11 @@ export function runSingleSimulation(
 
           if (!isISK) {
             const costBasisWithdrawn = position.costBasis * withdrawalFraction
-            const gainOnWithdrawal = proportionalWithdrawal - costBasisWithdrawn
-            if (gainOnWithdrawal > 0) {
-              withdrawalTax += gainOnWithdrawal * params.capitalGainsTaxRate
-            }
+            withdrawalTax += capitalGainsTax(
+              proportionalWithdrawal,
+              costBasisWithdrawn,
+              params.capitalGainsTaxRate,
+            )
           }
 
           position.value -= proportionalWithdrawal
@@ -375,10 +392,11 @@ export function runSingleSimulation(
 
         if (!isISK) {
           const costBasisWithdrawn = position.costBasis * withdrawalFraction
-          const gainOnWithdrawal = amountWithdrawn - costBasisWithdrawn
-          if (gainOnWithdrawal > 0) {
-            withdrawalTax += gainOnWithdrawal * params.capitalGainsTaxRate
-          }
+          withdrawalTax += capitalGainsTax(
+            amountWithdrawn,
+            costBasisWithdrawn,
+            params.capitalGainsTaxRate,
+          )
         }
 
         position.value -= amountWithdrawn
@@ -403,10 +421,11 @@ export function runSingleSimulation(
           const sellFraction = sellValue / position.value
 
           if (!isISK) {
-            const gainOnSale = sellValue - position.costBasis * sellFraction
-            if (gainOnSale > 0) {
-              rebalancingTax += gainOnSale * params.capitalGainsTaxRate
-            }
+            rebalancingTax += capitalGainsTax(
+              sellValue,
+              position.costBasis * sellFraction,
+              params.capitalGainsTaxRate,
+            )
           }
 
           position.value = targetValue
@@ -455,9 +474,12 @@ export function runSingleSimulation(
     if (isISK) {
       liquidValue = amount
     } else {
-      const totalCostBasis = assetPositions.reduce((sum, pos) => sum + pos.costBasis, 0)
-      const unrealizedGain = amount - totalCostBasis
-      liquidValue = amount - unrealizedGain * params.capitalGainsTaxRate
+      // The schablon cap applies per security, so sum the latent tax per position.
+      const latentTax = assetPositions.reduce(
+        (sum, pos) => sum + capitalGainsTax(pos.value, pos.costBasis, params.capitalGainsTaxRate),
+        0,
+      )
+      liquidValue = amount - latentTax
     }
 
     cumulativePaidTax += tax

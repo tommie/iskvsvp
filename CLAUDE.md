@@ -86,6 +86,13 @@ src/
 - If both found, uses database correlation; otherwise defaults to 0.5
 - Diagonal always 1.0
 
+### VP Capital Gains Tax
+
+- Computed by `capitalGainsTax()` in `simulation.ts` for withdrawals, rebalancing sales and the latent tax in `liquidValue`.
+- Applies schablonmetoden unconditionally: acquisition cost is `max(actual, 20% of proceeds)`, capping the effective rate at 24% of proceeds. A rational investor always picks the better basis.
+- Applied per position since the schablon is per security. Whether it applies to fund units (not just shares) is unverified.
+- TODO: model deferred liquidation (heirs inherit basis) as a discounted/perpetuity terminal value instead of a full latent tax in `liquidValue`.
+
 ## State Management
 
 **calculator.ts**:

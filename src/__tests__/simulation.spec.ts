@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { spendingMultiplier, runSingleSimulation } from '../simulation'
+import { spendingMultiplier, runSingleSimulation, capitalGainsTax } from '../simulation'
 import type { InputParameters } from '../types'
 import type { BootstrapPayload } from '../bootstrap'
 
@@ -324,5 +324,36 @@ describe('withdrawal ratchet (Kitces)', () => {
     expect(withRatchet.periodData.withdrawal[5]!).toBeGreaterThan(
       noRatchet.periodData.withdrawal[5]!,
     )
+  })
+})
+
+describe('schablonmetoden capital gains tax', () => {
+  it('uses the actual cost when it exceeds 20% of the proceeds', () => {
+    // Gain 40 on proceeds 100 (basis 60): 40 * 30% = 12.
+    expect(capitalGainsTax(100, 60, 0.3)).toBeCloseTo(12, 10)
+  })
+
+  it('caps the effective rate at 24% of proceeds for a near-zero basis', () => {
+    expect(capitalGainsTax(100, 0, 0.3)).toBeCloseTo(24, 10)
+    expect(capitalGainsTax(100, 5, 0.3)).toBeCloseTo(24, 10)
+  })
+
+  it('is continuous at the point where the schablon basis takes over', () => {
+    expect(capitalGainsTax(100, 20, 0.3)).toBeCloseTo(24, 10)
+  })
+
+  it('does not tax losses', () => {
+    expect(capitalGainsTax(100, 150, 0.3)).toBe(0)
+  })
+
+  it('taxes VP withdrawals at 24% of proceeds once the basis is negligible', () => {
+    // 2% monthly growth (~27%/year) makes the initial cost basis a vanishing
+    // fraction of the portfolio after a couple of decades.
+    const params = makeParams({ capitalGainsTaxRate: 0.3, yearsLater: 36 })
+    const result = runSingleSimulation(params, makePayload(0.02))
+
+    const last = params.yearsLater - 1
+    const ratio = result.periodData.tax[last]! / result.periodData.withdrawal[last]!
+    expect(ratio).toBeCloseTo(0.24, 3)
   })
 })
