@@ -30,7 +30,6 @@ function randomNormal(mean: number, stdDev: number, rng: () => number): number {
   return mean + z0 * stdDev
 }
 
-
 interface AssetPosition {
   value: number
   costBasis: number
@@ -56,7 +55,7 @@ const SPENDING_CURVE_NODES: [number, number][] = [
   [45, 1.08],
   [50, 1.08],
   [60, 0.84],
-  [80, 0.70],
+  [80, 0.7],
 ]
 
 export function spendingMultiplier(age: number, enabled: boolean): number {
@@ -169,9 +168,7 @@ export function runSingleSimulation(
       assetReturns = precomputedReturns[i]!
     } else {
       // Fallback: independent normal returns (should not be reached with factor model)
-      assetReturns = params.assets.map((a) =>
-        randomNormal(a.expectedReturn, a.volatility, rng),
-      )
+      assetReturns = params.assets.map((a) => randomNormal(a.expectedReturn, a.volatility, rng))
     }
 
     // Override with stress returns if specified for this year
@@ -239,16 +236,21 @@ export function runSingleSimulation(
           const GAMMA = 3
           let nominalReturn: number
           if (bootstrapPayload) {
-            nominalReturn = bootstrapPayload.portfolioGeometricMean
-              - (GAMMA - 1) * bootstrapPayload.portfolioVariance / 2
+            nominalReturn =
+              bootstrapPayload.portfolioGeometricMean -
+              ((GAMMA - 1) * bootstrapPayload.portfolioVariance) / 2
           } else if (factorModelPayload) {
-            nominalReturn = factorModelPayload.portfolioExpectedReturn
-              - (GAMMA - 1) * factorModelPayload.portfolioVariance / 2
+            nominalReturn =
+              factorModelPayload.portfolioExpectedReturn -
+              ((GAMMA - 1) * factorModelPayload.portfolioVariance) / 2
           } else {
             // Fallback: weighted geometric mean from asset parameters
             const mu = params.assets.reduce((s, a) => s + a.weight * a.expectedReturn, 0)
-            const sigma2 = params.assets.reduce((s, a) => s + a.weight * a.volatility * a.volatility, 0)
-            nominalReturn = mu - (GAMMA - 1) * sigma2 / 2
+            const sigma2 = params.assets.reduce(
+              (s, a) => s + a.weight * a.volatility * a.volatility,
+              0,
+            )
+            nominalReturn = mu - ((GAMMA - 1) * sigma2) / 2
           }
           const taxDrag = isISK
             ? currentIskTaxRate * params.capitalGainsTaxRate
@@ -256,7 +258,8 @@ export function runSingleSimulation(
           const r = nominalReturn - params.inflationRate - taxDrag
           // Target FV/(1-t): tax is applied after the final withdrawal,
           // so aim higher to end at the desired value post-tax.
-          const fv = (params.bequestGoal * params.initialCapital * cumulativeInflation) / (1 - taxDrag)
+          const fv =
+            (params.bequestGoal * params.initialCapital * cumulativeInflation) / (1 - taxDrag)
           // amount is post-growth (returns already applied in step 1), so
           // divide by (1+r) to get the pre-growth PV the PMT formula expects.
           let amortized: number
@@ -269,16 +272,17 @@ export function runSingleSimulation(
           }
           // Floor: inflation-based withdrawal, adjusted for age-dependent spending decline
           const age = params.startYear + i
-          const floor = params.inflationBasedWithdrawal * cumulativeInflation
-            * spendingMultiplier(age, params.ageAdjustedSpending)
+          const floor =
+            params.inflationBasedWithdrawal *
+            cumulativeInflation *
+            spendingMultiplier(age, params.ageAdjustedSpending)
           withdrawn = Math.max(floor, amortized)
           withdrawn = Math.max(0, Math.min(withdrawn, amount))
-
         }
       } else {
         const age = params.startYear + i
-        const spendingScale = spendingMultiplier(age, params.ageAdjustedSpending)
-          / avgSpendingMultiplier
+        const spendingScale =
+          spendingMultiplier(age, params.ageAdjustedSpending) / avgSpendingMultiplier
         const balanceWithdrawal = amount * params.balanceWithdrawalRate * spendingScale
 
         let profitWithdrawal = 0
@@ -292,8 +296,10 @@ export function runSingleSimulation(
           }
         }
 
-        const inflationWithdrawal = params.inflationBasedWithdrawal * cumulativeInflation
-          * spendingMultiplier(age, params.ageAdjustedSpending)
+        const inflationWithdrawal =
+          params.inflationBasedWithdrawal *
+          cumulativeInflation *
+          spendingMultiplier(age, params.ageAdjustedSpending)
         withdrawn = balanceWithdrawal + profitWithdrawal + inflationWithdrawal
 
         // Kitces ratchet: withdrawal can increase but never decrease.

@@ -15,7 +15,7 @@ describe('spendingMultiplier', () => {
     expect(spendingMultiplier(45, true)).toBeCloseTo(1.08, 8)
     expect(spendingMultiplier(50, true)).toBeCloseTo(1.08, 8)
     expect(spendingMultiplier(60, true)).toBeCloseTo(0.84, 8)
-    expect(spendingMultiplier(80, true)).toBeCloseTo(0.70, 8)
+    expect(spendingMultiplier(80, true)).toBeCloseTo(0.7, 8)
   })
 
   it('interpolates linearly between nodes', () => {
@@ -35,8 +35,8 @@ describe('spendingMultiplier', () => {
     const f45 = spendingMultiplier(45, true)
     const f50 = spendingMultiplier(50, true)
     const f60 = spendingMultiplier(60, true)
-    const avg4559 = (5 * (f45 + f50) / 2 + 10 * (f50 + f60) / 2) / 15
-    expect(avg4559).toBeCloseTo(1.00, 8)
+    const avg4559 = ((5 * (f45 + f50)) / 2 + (10 * (f50 + f60)) / 2) / 15
+    expect(avg4559).toBeCloseTo(1.0, 8)
 
     // 60+ bucket: average of f(60) and f(80) = (0.84+0.70)/2 = 0.77
     const avg60 = (spendingMultiplier(60, true) + spendingMultiplier(80, true)) / 2
@@ -48,8 +48,8 @@ describe('spendingMultiplier', () => {
     expect(spendingMultiplier(20, true)).toBeCloseTo(0.84, 8)
     expect(spendingMultiplier(0, true)).toBeCloseTo(0.84, 8)
     // Above age 80: clamps to f(80)
-    expect(spendingMultiplier(90, true)).toBeCloseTo(0.70, 8)
-    expect(spendingMultiplier(100, true)).toBeCloseTo(0.70, 8)
+    expect(spendingMultiplier(90, true)).toBeCloseTo(0.7, 8)
+    expect(spendingMultiplier(100, true)).toBeCloseTo(0.7, 8)
   })
 
   it('is monotonically non-decreasing up to peak and non-increasing after', () => {
@@ -206,9 +206,10 @@ describe('runSingleSimulation age-adjusted inflation withdrawal', () => {
     // At age 45: multiplier = 1.08, withdrawal = 108,000
     expect(result.periodData.withdrawal[0]).toBeCloseTo(100_000 * 1.08, 0)
     // At age 80 (year 35): multiplier = 0.70, withdrawal = 70,000
-    expect(result.periodData.withdrawal[35]).toBeCloseTo(100_000 * 0.70, 0)
+    expect(result.periodData.withdrawal[35]).toBeCloseTo(100_000 * 0.7, 0)
     // Monotonically decreasing after peak
-    for (let t = 6; t < 36; t++) { // age 51+
+    for (let t = 6; t < 36; t++) {
+      // age 51+
       expect(result.periodData.withdrawal[t]!).toBeLessThanOrEqual(
         result.periodData.withdrawal[t - 1]!,
       )
@@ -265,7 +266,7 @@ describe('withdrawal ratchet (Kitces)', () => {
     const payload = makePayload(0)
     const params = makeParams({
       balanceWithdrawalRate: 0.04,
-      withdrawalRatchetLimit: 0.10, // 10% max increase per year
+      withdrawalRatchetLimit: 0.1, // 10% max increase per year
     })
     const result = runSingleSimulation(params, payload)
     const withdrawals = result.periodData.withdrawal
@@ -280,9 +281,9 @@ describe('withdrawal ratchet (Kitces)', () => {
     const params = makeParams({
       seed: 'ratchet-test',
       balanceWithdrawalRate: 0.05,
-      withdrawalRatchetLimit: 0.10,
+      withdrawalRatchetLimit: 0.1,
       yearsLater: 20,
-      assets: [{ name: 'A', weight: 1, expectedReturn: 0.06, volatility: 0.20 }],
+      assets: [{ name: 'A', weight: 1, expectedReturn: 0.06, volatility: 0.2 }],
     })
     const result = runSingleSimulation(params) // no bootstrap, no factor model
     const w = result.periodData.withdrawal
@@ -309,7 +310,7 @@ describe('withdrawal ratchet (Kitces)', () => {
       payload,
     )
     const withRatchet = runSingleSimulation(
-      makeParams({ ...baseOpts, withdrawalRatchetLimit: 0.10 }),
+      makeParams({ ...baseOpts, withdrawalRatchetLimit: 0.1 }),
       payload,
     )
 
