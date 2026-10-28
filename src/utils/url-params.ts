@@ -14,7 +14,7 @@ const PARAM_KEYS: Record<string, string> = {
   accountType: 'at',
   initialCapital: 'ic',
   startYear: 'sy',
-  yearsLater: 'yl',
+  endYear: 'ey',
   assets: 'pa',
   assetCorrelationMatrix: 'cm',
   assetRebalanceFrequency: 'rb',
@@ -490,7 +490,7 @@ export function encodeParamsToUrl(
   // Map each parameter to its short name
   query.ic = params.initialCapital.toString()
   query.sy = params.startYear.toString()
-  query.yl = params.yearsLater.toString()
+  query.ey = params.endYear.toString()
   query.ir = params.inflationRate.toString()
   query.is = params.inflationStdDev.toString()
   query.vft = params.vpWealthTaxRate.toString()
@@ -586,7 +586,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   // Parse basic parameters
   const ic = parseNum('ic')
   const sy = parseNum('sy')
-  const yl = parseNum('yl')
+  const ey = parseNum('ey')
   const ir = parseNum('ir')
   const is = parseNum('is')
   const vft = parseNum('vft')
@@ -594,7 +594,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
 
   if (ic !== undefined) params.initialCapital = ic
   if (sy !== undefined) params.startYear = sy
-  if (yl !== undefined) params.yearsLater = yl
+  if (ey !== undefined) params.endYear = ey
   if (ir !== undefined) params.inflationRate = ir
   if (is !== undefined) params.inflationStdDev = is
   if (vft !== undefined) params.vpWealthTaxRate = vft

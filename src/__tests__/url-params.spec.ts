@@ -70,7 +70,7 @@ describe('asset classes in the URL', () => {
   const params = {
     initialCapital: 5_000_000,
     startYear: 45,
-    yearsLater: 36,
+    endYear: 81,
     assets: [
       {
         presetId: 'global-equity',
@@ -101,6 +101,14 @@ describe('asset classes in the URL', () => {
   it('round-trips the preset id and a name containing a comma', () => {
     const decoded = decodeParamsFromUrl(encodeParamsToUrl(params))
     expect(decoded!.assets).toEqual(params.assets)
+  })
+
+  it('round-trips the start and end year', () => {
+    const decoded = decodeParamsFromUrl(
+      encodeParamsToUrl({ ...params, startYear: 2026, endYear: 2062 }),
+    )
+    expect(decoded!.startYear).toBe(2026)
+    expect(decoded!.endYear).toBe(2062)
   })
 
   it('round-trips need, extra and the bequest amount', () => {

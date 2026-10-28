@@ -65,6 +65,12 @@ src/
 - `simulation.ts` turns each real return into a nominal one with that year's inflation draw, since the portfolio, taxes and cost basis are nominal.
 - `presetCorrelation` returns 1 for a class against itself, so holding a class twice gives a singular (semi-definite) matrix, which `cholesky` accepts.
 
+### Start and End Year
+
+- The plan is `startYear` to `endYear`, and the tool only uses the **difference** (`horizonYears`, which throws unless it is a whole number of at least one year). They are labels: an age or a calendar year works equally, which is why the names are generic. Only age-adjusted spending reads them as ages.
+- To get next year's budget, advance `startYear` by one with `endYear` fixed and enter the balance reached. The rule depends only on balance and years left, so this pays what the earlier plan would have paid in that state (tested in `arva.spec.ts`).
+- The form refuses to run (`horizonError`) rather than rounding a bad horizon; the engine throws as well.
+
 ### Withdrawal Rule (`arva.ts`)
 
 - **Need** is paid whenever affordable; **extra** only out of the surplus over the reserved needs and bequest: `need + clamp(surplus / annuity, 0, extra)`. Extra 0 is the fixed inflation-indexed withdrawal, so there is no separate fixed mode. This is the Kapitalplanerare's rule (see `src/planner/propagate.ts` on the `planner` branch for the measurements behind each choice).

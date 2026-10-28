@@ -20,6 +20,7 @@ import {
   type StopReason,
 } from './precision'
 import { realReturnSampler } from './returns'
+import { horizonYears } from './types'
 
 // Extended result that includes final asset weights and cumulative inflation
 export interface SingleSimulationResult extends SimulationResult<number> {
@@ -132,6 +133,7 @@ export function runSingleSimulation(
   params: InputParameters,
   options: SingleSimulationOptions = {},
 ): SingleSimulationResult {
+  const years = horizonYears(params)
   const rng = alea(params.seed)
   const isISK = params.iskTaxRate !== undefined
 
@@ -187,7 +189,7 @@ export function runSingleSimulation(
   // since the rule must not forecast how the ISK rate wanders.
   const needByYear: number[] = []
   const extraByYear: number[] = []
-  for (let i = 0; i < params.yearsLater; i++) {
+  for (let i = 0; i < years; i++) {
     const inWithdrawal = i >= params.depositYears
     const multiplier = spendingMultiplier(params.startYear + i, params.ageAdjustedSpending)
     needByYear.push(inWithdrawal ? params.withdrawalNeed * multiplier : 0)
@@ -204,7 +206,7 @@ export function runSingleSimulation(
     scheduleDrag,
   )
 
-  for (let i = 0; i < params.yearsLater; i++) {
+  for (let i = 0; i < years; i++) {
     // Generate stochastic parameters
     const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev, rng)
 
@@ -537,7 +539,7 @@ export function runSingleSimulation(
 
   // Handle final drawdown period if still in drawdown
   if (currentDrawdownStart !== null) {
-    const currentDrawdownPeriod = params.yearsLater - 1 - currentDrawdownStart
+    const currentDrawdownPeriod = years - 1 - currentDrawdownStart
     maxDrawdownPeriod = Math.max(maxDrawdownPeriod, currentDrawdownPeriod)
   }
 

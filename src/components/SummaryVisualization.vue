@@ -10,7 +10,7 @@ import D3Chart from './D3Chart.vue'
 const store = useCalculatorStore()
 const {
   simulationResults,
-  yearsLater,
+  horizon,
   showDetailedStatistics,
   depositYears,
 } = storeToRefs(store)
@@ -21,7 +21,7 @@ const firstWithdrawalPeriod = computed(() => depositYears.value)
 // Combine data for reactivity tracking
 const chartData = computed(() => ({
   simulationResults: simulationResults.value,
-  yearsLater: yearsLater.value,
+  horizon: horizon.value,
   showDetailedStatistics: showDetailedStatistics.value,
   firstWithdrawalPeriod: firstWithdrawalPeriod.value,
 }))
@@ -55,7 +55,7 @@ const buildSeriesFromStats = (
   const finalPeriod = simulationResults.value.statistics[0]!.median.snapshots.liquidValue.length - 1
 
   // Years the average is taken over, as in the results table.
-  const withdrawalYears = Math.max(1, yearsLater.value - depositYears.value)
+  const withdrawalYears = Math.max(1, horizon.value - depositYears.value)
 
   const getFieldValue = (
     stats: SimulationStatistics<SimulationResult<number>>,

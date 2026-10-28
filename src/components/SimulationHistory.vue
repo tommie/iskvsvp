@@ -319,7 +319,7 @@ const positionPopover = (popoverId: string, anchorId: string) => {
                     {{
                       formatPercent(
                         getWinnerStats(record)!.accumulatedRealWithdrawal /
-                          record.parameters.yearsLater /
+                          (record.parameters.endYear - record.parameters.startYear) /
                           record.parameters.initialCapital,
                       )
                     }}
@@ -434,7 +434,7 @@ const positionPopover = (popoverId: string, anchorId: string) => {
                 <span class="param-label">Simulering:</span>
                 <span class="param-value-group">
                   <span class="param-value">
-                    {{ record.parameters.yearsLater }} år,
+                    {{ record.parameters.endYear - record.parameters.startYear }} år,
                     {{ formatNumber(record.summary.paths) }} gånger
                   </span>
                 </span>

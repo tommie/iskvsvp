@@ -8,7 +8,10 @@ import {
   bengenRate,
 } from '../simulation'
 import { DEFAULT_ASSET_CLASSES, DEFAULT_CORRELATIONS } from '../assets'
-import type { InputParameters } from '../types'
+import { horizonYears, type InputParameters } from '../types'
+
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 45
 
 describe('spendingMultiplier', () => {
   it('returns 1.0 when disabled', () => {
@@ -108,7 +111,7 @@ function makeParams(overrides: Partial<InputParameters> = {}): InputParameters {
     seed: 'test',
     initialCapital: 1_000_000,
     startYear: 45,
-    yearsLater: 36,
+    endYear: START_YEAR + 36,
     assets: [{ name: 'A', weight: 1, expectedReturn: 0.05, volatility: 0.1 }],
     assetCorrelationMatrix: [[1]],
     assetRebalanceFrequency: 'annually',
@@ -126,12 +129,42 @@ function makeParams(overrides: Partial<InputParameters> = {}): InputParameters {
   }
 }
 
+describe('horizonYears', () => {
+  it('is the difference between the end and the start, whatever the numbers mean', () => {
+    // An age pair and a calendar pair describe the same plan.
+    expect(horizonYears({ startYear: 45, endYear: 81 })).toBe(36)
+    expect(horizonYears({ startYear: 2026, endYear: 2062 })).toBe(36)
+  })
+
+  it('refuses a plan that does not run, or runs a fraction of a year', () => {
+    expect(() => horizonYears({ startYear: 60, endYear: 60 })).toThrow(/Slutår/)
+    expect(() => horizonYears({ startYear: 60, endYear: 40 })).toThrow(/Slutår/)
+    expect(() => horizonYears({ startYear: 60, endYear: 70.5 })).toThrow(/Slutår/)
+  })
+
+  it('runs the simulation for exactly that many years', () => {
+    const r = run(makeParams({ startYear: 2026, endYear: 2036 }))
+    expect(r.periodData.withdrawal).toHaveLength(10)
+  })
+
+  it('refuses to simulate an empty plan rather than returning nothing', () => {
+    expect(() => run(makeParams({ startYear: 60, endYear: 60 }))).toThrow(/Slutår/)
+  })
+
+  it('advancing the start with the end fixed shortens the plan by that much', () => {
+    // Next year's budget: one year on, one year fewer, the same end.
+    const a = makeParams({ startYear: 45, endYear: 55 })
+    const b = makeParams({ startYear: 46, endYear: 55 })
+    expect(horizonYears(a) - horizonYears(b)).toBe(1)
+  })
+})
+
 describe('age-adjusted need', () => {
   // A flat portfolio isolates the shape of the need: nothing grows, so the
   // extra is zero and the need is paid exactly.
   const flat = makePayload(0)
   const params = (ageAdjustedSpending: boolean) =>
-    makeParams({ ageAdjustedSpending, withdrawalNeed: 40_000, yearsLater: 20 })
+    makeParams({ ageAdjustedSpending, withdrawalNeed: 40_000, endYear: START_YEAR + 20 })
 
   it('without age adjustment, the need is constant', () => {
     const w = run(params(false), flat).periodData.withdrawal
@@ -152,7 +185,7 @@ describe('the extra', () => {
   it('is paid out of a surplus and never exceeds what was asked for', () => {
     // 1M flat, 10 years of need 20k: 800k of surplus against 10 * 30k of extra.
     const r = run(
-      makeParams({ withdrawalNeed: 20_000, withdrawalExtra: 30_000, yearsLater: 10 }),
+      makeParams({ withdrawalNeed: 20_000, withdrawalExtra: 30_000, endYear: START_YEAR + 10 }),
       flat,
     )
     for (const w of r.periodData.withdrawal) expect(w).toBeLessThanOrEqual(50_000 + 1e-6)
@@ -166,7 +199,7 @@ describe('the extra', () => {
         initialCapital: 200_000,
         withdrawalNeed: 20_000,
         withdrawalExtra: 30_000,
-        yearsLater: 10,
+        endYear: START_YEAR + 10,
       }),
       flat,
     )
@@ -177,7 +210,10 @@ describe('the extra', () => {
     // Spending exactly the capital over the horizon: the last year's annuity
     // factor is one, so the rule empties the account rather than aiming at zero
     // and missing.
-    const r = run(makeParams({ withdrawalNeed: 0, withdrawalExtra: 200_000, yearsLater: 5 }), flat)
+    const r = run(
+      makeParams({ withdrawalNeed: 0, withdrawalExtra: 200_000, endYear: START_YEAR + 5 }),
+      flat,
+    )
     expect(r.snapshots.capital[4]!).toBeCloseTo(0, 6)
     expect(r.periodData.withdrawal.reduce((a, b) => a + b, 0)).toBeCloseTo(1_000_000, 4)
   })
@@ -205,10 +241,10 @@ describe('schablonmetoden capital gains tax', () => {
   it('taxes VP withdrawals at 24% of proceeds once the basis is negligible', () => {
     // 2% monthly growth (~27%/year) makes the initial cost basis a vanishing
     // fraction of the portfolio after a couple of decades.
-    const params = makeParams({ capitalGainsTaxRate: 0.3, yearsLater: 36 })
+    const params = makeParams({ capitalGainsTaxRate: 0.3, endYear: START_YEAR + 36 })
     const result = run({ ...params, ...makePayload(0.02) })
 
-    const last = params.yearsLater - 1
+    const last = horizonYears(params) - 1
     const ratio = result.periodData.tax[last]! / result.periodData.withdrawal[last]!
     // 24% of the proceeds is the tax on the withdrawal itself. The year's bill
     // is then paid by selling holdings that are 80% gain, which realizes more
@@ -223,7 +259,7 @@ describe('withdrawal clamped to available capital', () => {
     makeParams({
       withdrawalNeed: 200_000,
       capitalGainsTaxRate: 0.3,
-      yearsLater: 10,
+      endYear: START_YEAR + 10,
       assets: [{ name: 'A', weight: 1, expectedReturn: 0, volatility: 0 }],
       ...overrides,
     })
@@ -282,7 +318,7 @@ describe('VP capital gains netting', () => {
       makeParams({
         withdrawalNeed: 125_000,
         capitalGainsTaxRate: 0.3,
-        yearsLater: 1,
+        endYear: START_YEAR + 1,
         assetRebalanceFrequency: 'never',
         assets: [
           { name: 'A', weight: 0.5, expectedReturn: 1.0, volatility: 0 },
@@ -306,7 +342,7 @@ describe('VP capital gains netting', () => {
       makeParams({
         withdrawalNeed: 50_000,
         capitalGainsTaxRate: 0.3,
-        yearsLater: 1,
+        endYear: START_YEAR + 1,
         assets: [{ name: 'A', weight: 1, expectedReturn: -0.5, volatility: 0 }],
       }),
     )
@@ -321,7 +357,7 @@ describe('VP capital gains netting', () => {
         initialCapital: 4_000_000,
         withdrawalNeed: 200_000,
         capitalGainsTaxRate: 0.3,
-        yearsLater: 1,
+        endYear: START_YEAR + 1,
         assets: [{ name: 'A', weight: 1, expectedReturn: -0.5, volatility: 0 }],
       }),
     )
@@ -334,7 +370,7 @@ describe('VP capital gains netting', () => {
         withdrawalNeed: 200_000,
         capitalGainsTaxRate: 0.3,
         iskTaxRate: 0.02,
-        yearsLater: 1,
+        endYear: START_YEAR + 1,
         assets: [{ name: 'A', weight: 1, expectedReturn: 1.0, volatility: 0 }],
       }),
     )
@@ -348,7 +384,7 @@ describe('cumulative tax includes the deferred liability', () => {
 
   it('adds the embedded CGT to the VP tax snapshot', () => {
     const r = run(
-      makeParams({ capitalGainsTaxRate: 0.3, vpWealthTaxRate: 0.004, yearsLater: 20 }),
+      makeParams({ capitalGainsTaxRate: 0.3, vpWealthTaxRate: 0.004, endYear: START_YEAR + 20 }),
       growing,
     )
     const paid = r.periodData.tax.reduce((a, b) => a + b, 0)
@@ -361,7 +397,7 @@ describe('cumulative tax includes the deferred liability', () => {
 
   it('leaves ISK unchanged, since it has no deferred CGT', () => {
     const r = run(
-      makeParams({ capitalGainsTaxRate: 0.3, iskTaxRate: 0.0296, yearsLater: 20 }),
+      makeParams({ capitalGainsTaxRate: 0.3, iskTaxRate: 0.0296, endYear: START_YEAR + 20 }),
       growing,
     )
     const paid = r.periodData.tax.reduce((a, b) => a + b, 0)
@@ -379,7 +415,7 @@ describe('cumulative tax includes the deferred liability', () => {
         withdrawalNeed: 5_000,
         capitalGainsTaxRate: 0.3,
         vpWealthTaxRate: 0.004,
-        yearsLater: 1,
+        endYear: START_YEAR + 1,
         assets: [{ name: 'A', weight: 1, expectedReturn: -0.5, volatility: 0 }],
       }),
     )
@@ -396,7 +432,7 @@ describe('tax paid from the portfolio is itself a realization', () => {
       makeParams({
         withdrawalNeed: 200_000,
         capitalGainsTaxRate: 0.3,
-        yearsLater: 1,
+        endYear: START_YEAR + 1,
         assets: [{ name: 'A', weight: 1, expectedReturn: 1.0, volatility: 0 }],
       }),
     )
@@ -410,7 +446,7 @@ describe('tax paid from the portfolio is itself a realization', () => {
         withdrawalNeed: 0,
         capitalGainsTaxRate: 0.3,
         iskTaxRate: 0.02,
-        yearsLater: 1,
+        endYear: START_YEAR + 1,
         assets: [{ name: 'A', weight: 1, expectedReturn: 1.0, volatility: 0 }],
       }),
     )
@@ -431,7 +467,7 @@ describe('agreement with the Kapitalplanerare', () => {
     makeParams({
       initialCapital: 9_000_000,
       startYear: 60,
-      yearsLater: 40,
+      endYear: 100,
       assets: DEFAULT_ASSET_CLASSES,
       assetCorrelationMatrix: DEFAULT_CORRELATIONS,
       withdrawalNeed: 200_000,
@@ -480,7 +516,7 @@ describe('how many paths simulateAll runs', () => {
       ...makePayload(0),
       withdrawalNeed: 10_000,
       withdrawalExtra: 0,
-      yearsLater: 10,
+      endYear: START_YEAR + 10,
       ...overrides,
     })
 
@@ -502,7 +538,7 @@ describe('how many paths simulateAll runs', () => {
         withdrawalNeed: need,
         assets: [{ name: 'A', weight: 1, expectedReturn: 0.04, volatility: 0.18 }],
         assetCorrelationMatrix: [[1]],
-        yearsLater: 30,
+        endYear: START_YEAR + 30,
       })
     const r = simulateAll([volatile(40_000), volatile(41_000)], ['a', 'b'], undefined)
     expect(r.convergence.paths).toBeGreaterThan(1000)
@@ -516,7 +552,7 @@ describe('how many paths simulateAll runs', () => {
       assets: [{ name: 'A', weight: 1, expectedReturn: 0.04, volatility: 0.18 }],
       assetCorrelationMatrix: [[1]],
       withdrawalNeed: 40_000,
-      yearsLater: 30,
+      endYear: START_YEAR + 30,
     })
     const r = simulateAll([volatile], ['a'], undefined, { timeBudgetMs: 5000, now: slowClock })
     expect(r.convergence.stopReason).toBe('time')
@@ -529,7 +565,7 @@ describe('how many paths simulateAll runs', () => {
       assets: [{ name: 'A', weight: 1, expectedReturn: 0.04, volatility: 0.18 }],
       assetCorrelationMatrix: [[1]],
       withdrawalNeed: 20_000,
-      yearsLater: 30,
+      endYear: START_YEAR + 30,
       seed: 'repeat',
     })
     const a = simulateAll([volatile], ['a'], undefined)
@@ -540,17 +576,19 @@ describe('how many paths simulateAll runs', () => {
 
   it('counts a plan that ends at zero having paid its need as surviving', () => {
     // 5 years of 200 000 out of 1 000 000, flat: the last withdrawal empties it.
-    const r = run(certain({ withdrawalNeed: 200_000, yearsLater: 5 }))
+    const r = run(certain({ withdrawalNeed: 200_000, endYear: START_YEAR + 5 }))
     expect(r.needFunded).toBe(true)
     expect(r.snapshots.capital[4]!).toBeCloseTo(0, 6)
     // One year more than the money covers is a failure.
-    expect(run(certain({ withdrawalNeed: 200_000, yearsLater: 6 })).needFunded).toBe(false)
+    expect(run(certain({ withdrawalNeed: 200_000, endYear: START_YEAR + 6 })).needFunded).toBe(
+      false,
+    )
   })
 })
 
 describe('withdrawalFailureAsZero', () => {
   const flat = (overrides: Partial<InputParameters> = {}) =>
-    makeParams({ ...makePayload(0), yearsLater: 10, ...overrides })
+    makeParams({ ...makePayload(0), endYear: START_YEAR + 10, ...overrides })
 
   it('is the plain total when the plan survives', () => {
     // 1 000 000 flat, 50 000 a year for 10 years: 500 000 over the plan.
@@ -581,7 +619,7 @@ describe('bengenRate', () => {
 
   it('is the capital over the years when nothing grows', () => {
     // 1 000 000 over 20 years at no return: 50 000 a year empties it exactly.
-    const b = bengenRate(flat(0, { yearsLater: 20 }), 20)
+    const b = bengenRate(flat(0, { endYear: START_YEAR + 20 }), 20)
     expect(b.atLeast).toBe(false)
     expect(b.amount).toBeLessThanOrEqual(50_000 + 1e-6)
     expect(b.amount).toBeGreaterThan(50_000 - 150)
@@ -594,16 +632,16 @@ describe('bengenRate', () => {
     const r = 0.05
     const n = 30
     const annuity = (1_000_000 * r) / (1 - Math.pow(1 + r, -n))
-    const b = bengenRate(flat(r, { yearsLater: n }), 20)
+    const b = bengenRate(flat(r, { endYear: START_YEAR + n }), 20)
     expect(b.amount).toBeLessThanOrEqual(annuity + 1e-6)
     expect(b.amount).toBeGreaterThan(annuity - 150)
   })
 
   it('ignores the extra, the bequest and the age curve, which are not Bengen’s rule', () => {
-    const plain = bengenRate(flat(0.03, { yearsLater: 25 }), 20)
+    const plain = bengenRate(flat(0.03, { endYear: START_YEAR + 25 }), 20)
     const decorated = bengenRate(
       flat(0.03, {
-        yearsLater: 25,
+        endYear: START_YEAR + 25,
         withdrawalExtra: 80_000,
         bequestAmount: 500_000,
         ageAdjustedSpending: true,
@@ -614,7 +652,7 @@ describe('bengenRate', () => {
   })
 
   it('reports a lower bound when even the ceiling survives', () => {
-    const b = bengenRate(flat(0.5, { yearsLater: 10 }), 20)
+    const b = bengenRate(flat(0.5, { endYear: START_YEAR + 10 }), 20)
     expect(b.atLeast).toBe(true)
     expect(b.rate).toBeCloseTo(0.1, 12)
   })
@@ -622,7 +660,7 @@ describe('bengenRate', () => {
   it('asks for less when it must survive more of the paths', () => {
     const volatile = flat(0.04, {
       assets: [{ name: 'A', weight: 1, expectedReturn: 0.04, volatility: 0.18 }],
-      yearsLater: 30,
+      endYear: START_YEAR + 30,
       seed: 'bengen',
     })
     const lenient = bengenRate(volatile, 400, 0.8)

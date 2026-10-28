@@ -7,7 +7,7 @@ const store = useCalculatorStore()
 const {
   simulationResults,
   showDetailedStatistics,
-  yearsLater,
+  horizon,
   depositYears,
   assets,
 } = storeToRefs(store)
@@ -23,7 +23,7 @@ const finalPeriod = computed(() => {
 // The first withdrawal period is the first year after the deposit years.
 const firstWithdrawalPeriod = computed(() => depositYears.value)
 
-const withdrawalYears = computed(() => Math.max(1, yearsLater.value - depositYears.value))
+const withdrawalYears = computed(() => Math.max(1, horizon.value - depositYears.value))
 
 const COLORS = ['#0d6efd', '#d1b101', '#6f42c1', '#fd7e14', '#dc3545', '#198754']
 

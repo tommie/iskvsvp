@@ -5,6 +5,7 @@ import { computed } from 'vue'
 import type { SimulationAsset } from '../types'
 import { ASSET_CLASS_PRESETS, assetFromPreset, presetCorrelation } from '../assets'
 import { cholesky } from '../returns'
+import { horizonYears } from '../types'
 import { spendingMultiplier } from '../simulation'
 
 const store = useCalculatorStore()
@@ -27,7 +28,8 @@ const {
   vpFundTaxRate,
   capitalGainsTax,
   startYear,
-  yearsLater,
+  endYear,
+  horizon,
   isRunning,
   progress,
   isAddToTableMode,
@@ -177,6 +179,18 @@ const setCorrelation = (i: number, j: number, value: number) => {
  * hand makes it easy not to (three assets pairwise at -0.9 cannot exist), and
  * the simulation refuses such a matrix rather than quietly adjusting it.
  */
+// The run needs a whole number of years between start and end. The tool
+// refuses anything else instead of rounding it, so say so here before it can be
+// started.
+const horizonError = computed(() => {
+  try {
+    horizonYears({ startYear: startYear.value, endYear: endYear.value })
+    return null
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e)
+  }
+})
+
 const correlationError = computed(() => {
   try {
     cholesky(assetCorrelationMatrix.value)
@@ -292,7 +306,7 @@ const maxWithdrawalRate = computed(() => {
                     type="number"
                     step="1"
                     min="0"
-                    :max="yearsLater"
+                    :max="horizon"
                     :class="getInputClass('depositYears')"
                     v-model.number="depositYears"
                     :disabled="isFieldDisabled('depositYears')"
@@ -686,7 +700,7 @@ const maxWithdrawalRate = computed(() => {
             <h5 class="section-title">Simulering</h5>
             <div class="row g-3">
               <div class="col-12 col-md-6">
-                <label class="form-label">Startår (ålder)</label>
+                <label class="form-label">Startår</label>
                 <input
                   type="number"
                   :class="getInputClass('startYear')"
@@ -696,19 +710,27 @@ const maxWithdrawalRate = computed(() => {
                 />
               </div>
               <div class="col-12 col-md-6">
-                <label class="form-label">Antal år</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    :class="getInputClass('yearsLater')"
-                    v-model.number="yearsLater"
-                    min="1"
-                    max="100"
-                    :disabled="isFieldDisabled('yearsLater')"
-                    @click="handleParameterClick('yearsLater', $event)"
-                  />
-                  <span class="input-group-text">år</span>
+                <label class="form-label">Slutår</label>
+                <input
+                  type="number"
+                  :class="getInputClass('endYear')"
+                  v-model.number="endYear"
+                  :min="startYear + 1"
+                  :disabled="isFieldDisabled('endYear')"
+                  @click="handleParameterClick('endYear', $event)"
+                />
+              </div>
+              <div v-if="horizonError" class="col-12">
+                <div class="alert alert-danger py-2 mb-0">
+                  <small>{{ horizonError }}</small>
                 </div>
+              </div>
+              <div class="col-12">
+                <small class="form-text text-muted">
+                  Ålder eller årtal, som du föredrar: bara skillnaden används. Åldersjusterat uttag
+                  läser dem som ålder. Ökar du startåret med ett och behåller slutåret, räknas
+                  nästa års budget fram från kapitalet du har då.
+                </small>
               </div>
             </div>
           </div>
@@ -719,7 +741,7 @@ const maxWithdrawalRate = computed(() => {
         <button
           class="btn btn-primary btn-lg"
           @click="handleRunSimulation"
-          :disabled="isRunning || !!correlationError"
+          :disabled="isRunning || !!correlationError || !!horizonError"
         >
           <span v-if="isRunning" class="spinner-border spinner-border-sm me-2"></span>
           <span v-else class="me-2">⏵</span>

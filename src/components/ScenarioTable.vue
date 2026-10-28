@@ -32,8 +32,8 @@ const getDeleteScenarioPopoverId = (scenarioIdx: number) => `delete-scenario-pop
 const parameterLabels: Record<string, string> = {
   accountType: 'Kontotyp',
   initialCapital: 'Startkapital',
-  startYear: 'Ålder vid start',
-  yearsLater: 'Antal år',
+  startYear: 'Startår',
+  endYear: 'Slutår',
   assetRebalanceFrequency: 'Ombalansering',
   withdrawalNeed: 'Behov',
   withdrawalExtra: 'Extra',
@@ -133,7 +133,7 @@ function parseValue(param: ScenarioParameter, inputValue: string): ScenarioValue
   if (
     param === 'initialCapital' ||
     param === 'startYear' ||
-    param === 'yearsLater' ||
+    param === 'endYear' ||
     param === 'withdrawalNeed' ||
     param === 'withdrawalExtra' ||
     param === 'bequestAmount'

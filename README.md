@@ -84,8 +84,8 @@ who finds ~1–2%/year real spending decline in US retirees.
 
 The curve is applied as a multiplier on the need and the extra, which also
 shapes how the surplus is spread over the extra. Values below 30 clamp
-to f(30); values above 80 clamp to f(80). The "start year" field is
-interpreted as the user's age when this feature is enabled.
+to f(30); values above 80 clamp to f(80). With this feature on, "start year" and "end year" are read as ages; otherwise the
+tool only uses the difference between them, so either may be an age or a calendar year.
 
 ## Recommended IDE Setup
 

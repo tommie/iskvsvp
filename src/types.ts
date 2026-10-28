@@ -18,8 +18,8 @@ export interface InputParameters {
   seed: string // Random seed for reproducibility
 
   initialCapital: number
-  startYear: number
-  yearsLater: number
+  startYear: number // First year of the plan. An age or a calendar year; the tool only uses endYear - startYear
+  endYear: number // Last year of the plan; only the difference to startYear is used
 
   assets: SimulationAsset[]
   assetCorrelationMatrix: number[][] // Correlation matrix between assets (symmetric, diagonal = 1)
@@ -41,7 +41,6 @@ export interface InputParameters {
 
   inflationRate: number
   inflationStdDev: number
-
 }
 
 export interface SimulationPeriodData<T = number> {
@@ -191,4 +190,20 @@ export function parseAssetPropertyParameter(param: AssetPropertyParameter): {
     property: 'weight',
     index: parseInt(match[1]!, 10),
   }
+}
+
+/**
+ * How many years the plan runs. The tool never interprets startYear and endYear
+ * (they may be ages or calendar years), only their difference, which has to be
+ * a whole number of years and at least one. Anything else is a mistake in the
+ * input rather than something to round, so it throws.
+ */
+export function horizonYears(plan: { startYear: number; endYear: number }): number {
+  const years = plan.endYear - plan.startYear
+  if (!Number.isInteger(years) || years < 1) {
+    throw new Error(
+      `Slutår (${plan.endYear}) måste ligga ett helt antal år efter startår (${plan.startYear}).`,
+    )
+  }
+  return years
 }

@@ -64,7 +64,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const vpFundTaxRate = ref(0.004) // VP fund tax rate (0.4%)
   const capitalGainsTax = ref(0.3)
   const startYear = ref(45)
-  const yearsLater = ref(36)
+  const endYear = ref(81)
+  // Years the plan runs. The tool only uses the difference; see horizonYears.
+  const horizon = computed(() => endYear.value - startYear.value)
   const seed = ref<string | undefined>(undefined)
 
   // Scenario table state
@@ -168,7 +170,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
       downValue: capitalGainsTax.value * 0.5,
     })
 
-    // NOTE: yearsLater is excluded because the display layer assumes all
+    // NOTE: endYear is excluded because the display layer assumes all
     // scenarios have the same number of periods.
 
     // Build scenarios: base + up/down for each variation
@@ -308,7 +310,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
       accountType: accountType.value,
       initialCapital: initialCapital.value,
       startYear: startYear.value,
-      yearsLater: yearsLater.value,
+      endYear: endYear.value,
       assets: assets.value,
       assetCorrelationMatrix: assetCorrelationMatrix.value,
       assetRebalanceFrequency: assetRebalanceFrequency.value,
@@ -335,12 +337,12 @@ export const useCalculatorStore = defineStore('calculator', () => {
   > => ({
     initialCapital: initialCapital.value,
     startYear: startYear.value,
-    yearsLater: yearsLater.value,
+    endYear: endYear.value,
     assets: assets.value,
     assetCorrelationMatrix: assetCorrelationMatrix.value,
     assetRebalanceFrequency: assetRebalanceFrequency.value,
     depositAmount: depositAmount.value,
-    depositYears: Math.min(depositYears.value, yearsLater.value),
+    depositYears: Math.min(depositYears.value, horizon.value),
     withdrawalNeed: withdrawalNeed.value,
     withdrawalExtra: withdrawalExtra.value,
     bequestAmount: bequestAmount.value,
@@ -499,7 +501,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
   function loadParameters(params: InputParameters) {
     initialCapital.value = params.initialCapital
     startYear.value = params.startYear
-    yearsLater.value = params.yearsLater
+    endYear.value = params.endYear
     assets.value = params.assets
     assetCorrelationMatrix.value = params.assetCorrelationMatrix
     assetRebalanceFrequency.value = params.assetRebalanceFrequency
@@ -552,7 +554,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
               if (urlParams.initialCapital !== undefined)
                 initialCapital.value = urlParams.initialCapital
               if (urlParams.startYear !== undefined) startYear.value = urlParams.startYear
-              if (urlParams.yearsLater !== undefined) yearsLater.value = urlParams.yearsLater
+              if (urlParams.endYear !== undefined) endYear.value = urlParams.endYear
               if (urlParams.assets !== undefined) assets.value = urlParams.assets
               if (urlParams.assetCorrelationMatrix !== undefined)
                 assetCorrelationMatrix.value = urlParams.assetCorrelationMatrix
@@ -617,7 +619,7 @@ export const useCalculatorStore = defineStore('calculator', () => {
         vpFundTaxRate,
         capitalGainsTax,
         startYear,
-        yearsLater,
+        endYear,
         seed,
       ],
       () => {
@@ -670,7 +672,8 @@ export const useCalculatorStore = defineStore('calculator', () => {
     vpFundTaxRate,
     capitalGainsTax,
     startYear,
-    yearsLater,
+    endYear,
+    horizon,
     seed,
 
     // State
