@@ -21,24 +21,16 @@ const PARAM_KEYS: Record<string, string> = {
   assetRebalanceFrequency: 'rb',
   depositAmount: 'da',
   depositYears: 'dy',
-  balanceWithdrawalRate: 'bwr',
-  profitWithdrawalRate: 'pwr',
-  profitLookbackYears: 'ply',
-  inflationBasedWithdrawal: 'ibw',
-  amortizedWithdrawal: 'aw',
-  bequestGoal: 'bg',
+  withdrawalNeed: 'wn',
+  withdrawalExtra: 'we',
+  bequestAmount: 'bq',
   ageAdjustedSpending: 'aas',
-  withdrawalRatchetLimit: 'wrl',
-  withdrawalCap: 'wc',
   vpWealthTaxRate: 'vft',
   capitalGainsTaxRate: 'cgt',
   iskTaxRate: 'itr',
   iskTaxRateStdDev: 'its',
   inflationRate: 'ir',
   inflationStdDev: 'is',
-  simulationMethod: 'sm',
-  bootstrapProfileId: 'bp',
-  stressPresetId: 'sp',
 }
 
 // Get URL key for a parameter (asset properties are not directly encoded in URL)
@@ -50,10 +42,11 @@ function getParamKey(param: ScenarioParameter): string | null {
 }
 
 /**
- * Encode a single asset to compact format: m:0.1299,sd:0.202,w:1,n:Global Equity
+ * Encode a single asset to compact format: m:0.0584,sd:0.17,w:1,p:global-equity,n:Globala aktier
  */
 function encodeAsset(asset: SimulationAsset): string {
-  return `m:${asset.expectedReturn},sd:${asset.volatility},w:${asset.weight},n:${asset.name}`
+  const preset = asset.presetId ? `p:${asset.presetId},` : ''
+  return `m:${asset.expectedReturn},sd:${asset.volatility},w:${asset.weight},${preset}n:${asset.name}`
 }
 
 /**
@@ -78,6 +71,8 @@ function decodeAsset(encoded: string): SimulationAsset | null {
         asset.volatility = parseFloat(value)
       } else if (key === 'w' && asset.weight === undefined) {
         asset.weight = parseFloat(value)
+      } else if (key === 'p' && asset.presetId === undefined) {
+        asset.presetId = value
       } else if (key === 'n') {
         // Name is everything after 'n:' and might contain commas
         const nameStart = encoded.indexOf(',n:')
@@ -138,6 +133,8 @@ function decodeAssetWithOverrides(
         sdValues.push(parseFloat(value))
       } else if (key === 'w') {
         wValues.push(parseFloat(value))
+      } else if (key === 'p') {
+        asset.presetId = value
       } else if (key === 'n') {
         // Name is everything after 'n:' and might contain commas
         const nameStart = encoded.indexOf(',n:')
@@ -268,7 +265,9 @@ function encodeAssetWithOverrides(
     parts.push(`w:${asset.weight}`)
   }
 
-  // Name (always single value)
+  // Catalogue entry, then name (always single value, and last since it may
+  // contain commas)
+  if (asset.presetId) parts.push(`p:${asset.presetId}`)
   parts.push(`n:${asset.name}`)
 
   return parts.join(',')
@@ -441,10 +440,6 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
       // Parse the value based on parameter type
       if (paramKey === 'accountType') {
         parameters[paramKey] = value as 'ISK' | 'VP'
-      } else if (paramKey === 'simulationMethod') {
-        parameters[paramKey] = value as 'factormodel' | 'bootstrap'
-      } else if (paramKey === 'bootstrapProfileId' || paramKey === 'stressPresetId') {
-        parameters[paramKey] = value
       } else if (paramKey === 'assets') {
         // If we have asset property overrides, don't set full assets array
         if (assetPropertyOverrides.size === 0) {
@@ -461,9 +456,7 @@ function decodeScenarioTable(query: LocationQuery): ScenarioTable | null {
           parameters[paramKey] = decodeCorrelationMatrix(value, assets.length)
         }
       } else if (paramKey === 'assetRebalanceFrequency') {
-        parameters[paramKey] = value === 'annually' ? 'annually' : 'never'
-      } else if (paramKey === 'amortizedWithdrawal') {
-        parameters[paramKey] = value === '1'
+        parameters[paramKey] = value === 'never' ? 'never' : 'annually'
       } else {
         // Parse as number
         const num = parseFloat(value)
@@ -515,8 +508,8 @@ export function encodeParamsToUrl(
       query.cm = []
     }
 
-    // Encode rebalance frequency (only if not default 'never')
-    if (params.assetRebalanceFrequency !== 'never') {
+    // Encode rebalance frequency (only if not default 'annually')
+    if (params.assetRebalanceFrequency !== 'annually') {
       query.rb = params.assetRebalanceFrequency
     }
   }
@@ -526,43 +519,15 @@ export function encodeParamsToUrl(
   query.dy = params.depositYears.toString()
 
   // Withdrawal parameters
-  query.bwr = params.balanceWithdrawalRate.toString()
-  query.pwr = params.profitWithdrawalRate.toString()
-  query.ply = params.profitLookbackYears.toString()
-  query.ibw = params.inflationBasedWithdrawal.toString()
-  if (params.amortizedWithdrawal) {
-    query.aw = '1'
+  query.wn = params.withdrawalNeed.toString()
+  query.we = params.withdrawalExtra.toString()
+  if (params.bequestAmount) {
+    query.bq = params.bequestAmount.toString()
   }
   if (params.ageAdjustedSpending) {
     query.aas = '1'
   }
-  if (params.withdrawalRatchetLimit) {
-    query.wrl = params.withdrawalRatchetLimit.toString()
-  }
-  if (params.withdrawalCap) {
-    query.wc = params.withdrawalCap.toString()
-  }
-  if (params.bequestGoal) {
-    query.bg = params.bequestGoal.toString()
-  }
   query.cgt = params.capitalGainsTaxRate.toString()
-
-  // Simulation method (only encode when not default)
-  if (params.simulationMethod === 'bootstrap') {
-    query.sm = 'bootstrap'
-  } else if (params.simulationMethod === 'factormodel') {
-    // factormodel is default, don't encode
-  }
-
-  // Bootstrap profile (optional)
-  if (params.bootstrapProfileId) {
-    query.bp = params.bootstrapProfileId
-  }
-
-  // Stress preset (optional, only in factormodel mode)
-  if (params.stressPresetId) {
-    query.sp = params.stressPresetId
-  }
 
   // ISK-specific params (optional)
   if (params.iskTaxRate !== undefined) {
@@ -670,7 +635,7 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
 
       // Parse rebalance frequency
       const rebalanceFrequency = getString('rb')
-      params.assetRebalanceFrequency = rebalanceFrequency === 'annually' ? 'annually' : 'never'
+      params.assetRebalanceFrequency = rebalanceFrequency === 'never' ? 'never' : 'annually'
     }
   }
 
@@ -682,39 +647,19 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   if (dy !== undefined) params.depositYears = dy
 
   // Parse withdrawal and tax parameters
-  const bwr = parseNum('bwr')
-  const pwr = parseNum('pwr')
-  const ply = parseNum('ply')
-  const ibw = parseNum('ibw')
+  const wn = parseNum('wn')
+  const we = parseNum('we')
+  const bq = parseNum('bq')
   const cgt = parseNum('cgt')
   const itr = parseNum('itr')
   const its = parseNum('its')
 
-  const sm = getString('sm')
-  if (sm === 'bootstrap') params.simulationMethod = sm
-  else if (sm === 'factormodel') params.simulationMethod = 'factormodel'
-
-  const bp = getString('bp')
-  if (bp) params.bootstrapProfileId = bp
-
-  const sp = getString('sp')
-  if (sp) params.stressPresetId = sp
-
-  const aw = getString('aw')
   const aas = getString('aas')
-  const wrl = parseNum('wrl')
-  const wc = parseNum('wc')
-  const bg = parseNum('bg')
 
-  if (bwr !== undefined) params.balanceWithdrawalRate = bwr
-  if (pwr !== undefined) params.profitWithdrawalRate = pwr
-  if (ply !== undefined) params.profitLookbackYears = ply
-  if (ibw !== undefined) params.inflationBasedWithdrawal = ibw
-  if (aw !== undefined) params.amortizedWithdrawal = aw === '1'
+  if (wn !== undefined) params.withdrawalNeed = wn
+  if (we !== undefined) params.withdrawalExtra = we
+  if (bq !== undefined) params.bequestAmount = bq
   if (aas !== undefined) params.ageAdjustedSpending = aas === '1'
-  if (wrl !== undefined) params.withdrawalRatchetLimit = wrl
-  if (wc !== undefined) params.withdrawalCap = wc
-  if (bg !== undefined) params.bequestGoal = bg
   if (cgt !== undefined) params.capitalGainsTaxRate = cgt
   if (itr !== undefined) params.iskTaxRate = itr
   if (its !== undefined) params.iskTaxRateStdDev = its

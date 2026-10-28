@@ -1,7 +1,10 @@
 export interface SimulationAsset {
+  // Catalogue entry (src/assets.ts) this asset came from, if any. Correlations
+  // for an added asset are looked up by it; absent for a hand-rolled asset.
+  presetId?: string
   name: string // Display name for the asset
   weight: number // Weight in portfolio (should sum to 1.0 across all assets)
-  expectedReturn: number // Mean annual return
+  expectedReturn: number // Arithmetic mean annual *real* return
   volatility: number // Standard deviation of returns
 }
 
@@ -24,15 +27,11 @@ export interface InputParameters {
   depositAmount: number // Annual deposit amount (inflation-adjusted)
   depositYears: number // Number of years to make deposits (before withdrawals start)
 
-  balanceWithdrawalRate: number
-  profitWithdrawalRate: number
-  profitLookbackYears: number
-  inflationBasedWithdrawal: number // Fixed withdrawal amount adjusted by inflation each year
-  amortizedWithdrawal: boolean // Enable Merton's rule amortization-based withdrawals
-  bequestGoal: number // Fraction of initial capital to preserve (0 = spend all, 1 = keep 100%)
-  ageAdjustedSpending: boolean // Age-dependent spending decline on inflation-indexed withdrawal
-  withdrawalRatchetLimit: number // Max fractional increase in withdrawal rate per year (0 = disabled)
-  withdrawalCap: number // Max annual withdrawal in today's money, inflation-adjusted (0 = no cap)
+  // Withdrawal rule (see arva.ts). Amounts are annual, in today's money.
+  withdrawalNeed: number // Paid whenever the portfolio can pay it
+  withdrawalExtra: number // Paid only out of the surplus over the remaining needs and bequest
+  bequestAmount: number // Capital to leave at the end, in today's money (0 = spend it all)
+  ageAdjustedSpending: boolean // Age-dependent spending decline on need and extra
 
   vpWealthTaxRate: number // VP wealth tax rate (e.g., 0.004 for 0.4%)
   capitalGainsTaxRate: number // Capital gains tax rate (used by both ISK and VP)
@@ -42,11 +41,6 @@ export interface InputParameters {
   inflationRate: number
   inflationStdDev: number
 
-  simulationMethod?: 'factormodel' | 'bootstrap' // Default: 'factormodel'
-  bootstrapProfileId?: string // ID of bootstrap sampling profile for block weighting
-  stressPresetId?: string // ID of factor stress preset (factor model mode)
-  stressYearReturns?: (number | null)[] // Per-asset stressed returns for one year
-  stressYear?: number // Year index at which stress returns are applied
 }
 
 export interface SimulationPeriodData<T = number> {
@@ -121,16 +115,10 @@ export interface SimulationResults {
 
   // Outcome probabilities for each scenario
   outcomeProbabilities: OutcomeProbabilities[]
-
-  // Simulation method used to generate these results.
-  simulationMethod?: 'factormodel' | 'bootstrap'
-
-  // Date range of the underlying data (factor model macro series or bootstrap fund history).
-  dataPeriod?: [string, string]
 }
 
 // Asset property parameter format: "assets.weight.0", etc.
-// expectedReturn and volatility are from the fund database and not user-editable.
+// expectedReturn and volatility belong to the asset class and are not varied per scenario.
 export type AssetPropertyParameter = `assets.${'weight'}.${number}`
 
 // Mapped type for asset properties
@@ -150,7 +138,7 @@ export interface ScenarioTable {
 
 // Type-safe parameter keys (excludes internal/auto-generated fields)
 export type ScenarioParameter =
-  | Exclude<keyof InputParameters, 'seed' | 'stressYearReturns' | 'stressYear'>
+  | Exclude<keyof InputParameters, 'seed'>
   | 'accountType'
   | AssetPropertyParameter
 

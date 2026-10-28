@@ -36,16 +36,14 @@ const parameterLabels: Record<string, string> = {
   yearsLater: 'Antal år',
   simulationCount: 'Antal simuleringar',
   assetRebalanceFrequency: 'Ombalansering',
-  balanceWithdrawalRate: 'Balansuttag (%)',
-  profitWithdrawalRate: 'Vinstuttag (%)',
-  profitLookbackYears: 'Lookback år',
-  inflationBasedWithdrawal: 'Inflationsjusterat uttag',
-  withdrawalCap: 'Uttagstak',
+  withdrawalNeed: 'Behov',
+  withdrawalExtra: 'Extra',
+  bequestAmount: 'Arvsmål',
   ageAdjustedSpending: 'Åldersjusterat uttag',
   vpWealthTaxRate: 'VP fondskatt (%)',
   capitalGainsTaxRate: 'Kapitalvinstskatt (%)',
-  iskTaxRate: 'ISK skattesats (%)',
-  iskTaxRateStdDev: 'ISK skattesats stddev',
+  iskTaxRate: 'ISK schabloninkomstsats (%)',
+  iskTaxRateStdDev: 'ISK schabloninkomstsats stddev',
   inflationRate: 'Inflation (%)',
   inflationStdDev: 'Inflation stddev',
 }
@@ -91,9 +89,7 @@ function formatValue(param: ScenarioParameter, value: ScenarioValue): string {
   // Format percentages (convert to percentage and format)
   if (
     typeof value === 'number' &&
-    (param === 'balanceWithdrawalRate' ||
-      param === 'profitWithdrawalRate' ||
-      param === 'vpWealthTaxRate' ||
+    (param === 'vpWealthTaxRate' ||
       param === 'capitalGainsTaxRate' ||
       param === 'iskTaxRate' ||
       param === 'inflationRate' ||
@@ -124,8 +120,6 @@ function parseValue(param: ScenarioParameter, inputValue: string): ScenarioValue
 
   // Parse percentages
   if (
-    param === 'balanceWithdrawalRate' ||
-    param === 'profitWithdrawalRate' ||
     param === 'vpWealthTaxRate' ||
     param === 'capitalGainsTaxRate' ||
     param === 'iskTaxRate' ||
@@ -142,9 +136,9 @@ function parseValue(param: ScenarioParameter, inputValue: string): ScenarioValue
     param === 'startYear' ||
     param === 'yearsLater' ||
     param === 'simulationCount' ||
-    param === 'profitLookbackYears' ||
-    param === 'inflationBasedWithdrawal' ||
-    param === 'withdrawalCap'
+    param === 'withdrawalNeed' ||
+    param === 'withdrawalExtra' ||
+    param === 'bequestAmount'
   ) {
     return parseInt(inputValue, 10)
   }

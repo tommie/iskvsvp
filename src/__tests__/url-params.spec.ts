@@ -15,10 +15,7 @@ describe('decodeScenarioTableFromUrl', () => {
       st: '1',
       sn: ['Aktiv', 'Passiv'],
       cp: '',
-      pa: [
-        'm:0.13,sd:0.16,w:0.85,w:0,n:Fund A',
-        'm:0.04,sd:0.04,w:0.15,w:1,n:Fund B',
-      ],
+      pa: ['m:0.13,sd:0.16,w:0.85,w:0,n:Fund A', 'm:0.04,sd:0.04,w:0.15,w:1,n:Fund B'],
       ic: '5000000',
     }
 
@@ -69,47 +66,57 @@ describe('decodeScenarioTableFromUrl', () => {
   })
 })
 
-describe('withdrawalCap round-trip', () => {
-  const params: Omit<InputParameters, 'seed'> = {
-    initialCapital: 1_000_000,
+describe('asset classes in the URL', () => {
+  const params = {
+    initialCapital: 5_000_000,
     startYear: 45,
-    yearsLater: 30,
-    simulationCount: 100,
-    assets: [{ name: 'A', weight: 1, expectedReturn: 0.08, volatility: 0.15 }],
-    assetCorrelationMatrix: [[1]],
-    assetRebalanceFrequency: 'never',
+    yearsLater: 36,
+    simulationCount: 1000,
+    assets: [
+      {
+        presetId: 'global-equity',
+        name: 'Globala aktier',
+        weight: 0.7,
+        expectedReturn: 0.0584,
+        volatility: 0.17,
+      },
+      { name: 'Eget, med komma', weight: 0.3, expectedReturn: 0.01, volatility: 0.05 },
+    ],
+    assetCorrelationMatrix: [
+      [1, 0.5],
+      [0.5, 1],
+    ],
+    assetRebalanceFrequency: 'annually',
     depositAmount: 0,
     depositYears: 0,
-    balanceWithdrawalRate: 0.01,
-    profitWithdrawalRate: 0,
-    profitLookbackYears: 5,
-    inflationBasedWithdrawal: 500_000,
-    amortizedWithdrawal: false,
-    bequestGoal: 0,
+    withdrawalNeed: 110_000,
+    withdrawalExtra: 55_000,
+    bequestAmount: 0,
     ageAdjustedSpending: false,
-    withdrawalRatchetLimit: 0,
-    withdrawalCap: 800_000,
     vpWealthTaxRate: 0.004,
     capitalGainsTaxRate: 0.3,
     inflationRate: 0.02,
     inflationStdDev: 0.009,
-  }
+  } satisfies Omit<InputParameters, 'seed'>
 
-  it('encodes as wc and decodes back', () => {
-    const query = encodeParamsToUrl(params)
-    expect(query.wc).toBe('800000')
-
-    const decoded = decodeParamsFromUrl(query)
-    expect(decoded).not.toBeNull()
-    expect(decoded!.withdrawalCap).toBe(800_000)
+  it('round-trips the preset id and a name containing a comma', () => {
+    const decoded = decodeParamsFromUrl(encodeParamsToUrl(params))
+    expect(decoded!.assets).toEqual(params.assets)
   })
 
-  it('omits wc when the cap is off, and decodes to undefined', () => {
-    const query = encodeParamsToUrl({ ...params, withdrawalCap: 0 })
-    expect(query.wc).toBeUndefined()
+  it('round-trips need, extra and the bequest amount', () => {
+    const withBequest = { ...params, bequestAmount: 2_000_000 }
+    const decoded = decodeParamsFromUrl(encodeParamsToUrl(withBequest))
+    expect(decoded!.withdrawalNeed).toBe(110_000)
+    expect(decoded!.withdrawalExtra).toBe(55_000)
+    expect(decoded!.bequestAmount).toBe(2_000_000)
+  })
 
-    const decoded = decodeParamsFromUrl(query)
-    expect(decoded).not.toBeNull()
-    expect(decoded!.withdrawalCap).toBeUndefined()
+  it('writes rb only when rebalancing is turned off, since annual is the default', () => {
+    expect(encodeParamsToUrl(params).rb).toBeUndefined()
+    const off = encodeParamsToUrl({ ...params, assetRebalanceFrequency: 'never' })
+    expect(off.rb).toBe('never')
+    expect(decodeParamsFromUrl(off)!.assetRebalanceFrequency).toBe('never')
+    expect(decodeParamsFromUrl(encodeParamsToUrl(params))!.assetRebalanceFrequency).toBe('annually')
   })
 })

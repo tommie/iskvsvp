@@ -228,7 +228,7 @@ const renderRorChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
 
 const renderIskTaxChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
   if (!iskTaxDistribution.value.length) return
-  drawChart(svg, container, iskTaxDistribution.value, 'ISK-skattesats över tid', '#198754')
+  drawChart(svg, container, iskTaxDistribution.value, 'ISK-schabloninkomstsats över tid', '#198754')
 }
 
 const renderInflationChart = (svg: SVGSVGElement, container: HTMLDivElement) => {

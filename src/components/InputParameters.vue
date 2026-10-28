@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { useCalculatorStore } from '../stores/calculator'
 import { storeToRefs } from 'pinia'
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed } from 'vue'
 import type { SimulationAsset } from '../types'
-import FundPresetSelector from './FundPresetSelector.vue'
-import { loadBootstrapData, getCommonDateRange, filterProfilesByDateRange } from '../bootstrap'
+import { ASSET_CLASS_PRESETS, assetFromPreset, presetCorrelation } from '../assets'
+import { cholesky } from '../returns'
 import { spendingMultiplier } from '../simulation'
 
 const store = useCalculatorStore()
@@ -16,15 +16,10 @@ const {
   assetRebalanceFrequency,
   depositAmount,
   depositYears,
-  balanceWithdrawalRate,
-  profitWithdrawalRate,
-  profitLookbackYears,
-  inflationBasedWithdrawal,
-  amortizedWithdrawal,
-  bequestGoal,
   ageAdjustedSpending,
-  withdrawalRatchetLimit,
-  withdrawalCap,
+  withdrawalNeed,
+  withdrawalExtra,
+  bequestAmount,
   iskTaxRate,
   iskTaxRateStdDev,
   inflationRate,
@@ -34,50 +29,10 @@ const {
   startYear,
   yearsLater,
   simulationCount,
-  simulationMethod,
-  bootstrapProfileId,
-  bootstrapWarning,
-  bootstrapProfileList,
-  stressPresetId,
-  stressWarning,
-  stressPresetList,
   isRunning,
   progress,
   isAddToTableMode,
 } = storeToRefs(store)
-
-onMounted(() => {
-  store.initBootstrapData()
-  store.initStressPresets()
-})
-
-// Disable bootstrap profiles whose events fall outside the fund data range
-const disabledProfileIds = ref(new Set<string>())
-watch(
-  [assets, bootstrapProfileList],
-  async () => {
-    if (bootstrapProfileList.value.length === 0) return
-    const assetNames = assets.value.map((a) => a.name)
-    try {
-      const { fundsDb } = await loadBootstrapData()
-      const range = getCommonDateRange(assetNames, fundsDb)
-      if (range) {
-        const available = new Set(
-          filterProfilesByDateRange(bootstrapProfileList.value, range.startDate, range.nMonths)
-            .map((p) => p.id),
-        )
-        disabledProfileIds.value = new Set(
-          bootstrapProfileList.value.filter((p) => !available.has(p.id)).map((p) => p.id),
-        )
-      } else {
-        disabledProfileIds.value = new Set()
-      }
-    } catch {
-      disabledProfileIds.value = new Set()
-    }
-  },
-  { deep: true, immediate: true },
-)
 
 // Import ScenarioParameter type for parameter click handling
 import type { ScenarioParameter } from '../types'
@@ -105,10 +60,8 @@ function isFieldDisabled(paramKey: ScenarioParameter): boolean {
 
 // Get class for input field (add clickable styling when in add-to-table mode)
 function getInputClass(paramKey: ScenarioParameter): string {
-  const selectKeys = ['accountType', 'bootstrapProfileId', 'simulationMethod', 'stressPresetId']
-  const baseClass = selectKeys.includes(paramKey)
-    ? 'form-select'
-    : 'form-control text-end'
+  const selectKeys = ['accountType']
+  const baseClass = selectKeys.includes(paramKey) ? 'form-select' : 'form-control text-end'
   if (isAddToTableMode.value && !store.isParameterControlled(paramKey)) {
     return `${baseClass} clickable-input`
   }
@@ -118,60 +71,25 @@ function getInputClass(paramKey: ScenarioParameter): string {
   return baseClass
 }
 
-const selectedAssetIndex = ref(0)
-const fundPresetSelector = ref<InstanceType<typeof FundPresetSelector> | null>(null)
-
 /**
- * Get the next available fund name (Fond 1, Fond 2, etc.)
+ * Add an asset to the portfolio, from the catalogue or hand-rolled (no preset).
+ * It starts at zero weight so adding it does not move the existing result.
+ *
+ * Its correlations with the existing assets come from the catalogue when both
+ * sides are catalogue entries; anything else gets a visible, editable
+ * placeholder rather than an implied independence.
  */
-const getNextFundName = (): string => {
-  const usedNumbers = new Set<number>()
+const addAsset = (presetId: string) => {
+  const preset = ASSET_CLASS_PRESETS.find((candidate) => candidate.id === presetId)
+  const newAsset: SimulationAsset = preset
+    ? assetFromPreset(preset, 0)
+    : { name: 'Egen tillgång', weight: 0, expectedReturn: 0.03, volatility: 0.1 }
 
-  assets.value.forEach((asset) => {
-    const match = asset.name.match(/^Fond (\d+)$/)
-    if (match) {
-      usedNumbers.add(parseInt(match[1]!))
-    }
-  })
-
-  let nextNumber = 1
-  while (usedNumbers.has(nextNumber)) {
-    nextNumber++
-  }
-
-  return `Fond ${nextNumber}`
-}
-
-/**
- * Add a new asset to the portfolio
- */
-const addAsset = () => {
-  const newAsset: SimulationAsset = {
-    name: getNextFundName(),
-    weight: 0,
-    expectedReturn: 0.1,
-    volatility: 0.2,
-  }
+  const toNew = assets.value.map((other) => presetCorrelation(newAsset.presetId, other.presetId))
+  const newMatrix = assetCorrelationMatrix.value.map((row, i) => [...row, toNew[i]!])
+  newMatrix.push([...toNew, 1])
 
   assets.value.push(newAsset)
-
-  // Update correlation matrix - add new row and column with identity correlations
-  const n = assets.value.length
-  const newMatrix: number[][] = []
-
-  for (let i = 0; i < n; i++) {
-    newMatrix[i] = []
-    for (let j = 0; j < n; j++) {
-      if (i === n - 1 || j === n - 1) {
-        // New asset: 1.0 on diagonal, 0.5 for off-diagonal (moderate correlation)
-        newMatrix[i]![j] = i === j ? 1.0 : 0.5
-      } else {
-        // Copy existing correlations
-        newMatrix[i]![j] = assetCorrelationMatrix.value[i]![j]!
-      }
-    }
-  }
-
   assetCorrelationMatrix.value = newMatrix
 }
 
@@ -197,113 +115,6 @@ const removeAsset = (index: number) => {
       newRow.push(assetCorrelationMatrix.value[i]![j]!)
     }
     newMatrix.push(newRow)
-  }
-
-  assetCorrelationMatrix.value = newMatrix
-
-  // Adjust selected asset index if needed
-  if (selectedAssetIndex.value >= assets.value.length) {
-    selectedAssetIndex.value = assets.value.length - 1
-  }
-}
-
-/**
- * Apply preset to selected asset
- */
-const applyFundPreset = (payload: {
-  fund: { name: string; mu: number; sigma: number }
-  index: number
-  correlations: number[]
-}) => {
-  const asset = assets.value[selectedAssetIndex.value]
-  if (!asset) return
-
-  // Update asset properties
-  asset.name = payload.fund.name
-  asset.expectedReturn = payload.fund.mu / 100 // Convert from percentage to decimal
-  asset.volatility = payload.fund.sigma / 100 // Convert from percentage to decimal
-
-  // Update correlation matrix for this asset
-  updateCorrelationsForAsset(selectedAssetIndex.value)
-}
-
-/**
- * Update correlation matrix for a specific asset by looking up fund names in database
- */
-const updateCorrelationsForAsset = (assetIndex: number) => {
-  if (!fundPresetSelector.value) return
-
-  const asset = assets.value[assetIndex]
-  if (!asset) return
-
-  const fundIndex = fundPresetSelector.value.getFundIndexByName(asset.name)
-  if (fundIndex === undefined) return // Asset not in database
-
-  const n = assets.value.length
-
-  // Create a new matrix to ensure reactivity
-  const newMatrix: number[][] = []
-
-  for (let i = 0; i < n; i++) {
-    newMatrix[i] = []
-    for (let j = 0; j < n; j++) {
-      if (i === j) {
-        // Diagonal is always 1
-        newMatrix[i]![j] = 1.0
-      } else if (i === assetIndex || j === assetIndex) {
-        // Row or column of the updated asset - look up correlation by name
-        const otherIdx = i === assetIndex ? j : i
-        const otherAsset = assets.value[otherIdx]!
-        const otherFundIndex = fundPresetSelector.value!.getFundIndexByName(otherAsset.name)
-
-        if (otherFundIndex !== undefined) {
-          // Both assets are in database - use database correlation
-          newMatrix[i]![j] = fundPresetSelector.value!.getCorrelation(fundIndex, otherFundIndex)
-        } else {
-          // Other asset not in database - use moderate default
-          newMatrix[i]![j] = 0.5
-        }
-      } else {
-        // Copy existing correlation
-        newMatrix[i]![j] = assetCorrelationMatrix.value[i]?.[j] ?? 0.5
-      }
-    }
-  }
-
-  assetCorrelationMatrix.value = newMatrix
-}
-
-/**
- * Called when fund database is loaded - update correlations for all assets that match fund names
- */
-const onFundDatabaseLoaded = () => {
-  if (!fundPresetSelector.value) return
-
-  // Check if any assets match database funds and update all correlations
-  const n = assets.value.length
-  const newMatrix: number[][] = []
-
-  for (let i = 0; i < n; i++) {
-    newMatrix[i] = []
-    const fundIndexI = fundPresetSelector.value.getFundIndexByName(assets.value[i]!.name)
-
-    for (let j = 0; j < n; j++) {
-      if (i === j) {
-        newMatrix[i]![j] = 1.0
-      } else if (fundIndexI !== undefined) {
-        const fundIndexJ = fundPresetSelector.value.getFundIndexByName(assets.value[j]!.name)
-        if (fundIndexJ !== undefined) {
-          // Both assets in database
-          newMatrix[i]![j] = fundPresetSelector.value.getCorrelation(fundIndexI, fundIndexJ)
-        } else {
-          // Keep existing or use default
-          newMatrix[i]![j] = assetCorrelationMatrix.value[i]?.[j] ?? 0.5
-        }
-      } else {
-        // Keep existing or use default
-        newMatrix[i]![j] = assetCorrelationMatrix.value[i]?.[j] ?? 0.5
-      }
-    }
   }
 
   assetCorrelationMatrix.value = newMatrix
@@ -349,6 +160,33 @@ const getCorrelation = (i: number, j: number): string => {
   return assetCorrelationMatrix.value[i]?.[j]?.toFixed(2) ?? '0.00'
 }
 
+/**
+ * Set one correlation, mirrored so the matrix stays symmetric. A new matrix
+ * is assigned so the change is seen by the store and the URL.
+ */
+const setCorrelation = (i: number, j: number, value: number) => {
+  if (!Number.isFinite(value)) return
+  const clamped = Math.max(-1, Math.min(1, value))
+  const next = assetCorrelationMatrix.value.map((row) => [...row])
+  next[i]![j] = clamped
+  next[j]![i] = clamped
+  assetCorrelationMatrix.value = next
+}
+
+/**
+ * Whether the correlations can describe real assets at all. Typing them by
+ * hand makes it easy not to (three assets pairwise at -0.9 cannot exist), and
+ * the simulation refuses such a matrix rather than quietly adjusting it.
+ */
+const correlationError = computed(() => {
+  try {
+    cholesky(assetCorrelationMatrix.value)
+    return null
+  } catch {
+    return 'Korrelationerna är omöjliga tillsammans. Minska några av dem.'
+  }
+})
+
 const handleRunSimulation = async () => {
   await store.runSimulation()
 }
@@ -357,81 +195,17 @@ const getTargetValue = (event: Event) => {
   return parseFloat((event.target as HTMLInputElement)?.value)
 }
 
-// Spending ceiling for the first withdrawal year, in today's money. Both the
-// cap and the balance it is compared against grow with inflation, so the
-// estimate can stay in today's money and ignore cumulative inflation.
-const firstYearWithdrawalCap = computed(() => {
-  if (withdrawalCap.value <= 0) return Infinity
-  const age = startYear.value + depositYears.value
-  return withdrawalCap.value * spendingMultiplier(age, ageAdjustedSpending.value)
-})
-
-const expectedTotalWithdrawalRate = computed(() => {
-  if (amortizedWithdrawal.value) {
-    // Approximate first-year PMT rate using parametric expected returns.
-    // The actual simulation uses bootstrap empirical returns with additional
-    // corrections (volatility drag, post-tax FV targeting, PV timing).
-    const withdrawalYears = yearsLater.value - depositYears.value
-    if (withdrawalYears <= 0 || initialCapital.value <= 0) return 0
-    const nominalReturn =
-      assets.value.reduce((sum, asset) => sum + asset.weight * asset.expectedReturn, 0)
-    const taxDrag =
-      accountType.value === 'ISK'
-        ? (iskTaxRate.value ?? 0) * capitalGainsTax.value
-        : vpFundTaxRate.value * capitalGainsTax.value
-    const r = nominalReturn - inflationRate.value - taxDrag
-    const fv = bequestGoal.value * initialCapital.value
-    let amortized: number
-    if (Math.abs(r) < 1e-10) {
-      amortized = (initialCapital.value - fv) / withdrawalYears
-    } else {
-      const disc = Math.pow(1 + r, -withdrawalYears)
-      amortized = (r * (initialCapital.value - fv * disc)) / (1 - disc)
-    }
-    const floor = inflationBasedWithdrawal.value
-    const withdrawal = Math.min(firstYearWithdrawalCap.value, Math.max(floor, amortized))
-    return withdrawal / initialCapital.value
-  }
-
-  const b = balanceWithdrawalRate.value
-  const p = profitWithdrawalRate.value
-  // Use weighted average of fund database expected returns as growth estimate.
-  const d = assets.value.reduce((sum, asset) => sum + asset.weight * asset.expectedReturn, 0)
-  const n = profitLookbackYears.value
-
-  // Age-adjusted scaling: the input rate is the average over the withdrawal
-  // period; the first-year rate is higher when starting near peak spending age.
-  let ageScale = 1
-  if (ageAdjustedSpending.value) {
-    const withdrawalYears = yearsLater.value - depositYears.value
-    if (withdrawalYears > 0) {
-      let sum = 0
-      for (let t = 0; t < withdrawalYears; t++) {
-        sum += spendingMultiplier(startYear.value + depositYears.value + t, true)
-      }
-      const avg = sum / withdrawalYears
-      const firstYear = spendingMultiplier(startYear.value + depositYears.value, true)
-      ageScale = avg > 0 ? firstYear / avg : 1
-    }
-  }
-
-  // Balance-based component
-  const balanceComponent = b * ageScale
-
-  // Profit-based component (steady state approximation)
-  // Net growth rate after balance withdrawals
-  const netGrowth = d - b
-
-  // Growth factor over lookback period with net growth
-  // [(1 + netGrowth)^n - 1] / [n × (1 + netGrowth)^n]
-  const growthFactor = Math.pow(1 + netGrowth, n)
-  const profitComponent = (p * (growthFactor - 1)) / (n * growthFactor)
-
-  const inflationComponent = inflationBasedWithdrawal.value / initialCapital.value
-
-  const uncapped = balanceComponent + profitComponent + inflationComponent
-  if (initialCapital.value <= 0) return uncapped
-  return Math.min(uncapped, firstYearWithdrawalCap.value / initialCapital.value)
+// The most the rule will pay in the first year, as a share of the capital: the
+// need plus the whole extra. What it actually pays is less
+// whenever the surplus does not carry the extra.
+const maxWithdrawalRate = computed(() => {
+  if (initialCapital.value <= 0) return 0
+  const multiplier = spendingMultiplier(
+    startYear.value + depositYears.value,
+    ageAdjustedSpending.value,
+  )
+  const asked = (withdrawalNeed.value + withdrawalExtra.value) * multiplier
+  return asked / initialCapital.value
 })
 </script>
 
@@ -459,7 +233,7 @@ const expectedTotalWithdrawalRate = computed(() => {
                   <option value="VP">VP (Värdepappersdepå)</option>
                 </select>
               </div>
-              <div class="col-12">
+              <div class="col-12 col-md-6">
                 <label class="form-label">Initialt kapital</label>
                 <input
                   type="number"
@@ -468,6 +242,25 @@ const expectedTotalWithdrawalRate = computed(() => {
                   :disabled="isFieldDisabled('initialCapital')"
                   @click="handleParameterClick('initialCapital', $event)"
                 />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Arvsmål</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="10000"
+                    min="0"
+                    :class="getInputClass('bequestAmount')"
+                    v-model.number="bequestAmount"
+                    :disabled="isFieldDisabled('bequestAmount')"
+                    @click="handleParameterClick('bequestAmount', $event)"
+                  />
+                  <span class="input-group-text">kr</span>
+                </div>
+                <small class="form-text text-muted">
+                  Kapital att lämna kvar vid slutet, i dagens penningvärde. Bara det extra påverkas
+                  av det. 0 = förbruka allt.
+                </small>
               </div>
             </div>
           </div>
@@ -513,108 +306,48 @@ const expectedTotalWithdrawalRate = computed(() => {
             </div>
           </div>
 
-          <!-- Withdrawal Rates -->
+          <!-- Withdrawal -->
           <div class="param-section">
             <h5 class="section-title">Uttag (per år)</h5>
             <div class="row g-3">
-              <div class="col-12">
-                <div class="form-check">
-                  <input
-                    type="checkbox"
-                    class="form-check-input"
-                    id="amortizedWithdrawal"
-                    v-model="amortizedWithdrawal"
-                    :disabled="isRunning"
-                  />
-                  <label class="form-check-label" for="amortizedWithdrawal">
-                    Amorteringsbaserat uttag (Mertons regel)
-                  </label>
-                </div>
-                <small class="form-text text-muted">
-                  Beräknar uttag med PMT-formeln baserat på återstående år och förväntad avkastning.
-                </small>
-              </div>
-              <div class="col-12 col-md-6" v-if="amortizedWithdrawal">
-                <label class="form-label">Arvsmål</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    max="100"
-                    class="form-control text-end"
-                    :value="(bequestGoal * 100).toFixed(0)"
-                    @change="bequestGoal = getTargetValue($event) / 100"
-                    :disabled="isRunning"
-                  />
-                  <span class="input-group-text">%</span>
-                </div>
-                <small class="form-text text-muted">
-                  Andel av initialt kapital (realt) att bevara. 0% = förbruka allt, 100% = bevara kapitalet.
-                </small>
-              </div>
-              <div class="col-12 col-md-6" v-if="!amortizedWithdrawal">
-                <label class="form-label">Värdebaserad uttagsgrad</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="0.1"
-                    :class="getInputClass('balanceWithdrawalRate')"
-                    :value="(balanceWithdrawalRate * 100).toFixed(1)"
-                    @change="balanceWithdrawalRate = getTargetValue($event) / 100"
-                    :disabled="isFieldDisabled('balanceWithdrawalRate')"
-                    @click="handleParameterClick('balanceWithdrawalRate', $event)"
-                  />
-                  <span class="input-group-text">%</span>
-                  <small class="form-text text-muted"> Belopp baserat på kapitalets värde. </small>
-                </div>
-              </div>
               <div class="col-12 col-md-6">
-                <label class="form-label">Inflationsbaserat uttag</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="1000"
-                    :class="getInputClass('inflationBasedWithdrawal')"
-                    v-model.number="inflationBasedWithdrawal"
-                    :disabled="isFieldDisabled('inflationBasedWithdrawal')"
-                    @click="handleParameterClick('inflationBasedWithdrawal', $event)"
-                  />
-                  <span class="input-group-text">kr</span>
-                </div>
-                <small class="form-text text-muted">
-                  Fast belopp som ökas med inflation varje år. Kan användas t.ex. för nödvändiga
-                  kostnader.
-                </small>
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label">Uttagstak</label>
+                <label class="form-label">Behov</label>
                 <div class="input-group">
                   <input
                     type="number"
                     step="1000"
                     min="0"
-                    :class="getInputClass('withdrawalCap')"
-                    v-model.number="withdrawalCap"
-                    :disabled="isFieldDisabled('withdrawalCap')"
-                    @click="handleParameterClick('withdrawalCap', $event)"
+                    :class="getInputClass('withdrawalNeed')"
+                    v-model.number="withdrawalNeed"
+                    :disabled="isFieldDisabled('withdrawalNeed')"
+                    @click="handleParameterClick('withdrawalNeed', $event)"
                   />
                   <span class="input-group-text">kr</span>
                 </div>
                 <small class="form-text text-muted">
-                  Maximalt uttag per år i dagens penningvärde, räknas upp med inflation. Det som
-                  inte tas ut ligger kvar investerat och skjuter upp kapitalvinstskatten i VP. 0 =
-                  av.
-                </small>
-                <small
-                  class="form-text text-warning"
-                  v-if="withdrawalCap > 0 && withdrawalCap < inflationBasedWithdrawal"
-                >
-                  Taket ligger under det inflationsbaserade uttaget och kapar därmed nödvändiga
-                  kostnader.
+                  Tas ut så länge kapitalet räcker. I dagens penningvärde, räknas upp med inflation.
                 </small>
               </div>
-              <div class="col-12 col-md-6" v-if="inflationBasedWithdrawal > 0 || withdrawalCap > 0">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Extra</label>
+                <div class="input-group">
+                  <input
+                    type="number"
+                    step="1000"
+                    min="0"
+                    :class="getInputClass('withdrawalExtra')"
+                    v-model.number="withdrawalExtra"
+                    :disabled="isFieldDisabled('withdrawalExtra')"
+                    @click="handleParameterClick('withdrawalExtra', $event)"
+                  />
+                  <span class="input-group-text">kr</span>
+                </div>
+                <small class="form-text text-muted">
+                  Tas bara ut av det kapital som överstiger vad återstående behov och arvsmål
+                  kräver. 0 ger ett fast uttag.
+                </small>
+              </div>
+              <div class="col-12" v-if="withdrawalNeed > 0 || withdrawalExtra > 0">
                 <div class="form-check">
                   <input
                     type="checkbox"
@@ -628,75 +361,25 @@ const expectedTotalWithdrawalRate = computed(() => {
                   </label>
                 </div>
                 <small class="form-text text-muted">
-                  Justerar inflationsuttaget efter åldersbaserad utgiftskurva (topp vid 45–50,
+                  Justerar behov och extra efter åldersbaserad utgiftskurva (topp vid 45–50,
                   avtagande till ~65% vid 80+). Baserat på Eurostat HBS.
                 </small>
               </div>
-              <div class="col-12 col-md-6" v-if="!amortizedWithdrawal">
-                <label class="form-label">Spärruppräkning</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="1"
-                    min="0"
-                    :class="getInputClass('withdrawalRatchetLimit')"
-                    :value="(withdrawalRatchetLimit * 100).toFixed(0)"
-                    @change="withdrawalRatchetLimit = getTargetValue($event) / 100"
-                    :disabled="isFieldDisabled('withdrawalRatchetLimit')"
-                    @click="handleParameterClick('withdrawalRatchetLimit', $event)"
-                  />
-                  <span class="input-group-text">%</span>
-                </div>
-                <small class="form-text text-muted">
-                  Max årlig ökning av uttag (Kitces-spärr). 0 = av.
-                </small>
-              </div>
-              <div class="col-12 col-md-6" v-if="!amortizedWithdrawal">
-                <label class="form-label">Vinstbaserad uttagsgrad</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="0.1"
-                    :class="getInputClass('profitWithdrawalRate')"
-                    :value="(profitWithdrawalRate * 100).toFixed(1)"
-                    @change="profitWithdrawalRate = getTargetValue($event) / 100"
-                    :disabled="isFieldDisabled('profitWithdrawalRate')"
-                    @click="handleParameterClick('profitWithdrawalRate', $event)"
-                  />
-                  <span class="input-group-text">%</span>
-                </div>
-                <small class="form-text text-muted">
-                  Belopp baserat på medel av de senaste årens vinst.
-                </small>
-              </div>
-              <div class="col-12 col-md-6" v-if="!amortizedWithdrawal">
-                <label class="form-label">Lookback-period (vinst)</label>
-                <div class="input-group">
-                  <input
-                    type="number"
-                    step="1"
-                    :class="getInputClass('profitLookbackYears')"
-                    :value="profitLookbackYears"
-                    @change="profitLookbackYears = getTargetValue($event)"
-                    :disabled="isFieldDisabled('profitLookbackYears')"
-                    @click="handleParameterClick('profitLookbackYears', $event)"
-                  />
-                  <span class="input-group-text">år</span>
-                </div>
-              </div>
               <div class="col-12">
-                <label class="form-label">Total uttagsgrad</label>
+                <label class="form-label">Högsta uttagsgrad</label>
                 <div class="input-group">
                   <input
                     type="text"
                     class="form-control text-end"
-                    :value="(expectedTotalWithdrawalRate * 100).toFixed(1)"
+                    :value="(maxWithdrawalRate * 100).toFixed(1)"
                     readonly
                     disabled
                   />
                   <span class="input-group-text">%</span>
                 </div>
-                <small class="form-text text-muted"> Första åren. </small>
+                <small class="form-text text-muted">
+                  Behov och extra i första året, i procent av startkapitalet.
+                </small>
               </div>
             </div>
           </div>
@@ -707,42 +390,24 @@ const expectedTotalWithdrawalRate = computed(() => {
           <div class="param-section">
             <h5 class="section-title">Portfölj</h5>
 
-            <div class="mb-3">
-              <FundPresetSelector
-                ref="fundPresetSelector"
-                :disabled="isRunning"
-                @select="applyFundPreset"
-                @loaded="onFundDatabaseLoaded"
-              />
-            </div>
-
             <div class="table-responsive">
               <table class="table table-sm portfolio-table">
                 <thead>
                   <tr>
-                    <th></th>
                     <th>Namn</th>
-                    <th class="text-end">Medelvärde (%)</th>
+                    <th
+                      class="text-end"
+                      title="Förväntad real avkastning per år (aritmetiskt medel)"
+                    >
+                      Real avk. (%)
+                    </th>
                     <th class="text-end">Stdavv (%)</th>
                     <th class="text-end">Vikt (%)</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr
-                    v-for="(asset, index) in assets"
-                    :key="index"
-                    :class="{ 'table-active': index === selectedAssetIndex }"
-                  >
-                    <td>
-                      <input
-                        type="radio"
-                        :value="index"
-                        v-model="selectedAssetIndex"
-                        :disabled="isRunning"
-                        class="form-check-input"
-                      />
-                    </td>
+                  <tr v-for="(asset, index) in assets" :key="index">
                     <td>
                       <input
                         type="text"
@@ -754,17 +419,22 @@ const expectedTotalWithdrawalRate = computed(() => {
                     <td>
                       <input
                         type="number"
-                        class="form-control-sm text-end form-control-plaintext"
+                        step="0.1"
+                        class="form-control form-control-sm text-end"
                         :value="(asset.expectedReturn * 100).toFixed(1)"
-                        disabled
+                        @change="asset.expectedReturn = getTargetValue($event) / 100"
+                        :disabled="isRunning"
                       />
                     </td>
                     <td>
                       <input
                         type="number"
-                        class="form-control-sm text-end form-control-plaintext"
+                        step="0.1"
+                        min="0"
+                        class="form-control form-control-sm text-end"
                         :value="(asset.volatility * 100).toFixed(1)"
-                        disabled
+                        @change="asset.volatility = getTargetValue($event) / 100"
+                        :disabled="isRunning"
                       />
                     </td>
                     <td>
@@ -786,14 +456,14 @@ const expectedTotalWithdrawalRate = computed(() => {
                         class="btn btn-sm btn-outline-danger"
                         @click="removeAsset(index)"
                         :disabled="isRunning || assets.length <= 1"
-                        title="Ta bort fond"
+                        title="Ta bort tillgång"
                       >
                         ×
                       </button>
                     </td>
                   </tr>
                   <tr>
-                    <td colspan="4" class="text-end fw-bold">Total vikt:</td>
+                    <td colspan="3" class="text-end fw-bold">Total vikt:</td>
                     <td class="text-end fw-bold" :class="{ 'text-danger': !weightsValid }">
                       {{ (totalWeight * 100).toFixed(1) }}%
                     </td>
@@ -803,14 +473,24 @@ const expectedTotalWithdrawalRate = computed(() => {
               </table>
             </div>
 
-            <button
-              type="button"
-              class="btn btn-sm btn-outline-primary"
-              @click="addAsset"
+            <select
+              class="form-select form-select-sm d-inline-block w-auto"
               :disabled="isRunning"
+              aria-label="Lägg till tillgång"
+              @change="
+                (event) => {
+                  const select = event.target as HTMLSelectElement
+                  if (select.value) addAsset(select.value)
+                  select.value = ''
+                }
+              "
             >
-              + Lägg till fond
-            </button>
+              <option value="">+ Lägg till tillgång…</option>
+              <option v-for="preset in ASSET_CLASS_PRESETS" :key="preset.id" :value="preset.id">
+                {{ preset.name }}
+              </option>
+              <option value="custom">Egen tillgång</option>
+            </select>
             <button
               type="button"
               class="btn btn-sm btn-outline-secondary ms-2"
@@ -846,7 +526,7 @@ const expectedTotalWithdrawalRate = computed(() => {
             <div v-if="assets.length > 1" class="mt-3">
               <label class="form-label">Korrelationsmatris</label>
               <small class="form-text text-muted d-block mb-1">
-                Från fonddatabasen.<template v-if="simulationMethod === 'bootstrap'"> Används inte i simuleringen.</template>
+                Mellan tillgångarnas reala avkastning. Startvärdena är riktvärden och kan ändras.
               </small>
               <div class="table-responsive">
                 <table class="table table-sm table-striped correlation-matrix-table">
@@ -868,14 +548,21 @@ const expectedTotalWithdrawalRate = computed(() => {
                         <input
                           v-else-if="i > j"
                           type="number"
-                          class="form-control form-control-sm text-center form-control-plaintext"
+                          step="0.05"
+                          min="-1"
+                          max="1"
+                          class="form-control form-control-sm text-center"
                           :value="getCorrelation(i, j)"
-                          disabled
+                          @change="setCorrelation(i, j, getTargetValue($event))"
+                          :disabled="isRunning"
                         />
                       </td>
                     </tr>
                   </tbody>
                 </table>
+              </div>
+              <div v-if="correlationError" class="alert alert-danger mt-2 mb-0 py-2">
+                <small>{{ correlationError }}</small>
               </div>
             </div>
           </div>
@@ -958,7 +645,7 @@ const expectedTotalWithdrawalRate = computed(() => {
               </div>
               <template v-if="accountType === 'ISK'">
                 <div class="col-12 col-md-6">
-                  <label class="form-label">Schablonskattesats</label>
+                  <label class="form-label">Schabloninkomstsats</label>
                   <div class="input-group">
                     <input
                       type="number"
@@ -987,7 +674,9 @@ const expectedTotalWithdrawalRate = computed(() => {
                     />
                     <span class="input-group-text">%</span>
                   </div>
-                  <small class="form-text text-muted">För årlig förändring av schablonskatt.</small>
+                  <small class="form-text text-muted"
+                    >För årlig förändring av schabloninkomstsats.</small
+                  >
                 </div>
               </template>
             </div>
@@ -1035,76 +724,17 @@ const expectedTotalWithdrawalRate = computed(() => {
                   @click="handleParameterClick('simulationCount', $event)"
                 />
               </div>
-              <div class="col-12">
-                <label class="form-label">Simuleringsmetod</label>
-                <select
-                  :class="getInputClass('simulationMethod')"
-                  v-model="simulationMethod"
-                  :disabled="isFieldDisabled('simulationMethod')"
-                  @click="handleParameterClick('simulationMethod', $event)"
-                >
-                  <option value="factormodel">Faktormodell (parametrisk)</option>
-                  <option value="bootstrap">Blockbootstrap (historisk)</option>
-                </select>
-                <small v-if="simulationMethod === 'bootstrap'" class="form-text text-muted">
-                  Samplar historiska block. Begränsas av fondernas historiklängd.
-                </small>
-              </div>
-              <div class="col-12" v-if="simulationMethod === 'factormodel' && stressPresetList.length > 0">
-                <label class="form-label">Stresstest</label>
-                <select
-                  :class="getInputClass('stressPresetId')"
-                  v-model="stressPresetId"
-                  :disabled="isFieldDisabled('stressPresetId')"
-                  @click="handleParameterClick('stressPresetId', $event)"
-                >
-                  <option value="">Ingen</option>
-                  <option
-                    v-for="preset in stressPresetList"
-                    :key="preset.id"
-                    :value="preset.id"
-                  >
-                    {{ preset.label }}
-                  </option>
-                </select>
-                <small class="form-text text-muted">
-                  Applicerar faktormodellens stresscenario vid första uttagsåret.
-                </small>
-                <div v-if="stressWarning" class="alert alert-warning mt-2 mb-0 py-1 px-2 small">
-                  {{ stressWarning }}
-                </div>
-              </div>
-              <div class="col-12" v-if="simulationMethod === 'bootstrap' && bootstrapProfileList.length > 0">
-                <label class="form-label">Stresstest</label>
-                <select
-                  :class="getInputClass('bootstrapProfileId')"
-                  v-model="bootstrapProfileId"
-                  :disabled="isFieldDisabled('bootstrapProfileId')"
-                  @click="handleParameterClick('bootstrapProfileId', $event)"
-                >
-                  <option
-                    v-for="profile in bootstrapProfileList"
-                    :key="profile.id"
-                    :value="profile.id"
-                    :disabled="disabledProfileIds.has(profile.id)"
-                  >
-                    {{ profile.label }}
-                  </option>
-                </select>
-                <small class="form-text text-muted">
-                  Väljer vilka historiska perioder som viktas i simuleringen.
-                </small>
-                <div v-if="bootstrapWarning" class="alert alert-warning mt-2 mb-0 py-1 px-2 small">
-                  {{ bootstrapWarning }}
-                </div>
-              </div>
             </div>
           </div>
         </div>
       </div>
 
       <div class="mt-4 d-flex align-items-center gap-2">
-        <button class="btn btn-primary btn-lg" @click="handleRunSimulation" :disabled="isRunning">
+        <button
+          class="btn btn-primary btn-lg"
+          @click="handleRunSimulation"
+          :disabled="isRunning || !!correlationError"
+        >
           <span v-if="isRunning" class="spinner-border spinner-border-sm me-2"></span>
           <span v-else class="me-2">⏵</span>
           Kör simulering

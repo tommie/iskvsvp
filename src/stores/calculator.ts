@@ -31,12 +31,7 @@ import {
   encodeScenarioTableToUrl,
   decodeScenarioTableFromUrl,
 } from '../utils/url-params'
-import { loadBootstrapData, prepareBootstrapPayload } from '../bootstrap'
-import type { BootstrapProfile, BootstrapPayload } from '../bootstrap'
-import { loadStressData, computeStressReturns } from '../stress'
-import type { StressPreset } from '../stress'
-import { prepareFactorModelPayload } from '../factor-model'
-import type { FactorModelPayload } from '../factor-model'
+import { DEFAULT_ASSET_CLASSES, DEFAULT_CORRELATIONS } from '../assets'
 import SimulationWorker from '../simulation.worker?worker'
 
 export const useCalculatorStore = defineStore('calculator', () => {
@@ -44,30 +39,25 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const accountType = ref<'ISK' | 'VP'>('ISK') // UI-only state for account type dropdown
   const initialCapital = ref(5000000)
 
-  // Default assets: Single asset (Swedbank Robur Globalfond A)
-  const assets = ref<SimulationAsset[]>([
-    {
-      name: 'Global Equity',
-      weight: 1.0,
-      expectedReturn: 0.1299,
-      volatility: 0.202,
-    },
-  ])
-  const assetCorrelationMatrix = ref<number[][]>([[1.0]])
-  const assetRebalanceFrequency = ref<RebalanceFrequency>('never')
+  // Default assets: the asset-class catalogue's own starting portfolio. Copied,
+  // because the arrays are edited in place by the UI.
+  const assets = ref<SimulationAsset[]>(DEFAULT_ASSET_CLASSES.map((asset) => ({ ...asset })))
+  const assetCorrelationMatrix = ref<number[][]>(DEFAULT_CORRELATIONS.map((row) => [...row]))
+  // Annual, matching the planner's assumption, so the two read alike.
+  const assetRebalanceFrequency = ref<RebalanceFrequency>('annually')
 
   const depositAmount = ref(0)
   const depositYears = ref(0)
-  const balanceWithdrawalRate = ref(0.015)
-  const profitWithdrawalRate = ref(0.15)
-  const profitLookbackYears = ref(5)
-  const inflationBasedWithdrawal = ref(0)
-  const amortizedWithdrawal = ref(false)
-  const bequestGoal = ref(0)
+  // 2.2% of the capital as need and up to 3.3% with the extra, as in the
+  // planner: a need the portfolio can carry is the premise the rule is built on.
+  const withdrawalNeed = ref(110_000)
+  const withdrawalExtra = ref(55_000)
+  const bequestAmount = ref(0)
   const ageAdjustedSpending = ref(false)
-  const withdrawalRatchetLimit = ref(0)
-  const withdrawalCap = ref(0)
-  const iskTaxRate = ref<number | undefined>(0.0296)
+  // Long-run level of the schablon basis rate (statslåneränta + 1 point), not
+  // the current spot value: holding one year's rate for decades lets short-term
+  // rate moves drive the answer. 4% implies a ~3% real long-run SLR.
+  const iskTaxRate = ref<number | undefined>(0.04)
   const iskTaxRateStdDev = ref<number | undefined>(0.005)
   const inflationRate = ref(0.02)
   const inflationStdDev = ref(0.009) // Barely any negative years
@@ -76,13 +66,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const startYear = ref(45)
   const yearsLater = ref(36)
   const simulationCount = ref(1000)
-  const simulationMethod = ref<'factormodel' | 'bootstrap'>('factormodel')
-  const bootstrapProfileId = ref('uniform')
-  const bootstrapWarning = ref('')
-  const bootstrapProfileList = ref<BootstrapProfile[]>([])
-  const stressPresetId = ref('')
-  const stressWarning = ref('')
-  const stressPresetList = ref<StressPreset[]>([])
   const seed = ref<string | undefined>(undefined)
 
   // Scenario table state
@@ -155,25 +138,25 @@ export const useCalculatorStore = defineStore('calculator', () => {
       })
     }
 
-    // Balance withdrawal rate: ×0.5/×2 (only if > 0)
-    if (balanceWithdrawalRate.value > 0) {
+    // Need: ×0.5/×2 (only if > 0)
+    if (withdrawalNeed.value > 0) {
       variations.push({
-        key: 'balanceWithdrawalRate',
-        upLabel: 'Värdeuttag ×2',
-        downLabel: 'Värdeuttag ×½',
-        upValue: balanceWithdrawalRate.value * 2,
-        downValue: balanceWithdrawalRate.value * 0.5,
+        key: 'withdrawalNeed',
+        upLabel: 'Behov ×2',
+        downLabel: 'Behov ×½',
+        upValue: withdrawalNeed.value * 2,
+        downValue: withdrawalNeed.value * 0.5,
       })
     }
 
-    // Profit withdrawal rate: ×0.5/×2 (only if > 0)
-    if (profitWithdrawalRate.value > 0) {
+    // Extra: ×0.5/×2 (only if > 0)
+    if (withdrawalExtra.value > 0) {
       variations.push({
-        key: 'profitWithdrawalRate',
-        upLabel: 'Vinstuttag ×2',
-        downLabel: 'Vinstuttag ×½',
-        upValue: profitWithdrawalRate.value * 2,
-        downValue: profitWithdrawalRate.value * 0.5,
+        key: 'withdrawalExtra',
+        upLabel: 'Extra ×2',
+        downLabel: 'Extra ×½',
+        upValue: withdrawalExtra.value * 2,
+        downValue: withdrawalExtra.value * 0.5,
       })
     }
 
@@ -333,24 +316,16 @@ export const useCalculatorStore = defineStore('calculator', () => {
       assetRebalanceFrequency: assetRebalanceFrequency.value,
       depositAmount: depositAmount.value,
       depositYears: depositYears.value,
-      balanceWithdrawalRate: balanceWithdrawalRate.value,
-      profitWithdrawalRate: profitWithdrawalRate.value,
-      profitLookbackYears: profitLookbackYears.value,
-      inflationBasedWithdrawal: inflationBasedWithdrawal.value,
-      amortizedWithdrawal: amortizedWithdrawal.value,
-      bequestGoal: bequestGoal.value,
+      withdrawalNeed: withdrawalNeed.value,
+      withdrawalExtra: withdrawalExtra.value,
+      bequestAmount: bequestAmount.value,
       ageAdjustedSpending: ageAdjustedSpending.value,
-      withdrawalRatchetLimit: withdrawalRatchetLimit.value,
-      withdrawalCap: withdrawalCap.value,
       vpWealthTaxRate: vpFundTaxRate.value,
       capitalGainsTaxRate: capitalGainsTax.value,
       iskTaxRate: iskTaxRate.value,
       iskTaxRateStdDev: iskTaxRateStdDev.value,
       inflationRate: inflationRate.value,
       inflationStdDev: inflationStdDev.value,
-      simulationMethod: simulationMethod.value,
-      bootstrapProfileId: bootstrapProfileId.value,
-      stressPresetId: stressPresetId.value,
     }
     return paramMap[paramKey]
   }
@@ -369,47 +344,15 @@ export const useCalculatorStore = defineStore('calculator', () => {
     assetRebalanceFrequency: assetRebalanceFrequency.value,
     depositAmount: depositAmount.value,
     depositYears: Math.min(depositYears.value, yearsLater.value),
-    balanceWithdrawalRate: balanceWithdrawalRate.value,
-    profitWithdrawalRate: profitWithdrawalRate.value,
-    profitLookbackYears: profitLookbackYears.value,
-    inflationBasedWithdrawal: inflationBasedWithdrawal.value,
-    amortizedWithdrawal: amortizedWithdrawal.value,
-    bequestGoal: bequestGoal.value,
+    withdrawalNeed: withdrawalNeed.value,
+    withdrawalExtra: withdrawalExtra.value,
+    bequestAmount: bequestAmount.value,
     ageAdjustedSpending: ageAdjustedSpending.value,
-    withdrawalRatchetLimit: withdrawalRatchetLimit.value,
-    withdrawalCap: withdrawalCap.value,
     vpWealthTaxRate: vpFundTaxRate.value,
     capitalGainsTaxRate: capitalGainsTax.value,
     inflationRate: inflationRate.value,
     inflationStdDev: inflationStdDev.value,
-    simulationMethod: simulationMethod.value,
-    bootstrapProfileId: bootstrapProfileId.value || undefined,
-    stressPresetId: stressPresetId.value || undefined,
   })
-
-  /**
-   * Load bootstrap profiles and fund index (called once at startup).
-   */
-  async function initBootstrapData() {
-    try {
-      const { profiles } = await loadBootstrapData()
-      bootstrapProfileList.value = profiles
-    } catch (e) {
-      console.warn('Failed to load bootstrap data:', e)
-    }
-  }
-
-  /**
-   * Load stress presets from the factor model data (called once at startup).
-   */
-  async function initStressPresets() {
-    try {
-      const { presets } = await loadStressData()
-      stressPresetList.value = presets
-    } catch (e) {
-      console.warn('Failed to load stress presets:', e)
-    }
-  }
 
   /**
    * Run the Monte Carlo simulation.
@@ -503,82 +446,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
         labels = [accountType.value]
       }
 
-      // Prepare simulation payload based on method
-      bootstrapWarning.value = ''
-      stressWarning.value = ''
-      const effectiveMethod = paramSets[0]?.simulationMethod ?? simulationMethod.value
-      let bootstrapPayload: BootstrapPayload | undefined
-      let factorPayload: FactorModelPayload | undefined
-      let dataPeriod: [string, string] | undefined
-
-      if (effectiveMethod === 'bootstrap') {
-        // Bootstrap mode: prepare historical data payload
-        const effectiveProfileId = paramSets[0]?.bootstrapProfileId ?? bootstrapProfileId.value
-        const { fundsDb, profiles } = await loadBootstrapData()
-        const profile = profiles.find((p) => p.id === effectiveProfileId)
-
-        if (!profile) {
-          bootstrapWarning.value = `Okänd bootstrapprofil: ${effectiveProfileId}`
-          return
-        }
-
-        const assetNames = paramSets[0]!.assets.map((a) => a.name)
-        const assetWeights = paramSets[0]!.assets.map((a) => a.weight)
-        const bootstrapResult = await prepareBootstrapPayload(assetNames, fundsDb, profile.components, assetWeights)
-
-        if ('warnings' in bootstrapResult) {
-          bootstrapWarning.value = bootstrapResult.warnings.join('; ')
-          return
-        }
-
-        bootstrapPayload = bootstrapResult
-        const [y, m] = bootstrapResult.startDate.split('-').map(Number) as [number, number]
-        const endTotal = y * 12 + (m - 1) + bootstrapResult.nMonths - 1
-        const endY = Math.floor(endTotal / 12)
-        const endM = (endTotal % 12) + 1
-        dataPeriod = [bootstrapResult.startDate, `${endY}-${String(endM).padStart(2, '0')}`]
-      } else {
-        // Factor model mode: prepare factor payload and stress returns
-        try {
-          const { factorData, fundsDb } = await loadStressData()
-          dataPeriod = factorData.factor_covariance.period
-          const assetNames = paramSets[0]!.assets.map((a) => a.name)
-          const assetWeights = paramSets[0]!.assets.map((a) => a.weight)
-          const fmResult = prepareFactorModelPayload(assetNames, assetWeights, fundsDb, factorData)
-
-          if ('warnings' in fmResult) {
-            stressWarning.value = fmResult.warnings.join('; ')
-            // Fall through without factor payload — simulation uses independent normals
-          } else {
-            factorPayload = fmResult.payload
-          }
-
-          // Compute stress returns if a preset is selected
-          const effectiveStressId = paramSets[0]?.stressPresetId ?? stressPresetId.value
-          if (effectiveStressId) {
-            const stressResult = computeStressReturns(
-              effectiveStressId,
-              paramSets[0]!.assets,
-              fundsDb,
-              factorData,
-            )
-            if (stressResult.warnings.length > 0) {
-              stressWarning.value = stressResult.warnings.join('; ')
-            }
-            if (stressResult.returns.length > 0) {
-              // Apply stress returns at the first withdrawal year
-              const stressYear = paramSets[0]!.depositYears ?? depositYears.value
-              for (const ps of paramSets) {
-                ps.stressYearReturns = stressResult.returns
-                ps.stressYear = stressYear
-              }
-            }
-          }
-        } catch (e) {
-          stressWarning.value = `Kunde inte ladda faktormodell: ${e}`
-        }
-      }
-
       // Create plain object copy for worker
       const plainParamSets = JSON.parse(JSON.stringify(paramSets))
 
@@ -604,11 +471,9 @@ export const useCalculatorStore = defineStore('calculator', () => {
         }
 
         // Start simulation
-        worker.postMessage({ paramSets: plainParamSets, labels, bootstrapPayload, factorModelPayload: factorPayload })
+        worker.postMessage({ paramSets: plainParamSets, labels })
       })
 
-      results.simulationMethod = effectiveMethod
-      results.dataPeriod = dataPeriod
       simulationResults.value = results
 
       // Save to history (save first scenario params as the representative parameters)
@@ -644,22 +509,14 @@ export const useCalculatorStore = defineStore('calculator', () => {
     assetRebalanceFrequency.value = params.assetRebalanceFrequency
     depositAmount.value = params.depositAmount
     depositYears.value = params.depositYears
-    balanceWithdrawalRate.value = params.balanceWithdrawalRate
-    profitWithdrawalRate.value = params.profitWithdrawalRate
-    profitLookbackYears.value = params.profitLookbackYears
-    inflationBasedWithdrawal.value = params.inflationBasedWithdrawal
-    amortizedWithdrawal.value = params.amortizedWithdrawal ?? false
-    bequestGoal.value = params.bequestGoal ?? 0
+    withdrawalNeed.value = params.withdrawalNeed
+    withdrawalExtra.value = params.withdrawalExtra
+    bequestAmount.value = params.bequestAmount
     ageAdjustedSpending.value = params.ageAdjustedSpending ?? false
-    withdrawalRatchetLimit.value = params.withdrawalRatchetLimit ?? 0
-    withdrawalCap.value = params.withdrawalCap ?? 0
     inflationRate.value = params.inflationRate
     inflationStdDev.value = params.inflationStdDev
     vpFundTaxRate.value = params.vpWealthTaxRate
     capitalGainsTax.value = params.capitalGainsTaxRate
-    simulationMethod.value = params.simulationMethod ?? 'factormodel'
-    bootstrapProfileId.value = params.bootstrapProfileId ?? 'uniform'
-    stressPresetId.value = params.stressPresetId ?? ''
     seed.value = params.seed
 
     // ISK-specific parameters (may be undefined for VP)
@@ -710,24 +567,14 @@ export const useCalculatorStore = defineStore('calculator', () => {
               if (urlParams.depositAmount !== undefined)
                 depositAmount.value = urlParams.depositAmount
               if (urlParams.depositYears !== undefined) depositYears.value = urlParams.depositYears
-              if (urlParams.balanceWithdrawalRate !== undefined)
-                balanceWithdrawalRate.value = urlParams.balanceWithdrawalRate
-              if (urlParams.profitWithdrawalRate !== undefined)
-                profitWithdrawalRate.value = urlParams.profitWithdrawalRate
-              if (urlParams.profitLookbackYears !== undefined)
-                profitLookbackYears.value = urlParams.profitLookbackYears
-              if (urlParams.inflationBasedWithdrawal !== undefined)
-                inflationBasedWithdrawal.value = urlParams.inflationBasedWithdrawal
-              if (urlParams.amortizedWithdrawal !== undefined)
-                amortizedWithdrawal.value = urlParams.amortizedWithdrawal
-              if (urlParams.bequestGoal !== undefined)
-                bequestGoal.value = urlParams.bequestGoal
+              if (urlParams.withdrawalNeed !== undefined)
+                withdrawalNeed.value = urlParams.withdrawalNeed
+              if (urlParams.withdrawalExtra !== undefined)
+                withdrawalExtra.value = urlParams.withdrawalExtra
+              if (urlParams.bequestAmount !== undefined)
+                bequestAmount.value = urlParams.bequestAmount
               if (urlParams.ageAdjustedSpending !== undefined)
                 ageAdjustedSpending.value = urlParams.ageAdjustedSpending
-              if (urlParams.withdrawalRatchetLimit !== undefined)
-                withdrawalRatchetLimit.value = urlParams.withdrawalRatchetLimit
-              if (urlParams.withdrawalCap !== undefined)
-                withdrawalCap.value = urlParams.withdrawalCap
               if (urlParams.inflationRate !== undefined)
                 inflationRate.value = urlParams.inflationRate
               if (urlParams.inflationStdDev !== undefined)
@@ -739,12 +586,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
               if (urlParams.iskTaxRate !== undefined) iskTaxRate.value = urlParams.iskTaxRate
               if (urlParams.iskTaxRateStdDev !== undefined)
                 iskTaxRateStdDev.value = urlParams.iskTaxRateStdDev
-              if (urlParams.simulationMethod !== undefined)
-                simulationMethod.value = urlParams.simulationMethod ?? 'factormodel'
-              if (urlParams.bootstrapProfileId !== undefined)
-                bootstrapProfileId.value = urlParams.bootstrapProfileId ?? 'uniform'
-              if (urlParams.stressPresetId !== undefined)
-                stressPresetId.value = urlParams.stressPresetId ?? ''
               if (urlParams.seed !== undefined) seed.value = urlParams.seed
             }
 
@@ -771,15 +612,10 @@ export const useCalculatorStore = defineStore('calculator', () => {
         assetRebalanceFrequency,
         depositAmount,
         depositYears,
-        balanceWithdrawalRate,
-        profitWithdrawalRate,
-        profitLookbackYears,
-        inflationBasedWithdrawal,
-        amortizedWithdrawal,
-        bequestGoal,
+        withdrawalNeed,
+        withdrawalExtra,
+        bequestAmount,
         ageAdjustedSpending,
-        withdrawalRatchetLimit,
-        withdrawalCap,
         iskTaxRate,
         iskTaxRateStdDev,
         inflationRate,
@@ -789,9 +625,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
         startYear,
         yearsLater,
         simulationCount,
-        simulationMethod,
-        bootstrapProfileId,
-        stressPresetId,
         seed,
       ],
       () => {
@@ -833,15 +666,10 @@ export const useCalculatorStore = defineStore('calculator', () => {
     assetRebalanceFrequency,
     depositAmount,
     depositYears,
-    balanceWithdrawalRate,
-    profitWithdrawalRate,
-    profitLookbackYears,
-    inflationBasedWithdrawal,
-    amortizedWithdrawal,
-    bequestGoal,
+    withdrawalNeed,
+    withdrawalExtra,
+    bequestAmount,
     ageAdjustedSpending,
-    withdrawalRatchetLimit,
-    withdrawalCap,
     iskTaxRate,
     iskTaxRateStdDev,
     inflationRate,
@@ -851,13 +679,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     startYear,
     yearsLater,
     simulationCount,
-    simulationMethod,
-    bootstrapProfileId,
-    bootstrapWarning,
-    bootstrapProfileList,
-    stressPresetId,
-    stressWarning,
-    stressPresetList,
     seed,
 
     // State
@@ -872,8 +693,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     controlledParameters,
 
     // Actions
-    initBootstrapData,
-    initStressPresets,
     runSimulation,
     resetResults,
     loadParameters,

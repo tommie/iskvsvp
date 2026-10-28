@@ -9,7 +9,6 @@ const {
   showDetailedStatistics,
   yearsLater,
   depositYears,
-  profitWithdrawalRate,
   assets,
 } = storeToRefs(store)
 
@@ -21,13 +20,8 @@ const finalPeriod = computed(() => {
   return statistics.value[0]!.median.snapshots.liquidValue.length - 1
 })
 
-// Calculate the first withdrawal period (accounts for deposit years and profit lookback)
-const firstWithdrawalPeriod = computed(() => {
-  if (profitWithdrawalRate.value > 0) {
-    return depositYears.value + 1
-  }
-  return depositYears.value
-})
+// The first withdrawal period is the first year after the deposit years.
+const firstWithdrawalPeriod = computed(() => depositYears.value)
 
 const withdrawalYears = computed(() => Math.max(1, yearsLater.value - depositYears.value))
 
@@ -212,29 +206,12 @@ const getCellStyle = (
 
 const hasResults = computed(() => statistics.value.length > 0)
 const hasMultipleScenarios = computed(() => statistics.value.length > 1)
-
-const formatYearMonth = (ym: string) => {
-  const [y, m] = ym.split('-')
-  const date = new Date(Number(y), Number(m) - 1)
-  return date.toLocaleDateString('sv-SE', { year: 'numeric', month: 'long' })
-}
-
-const dataPeriodText = computed(() => {
-  const period = simulationResults.value?.dataPeriod
-  if (!period) return null
-  return `${formatYearMonth(period[0])} till ${formatYearMonth(period[1])}`
-})
 </script>
 
 <template>
   <div v-if="hasResults">
     <p class="text-muted mb-3">
       Statistik över alla simuleringar.
-      <span v-if="dataPeriodText">
-        Avkastning samplas från
-        {{ simulationResults?.simulationMethod === 'bootstrap' ? 'historisk data' : 'en faktormodell baserad på makrodata' }}
-        {{ dataPeriodText }}.</span
-      >
       <span v-if="hasMultipleScenarios">
         Celler med bästa värdet för varje mått och percentil är markerade med färg.</span
       >
@@ -567,7 +544,7 @@ const dataPeriodText = computed(() => {
             <!-- ISK Tax Rate (only for scenarios that have it) -->
             <template v-for="(label, idx) in labels" :key="`iskTax-${idx}`">
               <tr v-if="getAverageIskTaxRate(idx, 'percentile90') > 0" class="table-group-divider">
-                <th scope="row">ISK-skattesats</th>
+                <th scope="row">ISK-schabloninkomstsats</th>
                 <th scope="row">{{ label }}</th>
                 <td>{{ formatPercent(getAverageIskTaxRate(idx, 'percentile10')) }}</td>
                 <td>{{ formatPercent(getAverageIskTaxRate(idx, 'median')) }}</td>

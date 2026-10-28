@@ -13,16 +13,10 @@ const {
   yearsLater,
   showDetailedStatistics,
   depositYears,
-  profitWithdrawalRate,
 } = storeToRefs(store)
 
-// Calculate the first withdrawal period (accounts for deposit years and profit lookback)
-const firstWithdrawalPeriod = computed(() => {
-  if (profitWithdrawalRate.value > 0) {
-    return depositYears.value + 1
-  }
-  return depositYears.value
-})
+// The first withdrawal period is the first year after the deposit years.
+const firstWithdrawalPeriod = computed(() => depositYears.value)
 
 // Combine data for reactivity tracking
 const chartData = computed(() => ({

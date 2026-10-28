@@ -2,65 +2,60 @@
 
 ISK vs VP Monte Carlo simulator — compares the tax efficiency of Swedish ISK
 (Investeringssparkonto) and VP (Vanlig depå) accounts using stochastic
-simulations with historical block bootstrap.
+simulations of correlated asset-class returns.
 
-## Amortized Withdrawal (Merton's Rule)
+## Withdrawal rule (ARVA on the surplus)
 
-The simulator supports PMT-based amortized withdrawals as an alternative to
-fixed-rate withdrawals. Each year, the withdrawal is computed using the
-annuity formula PMT(r, n, -PV, FV), where:
+The household enters a **need** and an **extra**, both annual and in today's
+money. The need is paid whenever the portfolio can pay it. The extra is paid
+only out of the balance above what the remaining needs and the bequest would
+take. Each year:
 
-- **PV** = current portfolio value
-- **FV** = bequest goal × initial capital × cumulative inflation (adjusted for tax drag)
-- **n** = remaining withdrawal years
-- **r** = certainty-equivalent return (CER)
+1. Reserve the discounted value of the remaining need commitments, and of the
+   bequest target.
+2. Spread any surplus over the extra still to come, in the shape the household
+   drew it.
+3. Pay `need + clamp(surplus / annuity, 0, extra)`.
 
-An inflation-indexed spending floor guarantees a minimum withdrawal regardless
-of portfolio performance.
+An extra of zero is a fixed, inflation-indexed withdrawal.
 
-### Certainty-Equivalent Return
+This is [Waring & Siegel's ARVA](https://www.cfapubs.org/doi/abs/10.2469/faj.v71.n1.3)
+(annually recalculated virtual annuity) applied to the surplus alone. Plain
+ARVA spends wealth divided by an annuity factor and has no floor; applied to
+the surplus it gives a guaranteed need and a discretionary part that cannot run
+dry.
 
-The PMT's discount rate uses [Merton's certainty-equivalent return](https://elmwealth.com/spending-like-youll-live-forever/)
-rather than the raw geometric mean:
+**How it differs from Merton.** Merton derives both the spending share and the
+risky share from one preference parameter, γ. ARVA keeps only the annuity form
+and takes the allocation as given. Here the rate that discounts the need is not
+a certainty-equivalent return, which would need a γ, but a *quantile* of the
+portfolio's own compound return: safety-first pricing of a hard floor. At the
+full horizon the 25th percentile is roughly what γ≈3 gives, but its haircut
+shrinks as 1/√T with the distance to the payment, where γ's does not, so a
+near payment is priced more cautiously than a distant one.
 
-```
-r_ce = geometric_mean − (γ − 1) × σ² / 2
-```
+- Each commitment is discounted at the 25th percentile of the annualised
+  compound return **over its own distance**, less the proportional tax drag.
+- The bequest is discounted at the **median** instead. Missing it is not
+  failure, so it is not priced as a floor.
+- In a VP account a sale also pays tax on its gain, so the balance needed to
+  deliver a krona of cash is `1 / (1 - g·r)`, with `g` the unrealised gain
+  fraction and `r` the rate. Only the schablon drag goes in the discount rate;
+  charging the gain tax in both would reserve a plan into never spending.
 
-The geometric mean and variance are estimated by Monte Carlo sampling from
-the same block bootstrap process the simulation uses, ensuring the PMT is
-calibrated to the actual return distribution (including profile weighting and
-Jensen's inequality from multi-asset portfolios).
+The rule depends on the balance and the years remaining alone. Rebuilding the
+plan a year later from the balance actually reached therefore pays exactly what
+the original plan would have paid in that state, which is what makes advancing
+the start year a consistent way to get next year's budget.
 
-**Why not just the geometric mean?** With γ=1 (geometric mean only), the PMT
-assumes risk-neutral preferences. When the portfolio underperforms, the PMT
-still plans optimistically, and the inflation floor forces withdrawals that
-the PMT would rather skip. This asymmetry systematically erodes capital in
-bad paths — volatile portfolios saw ~36% breakeven probability instead of the
-theoretical 50%.
-
-**Why γ=3?** Empirical estimates of CRRA risk aversion cluster around 2–4
-([French, Schwert & Stambaugh 1987](https://doi.org/10.1016/0304-405X(87)90026-2): γ≈2.4;
-[Tödter 2008](https://www.tandfonline.com/doi/full/10.1080/23322039.2014.990742): γ≈3.5).
-We use γ=3 as a slightly conservative round value. The effect scales with
-portfolio variance: low-volatility portfolios see minimal adjustment, while
-volatile portfolios get a meaningful reduction that keeps the floor from
-dominating.
-
-**Limitations of the Merton framework:** γ is an exogenous preference
-parameter that individuals cannot reliably self-assess.
-[Risk tolerance questionnaires](https://pmc.ncbi.nlm.nih.gov/articles/PMC2856097/)
-exist but produce noisy mappings to γ. The model assumes constant relative
-risk aversion, while real preferences are
-[state-dependent](https://www.advisorperspectives.com/articles/2025/02/10/merton-share-why-dont-use-retirement-calculators)
-(risk aversion increases during crashes). Despite these limitations, the CER
-adjustment is the theoretically grounded way to translate return uncertainty
-into a conservative spending rate, and γ=3 produces reasonable behavior
-across the portfolio configurations we tested.
+The same rule, validated against a density-propagation engine on a 9 mkr, 40 year
+plan, runs in the Kapitalplanerare on the `planner` branch: survival of the need
+alone about 90%, of the dynamic rule about 86%, and expected spending 7.8 and
+10.8 mkr from both engines.
 
 ## Age-Adjusted Spending
 
-The inflation-indexed withdrawal can optionally be modulated by an
+The need and extra can optionally be modulated by an
 age-dependent spending curve. Retirement spending follows a well-documented
 decline: real expenditures peak around age 45–50 and fall to roughly 65–70%
 of peak by age 80+.
@@ -87,11 +82,8 @@ decline rate is consistent with
 [Blanchett (2014)](https://www.morningstar.com/content/dam/marketing/shared/research/foundational/677785-EstimatingTrueCostRetirement.pdf),
 who finds ~1–2%/year real spending decline in US retirees.
 
-The curve is applied as a multiplier on withdrawals: the inflation-indexed
-amount (standalone and Merton floor) is scaled directly, while the
-balance-based withdrawal rate is normalized so that the user's input
-represents the average rate over the withdrawal period (early retirees
-near peak spending age get a higher initial rate). Values below 30 clamp
+The curve is applied as a multiplier on the need and the extra, which also
+shapes how the surplus is spread over the extra. Values below 30 clamp
 to f(30); values above 80 clamp to f(80). The "start year" field is
 interpreted as the user's age when this feature is enabled.
 

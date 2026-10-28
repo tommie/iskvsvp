@@ -175,7 +175,7 @@ watch(simulationResults, (newResults) => {
     <footer class="mt-5 pt-4 border-top text-muted">
       <p class="small">
         Denna sida använder Monte Carlo-metoder för att modellera osäkerhet i avkastning och
-        inflation. Årlig avkastning, inflation och förändring i ISK-skattesats modelleras som
+        inflation. Årlig avkastning, inflation och förändring i ISK-schabloninkomstsats modelleras som
         normalfördelningar. Resultaten visar statistik över
         {{ simulationCount.toLocaleString('sv-SE') }} simuleringar. Den kan inte spå i framtiden,
         men kan användas för att jämföra olika investeringsmodeller.

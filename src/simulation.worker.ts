@@ -1,28 +1,18 @@
 import type { InputParameters } from './types'
-import type { BootstrapPayload } from './bootstrap'
-import type { FactorModelPayload } from './factor-model'
 import { simulateAll } from './simulation'
 
 self.onmessage = (
   e: MessageEvent<{
     paramSets: InputParameters[]
     labels: string[]
-    bootstrapPayload?: BootstrapPayload
-    factorModelPayload?: FactorModelPayload
   }>,
 ) => {
   try {
-    const { paramSets, labels, bootstrapPayload, factorModelPayload } = e.data
+    const { paramSets, labels } = e.data
 
-    const results = simulateAll(
-      paramSets,
-      labels,
-      (progress) => {
-        self.postMessage({ type: 'progress', progress })
-      },
-      bootstrapPayload,
-      factorModelPayload,
-    )
+    const results = simulateAll(paramSets, labels, (progress) => {
+      self.postMessage({ type: 'progress', progress })
+    })
 
     self.postMessage({ type: 'complete', results })
   } catch (error) {

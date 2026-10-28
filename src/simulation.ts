@@ -7,10 +7,8 @@ import type {
   SimulationPeriodData,
   FinalAssetWeights,
 } from './types'
-import type { BootstrapPayload } from './bootstrap'
-import { sampleAnnualReturns } from './bootstrap'
-import type { FactorModelPayload } from './factor-model'
-import { sampleFactorModelReturns } from './factor-model'
+import { arvaWithdrawal, reserveSchedule, returnLaw } from './arva'
+import { realReturnSampler } from './returns'
 
 // Extended result that includes final asset weights and cumulative inflation
 export interface SingleSimulationResult extends SimulationResult<number> {
@@ -108,28 +106,14 @@ export function spendingMultiplier(age: number, enabled: boolean): number {
  * Run a single simulation for a single scenario (ISK or VP).
  * Returns period-by-period data, cumulative snapshots, and final asset weights.
  */
-export function runSingleSimulation(
-  params: InputParameters,
-  bootstrapPayload?: BootstrapPayload,
-  factorModelPayload?: FactorModelPayload,
-): SingleSimulationResult {
+export function runSingleSimulation(params: InputParameters): SingleSimulationResult {
   const rng = alea(params.seed)
   const isISK = params.iskTaxRate !== undefined
 
-  // Pre-compute returns: factor model, bootstrap, or simple parametric
-  let precomputedReturns: number[][] | null = null
-  if (bootstrapPayload) {
-    precomputedReturns = sampleAnnualReturns(
-      bootstrapPayload.returnMatrix,
-      bootstrapPayload.nMonths,
-      bootstrapPayload.profileComponents,
-      rng,
-      params.yearsLater,
-      bootstrapPayload.startDate,
-    )
-  } else if (factorModelPayload) {
-    precomputedReturns = sampleFactorModelReturns(factorModelPayload, rng, params.yearsLater)
-  }
+  // Asset returns are real and lognormal; each year they are turned into
+  // nominal ones with that year's inflation draw, since the portfolio, the
+  // taxes and the cost basis are all nominal.
+  const sampleRealReturns = realReturnSampler(params.assets, params.assetCorrelationMatrix)
 
   // Initialize asset positions
   const assetPositions: AssetPosition[] = params.assets.map((asset) => ({
@@ -142,7 +126,6 @@ export function runSingleSimulation(
   let accumulatedRealWithdrawal = 0
   let accumulatedNominalWithdrawal = 0
   let currentIskTaxRate = params.iskTaxRate ?? 0
-  const yearlyAmounts: number[] = [params.initialCapital]
   let peakAmount = params.initialCapital
   let currentDrawdownStart: number | null = null
   let maxDrawdown = 0
@@ -172,44 +155,34 @@ export function runSingleSimulation(
   const snapshotTaxationDegrees: number[] = []
   const snapshotIskTaxRates: number[] = []
 
-  // Precompute the average spending multiplier over the withdrawal period.
-  // The balance withdrawal rate is scaled so that the time-weighted average
-  // rate equals the user's input (the input represents the average, not the
-  // initial rate). Early retirees get a higher initial rate because the
-  // spending curve peaks around age 50.
-  const withdrawalYearsForAvg = params.yearsLater - params.depositYears
-  let avgSpendingMultiplier = 1
-  if (params.ageAdjustedSpending && withdrawalYearsForAvg > 0) {
-    let sum = 0
-    for (let t = 0; t < withdrawalYearsForAvg; t++) {
-      sum += spendingMultiplier(params.startYear + params.depositYears + t, true)
-    }
-    avgSpendingMultiplier = sum / withdrawalYearsForAvg
+  // The withdrawal schedule, in real terms: what the household asks for in
+  // each year, shaped by the age-dependent spending curve when that is on.
+  // The reserve is sized with the schedule's tax drag fixed at today's rate,
+  // since the rule must not forecast how the ISK rate wanders.
+  const needByYear: number[] = []
+  const extraByYear: number[] = []
+  for (let i = 0; i < params.yearsLater; i++) {
+    const inWithdrawal = i >= params.depositYears
+    const multiplier = spendingMultiplier(params.startYear + i, params.ageAdjustedSpending)
+    needByYear.push(inWithdrawal ? params.withdrawalNeed * multiplier : 0)
+    extraByYear.push(inWithdrawal ? params.withdrawalExtra * multiplier : 0)
   }
-
-  let ratchetFloor = 0
+  const scheduleDrag = isISK
+    ? (params.iskTaxRate ?? 0) * params.capitalGainsTaxRate
+    : params.vpWealthTaxRate * params.capitalGainsTaxRate
+  const schedule = reserveSchedule(
+    needByYear,
+    extraByYear,
+    params.bequestAmount,
+    returnLaw(params.assets, params.assetCorrelationMatrix),
+    scheduleDrag,
+  )
 
   for (let i = 0; i < params.yearsLater; i++) {
     // Generate stochastic parameters
     const inflationRate = randomNormal(params.inflationRate, params.inflationStdDev, rng)
 
-    let assetReturns: number[]
-    if (precomputedReturns) {
-      assetReturns = precomputedReturns[i]!
-    } else {
-      // Fallback: independent normal returns (should not be reached with factor model)
-      assetReturns = params.assets.map((a) => randomNormal(a.expectedReturn, a.volatility, rng))
-    }
-
-    // Override with stress returns if specified for this year
-    if (params.stressYearReturns && params.stressYear === i) {
-      for (let k = 0; k < assetReturns.length; k++) {
-        const stressed = params.stressYearReturns[k]
-        if (stressed != null) {
-          assetReturns[k] = stressed
-        }
-      }
-    }
+    const assetReturns = sampleRealReturns(rng).map((real) => (1 + real) * (1 + inflationRate) - 1)
 
     cumulativeInflation *= 1 + inflationRate
 
@@ -253,122 +226,27 @@ export function runSingleSimulation(
 
       amount = assetPositions.reduce((sum, pos) => sum + pos.value, 0)
     } else {
-      // Withdrawal years: calculate and execute withdrawals
-      if (params.amortizedWithdrawal) {
-        // Merton's rule: PMT-based amortization
-        const withdrawalYearsTotal = params.yearsLater - params.depositYears
-        const remainingYears = withdrawalYearsTotal - (i - params.depositYears)
-        if (remainingYears > 0 && amount > 0) {
-          // Certainty-equivalent return (CER) per Merton's framework.
-          // The geometric mean already incorporates σ²/2 (γ=1). We apply an
-          // additional (γ-1)×σ²/2 reduction for risk aversion.
-          // γ=3: slightly more conservative than empirical estimates (typically
-          // 2–4 in the literature), chosen as a round number that reduces floor
-          // binding in volatile portfolios without over-suppressing withdrawals.
-          const GAMMA = 3
-          let nominalReturn: number
-          if (bootstrapPayload) {
-            nominalReturn =
-              bootstrapPayload.portfolioGeometricMean -
-              ((GAMMA - 1) * bootstrapPayload.portfolioVariance) / 2
-          } else if (factorModelPayload) {
-            nominalReturn =
-              factorModelPayload.portfolioExpectedReturn -
-              ((GAMMA - 1) * factorModelPayload.portfolioVariance) / 2
-          } else {
-            // Fallback: weighted geometric mean from asset parameters
-            const mu = params.assets.reduce((s, a) => s + a.weight * a.expectedReturn, 0)
-            const sigma2 = params.assets.reduce(
-              (s, a) => s + a.weight * a.volatility * a.volatility,
-              0,
-            )
-            nominalReturn = mu - ((GAMMA - 1) * sigma2) / 2
-          }
-          const taxDrag = isISK
-            ? currentIskTaxRate * params.capitalGainsTaxRate
-            : params.vpWealthTaxRate * params.capitalGainsTaxRate
-          const r = nominalReturn - params.inflationRate - taxDrag
-          // Target FV/(1-t): tax is applied after the final withdrawal,
-          // so aim higher to end at the desired value post-tax.
-          const fv =
-            (params.bequestGoal * params.initialCapital * cumulativeInflation) / (1 - taxDrag)
-          // amount is post-growth (returns already applied in step 1), so
-          // divide by (1+r) to get the pre-growth PV the PMT formula expects.
-          let amortized: number
-          if (Math.abs(r) < 1e-10) {
-            amortized = (amount - fv) / remainingYears
-          } else {
-            const disc = Math.pow(1 + r, -remainingYears)
-            const pv = amount / (1 + r)
-            amortized = (r * (pv - fv * disc)) / (1 - disc)
-          }
-          // Floor: inflation-based withdrawal, adjusted for age-dependent spending decline
-          const age = params.startYear + i
-          const floor =
-            params.inflationBasedWithdrawal *
-            cumulativeInflation *
-            spendingMultiplier(age, params.ageAdjustedSpending)
-          withdrawn = Math.max(floor, amortized)
-          withdrawn = Math.max(0, Math.min(withdrawn, amount))
-        }
-      } else {
-        const age = params.startYear + i
-        const spendingScale =
-          spendingMultiplier(age, params.ageAdjustedSpending) / avgSpendingMultiplier
-        const balanceWithdrawal = amount * params.balanceWithdrawalRate * spendingScale
+      // Withdrawal years: the rule works in real terms, so bring the balance
+      // back to today's money and the result forward again.
+      const realBalance = amount / cumulativeInflation
 
-        let profitWithdrawal = 0
-        if (i > 0 && params.profitWithdrawalRate > 0) {
-          const lookbackYears = Math.min(params.profitLookbackYears, yearlyAmounts.length - 1)
-          if (lookbackYears > 0) {
-            const oldAmount = yearlyAmounts[yearlyAmounts.length - 1 - lookbackYears]!
-            const totalProfit = amount - oldAmount
-            const averageAnnualProfit = totalProfit / lookbackYears
-            profitWithdrawal = Math.max(0, averageAnnualProfit * params.profitWithdrawalRate)
-          }
-        }
-
-        const inflationWithdrawal =
-          params.inflationBasedWithdrawal *
-          cumulativeInflation *
-          spendingMultiplier(age, params.ageAdjustedSpending)
-        withdrawn = balanceWithdrawal + profitWithdrawal + inflationWithdrawal
-
-        // Kitces ratchet: withdrawal can increase but never decrease.
-        // Clamp between [floor, floor*(1+limit)]: the floor tracks the
-        // actual (clamped) withdrawal so it never lags behind.
-        if (params.withdrawalRatchetLimit > 0) {
-          if (ratchetFloor === 0) {
-            ratchetFloor = withdrawn
-          } else {
-            const cap = ratchetFloor * (1 + params.withdrawalRatchetLimit)
-            withdrawn = Math.max(ratchetFloor, Math.min(withdrawn, cap))
-            ratchetFloor = withdrawn
-          }
-        }
+      // How much of a krona of balance reaches the household as cash. A VP
+      // sale that realises gain fraction g at rate r also pays tax on it.
+      let share = 1
+      if (!isISK && amount > 0) {
+        const netGain = assetPositions.reduce(
+          (sum, pos) => sum + schablonGain(pos.value, pos.costBasis),
+          0,
+        )
+        share = 1 - Math.max(0, netGain / amount) * params.capitalGainsTaxRate
       }
 
-      // Spending ceiling: an absolute amount in today's money, tracking
-      // inflation and the same age curve as the other absolute inputs (so it
-      // can never bind below the Merton floor). What is not withdrawn stays
-      // invested, which in a VP account defers the capital gains tax on those
-      // gains indefinitely — the point of the cap is to stop percentage-based
-      // rules from realizing more than will actually be spent.
-      if (params.withdrawalCap > 0) {
-        const cap = params.withdrawalCap * cumulativeInflation
-          * spendingMultiplier(params.startYear + i, params.ageAdjustedSpending)
-        if (withdrawn > cap) {
-          withdrawn = cap
-          // The ratchet floor must follow the cap down, otherwise it stays
-          // above the ceiling and pins every later year to the cap regardless
-          // of how the portfolio performs.
-          if (ratchetFloor > cap) ratchetFloor = cap
-        }
-      }
+      withdrawn =
+        arvaWithdrawal(realBalance, needByYear[i]!, extraByYear[i]!, schedule, i, share) *
+        cumulativeInflation
 
-      // You cannot withdraw money that is not there. Without this the absolute
-      // withdrawal components (inflation-based, ratchet floor) keep paying out
-      // of a depleted portfolio: balances go negative, and when the balance
+      // You cannot withdraw money that is not there. Without this the need
+      // keeps being paid out of a depleted portfolio: balances go negative, and when the balance
       // hits exactly zero the withdrawn/amount fraction becomes Infinity and
       // poisons every downstream statistic with NaN.
       withdrawn = Math.max(0, Math.min(withdrawn, amount))
@@ -410,7 +288,10 @@ export function runSingleSimulation(
           const withdrawalFraction = proportionalWithdrawal / position.value
 
           if (!isISK) {
-            withdrawalGain += schablonGain(proportionalWithdrawal, position.costBasis * withdrawalFraction)
+            withdrawalGain += schablonGain(
+              proportionalWithdrawal,
+              position.costBasis * withdrawalFraction,
+            )
           }
 
           position.value -= proportionalWithdrawal
@@ -620,8 +501,6 @@ export function runSingleSimulation(
     snapshotTaxationDegrees.push(taxationDegree)
     snapshotIskTaxRates.push(currentIskTaxRate)
 
-    // Track yearly amount for profit calculation
-    yearlyAmounts.push(amount)
   }
 
   // Handle final drawdown period if still in drawdown
@@ -676,9 +555,21 @@ export function quickselect(arr: number[], k: number, lo: number, hi: number): n
   while (lo < hi) {
     // Median-of-three pivot to avoid worst-case O(N²) on sorted input.
     const mid = (lo + hi) >> 1
-    if (arr[mid]! < arr[lo]!) { const t = arr[lo]!; arr[lo] = arr[mid]!; arr[mid] = t }
-    if (arr[hi]! < arr[lo]!) { const t = arr[lo]!; arr[lo] = arr[hi]!; arr[hi] = t }
-    if (arr[hi]! < arr[mid]!) { const t = arr[mid]!; arr[mid] = arr[hi]!; arr[hi] = t }
+    if (arr[mid]! < arr[lo]!) {
+      const t = arr[lo]!
+      arr[lo] = arr[mid]!
+      arr[mid] = t
+    }
+    if (arr[hi]! < arr[lo]!) {
+      const t = arr[lo]!
+      arr[lo] = arr[hi]!
+      arr[hi] = t
+    }
+    if (arr[hi]! < arr[mid]!) {
+      const t = arr[mid]!
+      arr[mid] = arr[hi]!
+      arr[hi] = t
+    }
     const pivot = arr[mid]!
 
     let i = lo
@@ -688,8 +579,11 @@ export function quickselect(arr: number[], k: number, lo: number, hi: number): n
       while (arr[i]! < pivot) i++
       while (arr[j]! > pivot) j--
       if (i <= j) {
-        const t = arr[i]!; arr[i] = arr[j]!; arr[j] = t
-        i++; j--
+        const t = arr[i]!
+        arr[i] = arr[j]!
+        arr[j] = t
+        i++
+        j--
       }
     }
     // Recurse into the partition containing k.
@@ -751,8 +645,6 @@ export function simulateAll(
   paramSets: InputParameters[],
   labels: string[],
   onProgress: ((progress: number) => void) | undefined,
-  bootstrapPayload?: BootstrapPayload,
-  factorModelPayload?: FactorModelPayload,
 ): SimulationResults {
   const allResults: SingleSimulationResult[][] = []
 
@@ -763,7 +655,7 @@ export function simulateAll(
 
     for (let i = 0; i < params.simulationCount; i++) {
       const params2 = { ...params, seed: params.seed + i.toString() }
-      results.push(runSingleSimulation(params2, bootstrapPayload, factorModelPayload))
+      results.push(runSingleSimulation(params2))
 
       if (onProgress && i % 100 === 0) {
         const overallProgress =
