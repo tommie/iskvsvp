@@ -513,14 +513,14 @@ export function runSingleSimulation(
     // iterating to a fixed point. Sitting at an unrealized loss does not reduce
     // the cash the bill needs, so u is floored at zero.
     if (!isISK && tax > 0 && amount > 0) {
-      // Per position, because the schablon cap on the gain applies per sale and
-      // a loss in one holding does not offset a gain in another here: only the
-      // gain the sale would actually realize raises the cash needed.
+      // The sale spreads across all holdings, so what it realizes is the
+      // netted sum of their gains and losses. The schablon floor on the basis
+      // still applies per holding, because it is per sale.
       const unrealizedGain = assetPositions.reduce(
-        (sum, pos) => sum + Math.max(0, schablonGain(pos.value, pos.costBasis)),
+        (sum, pos) => sum + schablonGain(pos.value, pos.costBasis),
         0,
       )
-      const unrealizedFraction = unrealizedGain / amount
+      const unrealizedFraction = Math.max(0, unrealizedGain / amount)
       const denominator = 1 - unrealizedFraction * params.capitalGainsTaxRate
       if (denominator > 0) {
         tax = Math.min(tax / denominator, amount)
@@ -552,11 +552,12 @@ export function runSingleSimulation(
     if (isISK) {
       liquidValue = amount
     } else {
-      // The schablon cap applies per security, so sum the latent tax per position.
-      const latentTax = assetPositions.reduce(
-        (sum, pos) => sum + capitalGainsTax(pos.value, pos.costBasis, params.capitalGainsTaxRate),
-        0,
-      )
+      // Liquidating realizes everything in one year, so gains and losses net
+      // (kvittning) and a net unrealized loss is a deferred tax asset. The
+      // schablon floor on the basis applies per holding, since it is per sale.
+      const latentTax =
+        assetPositions.reduce((sum, pos) => sum + schablonGain(pos.value, pos.costBasis), 0) *
+        params.capitalGainsTaxRate
       liquidValue = amount - latentTax
     }
 

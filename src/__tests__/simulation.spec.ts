@@ -370,7 +370,10 @@ describe('schablonmetoden capital gains tax', () => {
 
     const last = params.yearsLater - 1
     const ratio = result.periodData.tax[last]! / result.periodData.withdrawal[last]!
-    expect(ratio).toBeCloseTo(0.24, 3)
+    // 24% of the proceeds is the tax on the withdrawal itself. The year's bill
+    // is then paid by selling holdings that are 80% gain, which realizes more
+    // gain: G = tax / (1 - 0.8 * 0.3).
+    expect(ratio).toBeCloseTo(0.24 / (1 - 0.8 * 0.3), 3)
   })
 })
 

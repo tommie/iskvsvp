@@ -104,9 +104,10 @@ src/
 
 ### VP Capital Gains Tax
 
-- Computed by `capitalGainsTax()` in `simulation.ts` for withdrawals, rebalancing sales and the latent tax in `liquidValue`.
-- Applies schablonmetoden unconditionally: acquisition cost is `max(actual, 20% of proceeds)`, capping the effective rate at 24% of proceeds. A rational investor always picks the better basis.
-- Applied per position since the schablon is per security. Whether it applies to fund units (not just shares) is unverified.
+- `schablonGain(proceeds, basis)` is `proceeds - max(basis, 20% of proceeds)`, **signed**: schablonmetoden caps the gain per sale, but a loss stays a loss so it can net (kvittning) with gains and the schablonintäkt. A rational investor always picks the better basis.
+- Withdrawals and rebalancing accumulate it into `withdrawalGain`/`rebalancingGain`. The gross-up for the sale that pays the bill and the latent tax in `liquidValue` both use the **netted sum across positions** (the gross-up floors it at 0; the liquidation does not, so a net unrealized loss is a deferred tax asset). The schablon floor is per position because it is per sale.
+- `capitalGainsTax(proceeds, basis, rate)` is the unnetted, non-negative form of one sale, kept for single-sale checks.
+- Whether the schablon applies to fund units (not just shares) is unverified.
 - TODO: model deferred liquidation (heirs inherit basis) as a discounted/perpetuity terminal value instead of a full latent tax in `liquidValue`.
 
 ## State Management
