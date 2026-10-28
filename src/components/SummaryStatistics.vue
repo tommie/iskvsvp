@@ -204,6 +204,35 @@ const getCellStyle = (
   return { backgroundColor: color + '33' } // Add 20% opacity (33 in hex)
 }
 
+const convergence = computed(() => simulationResults.value?.convergence)
+
+// An uncertainty, with the % on the number. Below one per cent the exact figure
+// is noise: it would say 0,4 where all anyone should take from it is that the
+// estimate is tight.
+const formatUncertainty = (halfWidth: number): string =>
+  halfWidth < 0.01 ? 'mindre än 1 %' : `±${formatPercent(halfWidth)}`
+
+// Why the figures are less certain than asked for, or null when they are not.
+const precisionWarning = computed(() => {
+  const c = convergence.value
+  if (!c || c.converged) return null
+  const survival = Math.max(...c.survivalHalfWidth)
+  const difference = Math.max(...c.differenceHalfWidth)
+  const reached =
+    `Osäkerheten är ${formatUncertainty(survival)} i överlevnad` +
+    (hasMultipleScenarios.value
+      ? ` och ${formatUncertainty(difference)} i skillnaden mellan scenarierna`
+      : '') +
+    `; målet var ±${formatPercent(c.targetSurvivalHalfWidth)}` +
+    (hasMultipleScenarios.value ? ` respektive ±${formatPercent(c.targetDifferenceHalfWidth)}` : '') +
+    '.'
+  // Not converged can only mean the time ran out; the other way to stop is precision.
+  return (
+    `Hann bara ${c.paths.toLocaleString('sv-SE')} simuleringar på ` +
+    `${Math.round(c.timeBudgetMs / 1000)} s. ${reached} Siffrorna kan ändras om du kör igen.`
+  )
+})
+
 const hasResults = computed(() => statistics.value.length > 0)
 const hasMultipleScenarios = computed(() => statistics.value.length > 1)
 </script>
@@ -211,11 +240,17 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
 <template>
   <div v-if="hasResults">
     <p class="text-muted mb-3">
-      Statistik över alla simuleringar.
+      Statistik över alla simuleringar<span v-if="convergence">
+        ({{ convergence.paths.toLocaleString('sv-SE') }} st)</span
+      >.
       <span v-if="hasMultipleScenarios">
         Celler med bästa värdet för varje mått och percentil är markerade med färg.</span
       >
     </p>
+
+    <div v-if="precisionWarning" class="alert alert-warning" role="alert">
+      {{ precisionWarning }}
+    </div>
 
     <!-- Outcome Probabilities Table -->
     <div class="table-responsive mb-4">
@@ -228,15 +263,23 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
         </thead>
         <tbody class="table-group-divider">
           <tr>
-            <th scope="row">Mer än noll</th>
+            <th scope="row">Behovet täcks hela tiden</th>
             <td v-for="(_, idx) in labels" :key="idx">
-              {{ formatPercent(outcomeProbabilities[idx]?.successRate ?? 0) }}
+              {{ formatPercent(outcomeProbabilities[idx]?.survivalRate ?? 0) }}
             </td>
           </tr>
           <tr>
             <th scope="row">Går bättre än jämnt upp (reellt)</th>
             <td v-for="(_, idx) in labels" :key="idx">
               {{ formatPercent(outcomeProbabilities[idx]?.breakEvenRate ?? 0) }}
+            </td>
+          </tr>
+          <tr v-if="convergence" class="text-muted small">
+            <th scope="row" class="fw-normal">
+              Osäkerhet i överlevnaden (95 %)
+            </th>
+            <td v-for="(_, idx) in labels" :key="idx">
+              {{ formatUncertainty(convergence.survivalHalfWidth[idx] ?? 0) }}
             </td>
           </tr>
         </tbody>

@@ -1,3 +1,5 @@
+import type { Convergence } from './precision'
+
 export interface SimulationAsset {
   // Catalogue entry (src/assets.ts) this asset came from, if any. Correlations
   // for an added asset are looked up by it; absent for a hand-rolled asset.
@@ -18,7 +20,6 @@ export interface InputParameters {
   initialCapital: number
   startYear: number
   yearsLater: number
-  simulationCount: number
 
   assets: SimulationAsset[]
   assetCorrelationMatrix: number[][] // Correlation matrix between assets (symmetric, diagonal = 1)
@@ -94,8 +95,9 @@ export interface FinalAssetWeights {
 
 // Outcome probabilities for a scenario
 export interface OutcomeProbabilities {
-  // Probability of ending with positive balance (not running out of money)
-  successRate: number
+  // Probability that the need was paid in full in every year. Ending at zero
+  // having paid it counts as surviving: the withdrawal rule aims at that.
+  survivalRate: number
   // Probability of ending with at least initial capital (inflation-adjusted)
   breakEvenRate: number
 }
@@ -115,6 +117,9 @@ export interface SimulationResults {
 
   // Outcome probabilities for each scenario
   outcomeProbabilities: OutcomeProbabilities[]
+
+  // How many paths were run and how precisely survival is known
+  convergence: Convergence
 }
 
 // Asset property parameter format: "assets.weight.0", etc.

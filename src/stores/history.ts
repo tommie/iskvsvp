@@ -13,6 +13,8 @@ export interface HistoryScenarioSummary {
 
 export interface HistorySummary {
   scenarios: HistoryScenarioSummary[]
+  // Paths actually run; the parameters only say how many were allowed.
+  paths: number
 }
 
 export interface HistoryRecord {
@@ -35,7 +37,7 @@ function buildSummary(results: SimulationResults): HistorySummary {
       maxDrawdown: stats.median.snapshots.maxDrawdown[finalPeriod] ?? 0,
     }
   })
-  return { scenarios }
+  return { scenarios, paths: results.convergence.paths }
 }
 
 export const useHistoryStore = defineStore('history', () => {

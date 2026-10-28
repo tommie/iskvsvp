@@ -71,7 +71,6 @@ describe('asset classes in the URL', () => {
     initialCapital: 5_000_000,
     startYear: 45,
     yearsLater: 36,
-    simulationCount: 1000,
     assets: [
       {
         presetId: 'global-equity',

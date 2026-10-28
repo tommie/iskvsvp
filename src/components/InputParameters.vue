@@ -28,7 +28,6 @@ const {
   capitalGainsTax,
   startYear,
   yearsLater,
-  simulationCount,
   isRunning,
   progress,
   isAddToTableMode,
@@ -710,19 +709,6 @@ const maxWithdrawalRate = computed(() => {
                   />
                   <span class="input-group-text">år</span>
                 </div>
-              </div>
-              <div class="col-12">
-                <label class="form-label">Antal simuleringar</label>
-                <input
-                  type="number"
-                  :class="getInputClass('simulationCount')"
-                  v-model.number="simulationCount"
-                  min="100"
-                  max="100000"
-                  step="100"
-                  :disabled="isFieldDisabled('simulationCount')"
-                  @click="handleParameterClick('simulationCount', $event)"
-                />
               </div>
             </div>
           </div>

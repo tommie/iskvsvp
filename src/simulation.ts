@@ -8,12 +8,24 @@ import type {
   FinalAssetWeights,
 } from './types'
 import { arvaWithdrawal, reserveSchedule, returnLaw } from './arva'
+import {
+  BATCH_PATHS,
+  DEFAULT_TIME_BUDGET_MS,
+  MIN_PATHS,
+  SurvivalTally,
+  TARGET_DIFFERENCE_HALF_WIDTH,
+  TARGET_SURVIVAL_HALF_WIDTH,
+  type Convergence,
+  type StopReason,
+} from './precision'
 import { realReturnSampler } from './returns'
 
 // Extended result that includes final asset weights and cumulative inflation
 export interface SingleSimulationResult extends SimulationResult<number> {
   finalAssetWeights: number[]
   finalCumulativeInflation: number
+  // Whether the need was paid in full in every withdrawal year.
+  needFunded: boolean
 }
 
 const ISK_TAX_RATE_MIN = 0.0125
@@ -132,6 +144,7 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
   let maxDrawdownPeriod = 0
 
   let cumulativeInflation = 1
+  let needFunded = true
 
   // Arrays to store period data (per-period values)
   const periodWithdrawals: number[] = []
@@ -250,6 +263,11 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
       // hits exactly zero the withdrawn/amount fraction becomes Infinity and
       // poisons every downstream statistic with NaN.
       withdrawn = Math.max(0, Math.min(withdrawn, amount))
+
+      // Survival is the need paid in full. Ending the plan at zero having paid
+      // it is not a failure, which is what the rule aims at in the last year.
+      // The tolerance is rounding noise, not slack.
+      if (withdrawn < needByYear[i]! * cumulativeInflation * (1 - 1e-9)) needFunded = false
 
       withdrawalRate = amount > 0 ? withdrawn / amount : 0
     }
@@ -544,6 +562,7 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
     },
     finalAssetWeights: finalWeights,
     finalCumulativeInflation: cumulativeInflation,
+    needFunded,
   }
 }
 
@@ -641,31 +660,72 @@ function calculateStats(values: number[]): {
  * Run Monte Carlo simulations for multiple parameter sets.
  * Returns aggregated statistics and median samples.
  */
+export interface SimulateOptions {
+  /** Wall-clock budget in milliseconds; the run stops and says so when it is spent. */
+  timeBudgetMs?: number
+  /** Clock, injectable so a test can spend the budget without waiting for it. */
+  now?: () => number
+}
+
 export function simulateAll(
   paramSets: InputParameters[],
   labels: string[],
   onProgress: ((progress: number) => void) | undefined,
+  options: SimulateOptions = {},
 ): SimulationResults {
-  const allResults: SingleSimulationResult[][] = []
+  const timeBudgetMs = options.timeBudgetMs ?? DEFAULT_TIME_BUDGET_MS
+  const now = options.now ?? (() => performance.now())
+  const startedAt = now()
 
-  // Run simulations for each parameter set
-  for (let setIdx = 0; setIdx < paramSets.length; setIdx++) {
-    const params = paramSets[setIdx]!
-    const results: SingleSimulationResult[] = []
+  // Scenarios are run path by path, in step, because the difference between
+  // two scenarios is judged from the per-path pairs: path i meets the same seed
+  // in each. There is no limit on paths: precision or the time budget stops it.
+  const allResults: SingleSimulationResult[][] = paramSets.map(() => [])
+  const tally = new SurvivalTally(paramSets.length)
 
-    for (let i = 0; i < params.simulationCount; i++) {
-      const params2 = { ...params, seed: params.seed + i.toString() }
-      results.push(runSingleSimulation(params2))
-
-      if (onProgress && i % 100 === 0) {
-        const overallProgress =
-          ((setIdx * params.simulationCount + i) / (paramSets.length * params.simulationCount)) *
-          100
-        onProgress(overallProgress)
+  let stopReason: StopReason
+  for (;;) {
+    const batchEnd = tally.paths + BATCH_PATHS
+    while (tally.paths < batchEnd) {
+      const i = tally.paths
+      const funded: boolean[] = []
+      for (let setIdx = 0; setIdx < paramSets.length; setIdx++) {
+        const params = paramSets[setIdx]!
+        const result = runSingleSimulation({ ...params, seed: params.seed + i.toString() })
+        allResults[setIdx]!.push(result)
+        funded.push(result.needFunded)
       }
+      tally.add(funded)
     }
 
-    allResults.push(results)
+    const elapsed = now() - startedAt
+    if (onProgress) {
+      onProgress(Math.min(99, (elapsed / timeBudgetMs) * 100))
+    }
+
+    if (
+      tally.paths >= MIN_PATHS &&
+      tally.isPrecise(TARGET_SURVIVAL_HALF_WIDTH, TARGET_DIFFERENCE_HALF_WIDTH)
+    ) {
+      stopReason = 'precision'
+      break
+    }
+    if (elapsed >= timeBudgetMs) {
+      stopReason = 'time'
+      break
+    }
+  }
+
+  const convergence: Convergence = {
+    paths: tally.paths,
+    elapsedMs: now() - startedAt,
+    timeBudgetMs,
+    stopReason,
+    survivalHalfWidth: tally.survivalHalfWidth(),
+    differenceHalfWidth: tally.differenceHalfWidth(),
+    targetSurvivalHalfWidth: TARGET_SURVIVAL_HALF_WIDTH,
+    targetDifferenceHalfWidth: TARGET_DIFFERENCE_HALF_WIDTH,
+    converged: tally.isPrecise(TARGET_SURVIVAL_HALF_WIDTH, TARGET_DIFFERENCE_HALF_WIDTH),
   }
 
   if (onProgress) {
@@ -676,7 +736,7 @@ export function simulateAll(
   const statistics: SimulationStatistics<SimulationResult<number>>[] = []
   const medianSamples: SimulationResult<number>[] = []
   const finalAssetWeightsStats: FinalAssetWeights[] = []
-  const outcomeProbabilities: { successRate: number; breakEvenRate: number }[] = []
+  const outcomeProbabilities: { survivalRate: number; breakEvenRate: number }[] = []
 
   for (let setIdx = 0; setIdx < allResults.length; setIdx++) {
     const results = allResults[setIdx]!
@@ -991,7 +1051,7 @@ export function simulateAll(
 
     // Calculate outcome probabilities
     const initialCapital = params.initialCapital
-    let successCount = 0
+    let survivalCount = 0
     let breakEvenCount = 0
 
     for (const result of results) {
@@ -999,9 +1059,8 @@ export function simulateAll(
         result.snapshots.liquidValue[result.snapshots.liquidValue.length - 1] ?? 0
       const inflationAdjustedCapital = initialCapital * result.finalCumulativeInflation
 
-      // Success: ended with positive balance
-      if (finalLiquidValue > 0) {
-        successCount++
+      if (result.needFunded) {
+        survivalCount++
       }
 
       // Break-even: preserved at least initial capital in real terms
@@ -1011,7 +1070,7 @@ export function simulateAll(
     }
 
     outcomeProbabilities.push({
-      successRate: successCount / results.length,
+      survivalRate: survivalCount / results.length,
       breakEvenRate: breakEvenCount / results.length,
     })
   }
@@ -1022,5 +1081,6 @@ export function simulateAll(
     medianSamples,
     finalAssetWeights: finalAssetWeightsStats,
     outcomeProbabilities,
+    convergence,
   }
 }

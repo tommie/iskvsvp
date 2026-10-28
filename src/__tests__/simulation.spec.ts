@@ -4,6 +4,7 @@ import {
   runSingleSimulation,
   capitalGainsTax,
   quickselect,
+  simulateAll,
 } from '../simulation'
 import { DEFAULT_ASSET_CLASSES, DEFAULT_CORRELATIONS } from '../assets'
 import type { InputParameters } from '../types'
@@ -107,7 +108,6 @@ function makeParams(overrides: Partial<InputParameters> = {}): InputParameters {
     initialCapital: 1_000_000,
     startYear: 45,
     yearsLater: 36,
-    simulationCount: 1,
     assets: [{ name: 'A', weight: 1, expectedReturn: 0.05, volatility: 0.1 }],
     assetCorrelationMatrix: [[1]],
     assetRebalanceFrequency: 'annually',
@@ -468,6 +468,82 @@ describe('agreement with the Kapitalplanerare', () => {
     expect(m.survival).toBeLessThan(0.89)
     expect(m.spent / 1e6).toBeGreaterThan(10.5)
     expect(m.spent / 1e6).toBeLessThan(11.1)
+  })
+})
+
+describe('how many paths simulateAll runs', () => {
+  // Flat, certain assets: every path is the same, so survival is known exactly
+  // and the only question is how soon the intervals are narrow enough.
+  const certain = (overrides: Partial<InputParameters> = {}) =>
+    makeParams({
+      ...makePayload(0),
+      withdrawalNeed: 10_000,
+      withdrawalExtra: 0,
+      yearsLater: 10,
+      ...overrides,
+    })
+
+  it('stops as soon as survival and the scenario difference are known well enough', () => {
+    const r = simulateAll([certain(), certain({ iskTaxRate: 0 })], ['VP', 'ISK'], undefined)
+    expect(r.convergence.stopReason).toBe('precision')
+    expect(r.convergence.converged).toBe(true)
+    // The first check is after the minimum number of paths.
+    expect(r.convergence.paths).toBeLessThan(1000)
+    expect(r.statistics).toHaveLength(2)
+    expect(r.outcomeProbabilities[0]!.survivalRate).toBe(1)
+  })
+
+  it('keeps going while the difference between scenarios is not yet resolved', () => {
+    // The second scenario withdraws more than the first, so it fails in some
+    // paths and not others, and the pairing takes more paths to pin down.
+    const volatile = (need: number) =>
+      certain({
+        withdrawalNeed: need,
+        assets: [{ name: 'A', weight: 1, expectedReturn: 0.04, volatility: 0.18 }],
+        assetCorrelationMatrix: [[1]],
+        yearsLater: 30,
+      })
+    const r = simulateAll([volatile(40_000), volatile(41_000)], ['a', 'b'], undefined)
+    expect(r.convergence.paths).toBeGreaterThan(1000)
+    expect(r.convergence.differenceHalfWidth[1]!).toBeGreaterThan(0)
+  })
+
+  it('says so when the time budget runs out before the intervals are narrow', () => {
+    let t = 0
+    const slowClock = () => (t += 2000)
+    const volatile = certain({
+      assets: [{ name: 'A', weight: 1, expectedReturn: 0.04, volatility: 0.18 }],
+      assetCorrelationMatrix: [[1]],
+      withdrawalNeed: 40_000,
+      yearsLater: 30,
+    })
+    const r = simulateAll([volatile], ['a'], undefined, { timeBudgetMs: 5000, now: slowClock })
+    expect(r.convergence.stopReason).toBe('time')
+    expect(r.convergence.converged).toBe(false)
+    expect(r.convergence.paths).toBeLessThan(2000)
+  })
+
+  it('gives the same answer twice when it stops on precision, so a shared link reproduces', () => {
+    const volatile = certain({
+      assets: [{ name: 'A', weight: 1, expectedReturn: 0.04, volatility: 0.18 }],
+      assetCorrelationMatrix: [[1]],
+      withdrawalNeed: 20_000,
+      yearsLater: 30,
+      seed: 'repeat',
+    })
+    const a = simulateAll([volatile], ['a'], undefined)
+    const b = simulateAll([volatile], ['a'], undefined)
+    expect(a.convergence.paths).toBe(b.convergence.paths)
+    expect(a.outcomeProbabilities).toEqual(b.outcomeProbabilities)
+  })
+
+  it('counts a plan that ends at zero having paid its need as surviving', () => {
+    // 5 years of 200 000 out of 1 000 000, flat: the last withdrawal empties it.
+    const r = run(certain({ withdrawalNeed: 200_000, yearsLater: 5 }))
+    expect(r.needFunded).toBe(true)
+    expect(r.snapshots.capital[4]!).toBeCloseTo(0, 6)
+    // One year more than the money covers is a failure.
+    expect(run(certain({ withdrawalNeed: 200_000, yearsLater: 6 })).needFunded).toBe(false)
   })
 })
 

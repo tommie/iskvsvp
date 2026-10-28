@@ -65,7 +65,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
   const capitalGainsTax = ref(0.3)
   const startYear = ref(45)
   const yearsLater = ref(36)
-  const simulationCount = ref(1000)
   const seed = ref<string | undefined>(undefined)
 
   // Scenario table state
@@ -310,7 +309,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
       initialCapital: initialCapital.value,
       startYear: startYear.value,
       yearsLater: yearsLater.value,
-      simulationCount: simulationCount.value,
       assets: assets.value,
       assetCorrelationMatrix: assetCorrelationMatrix.value,
       assetRebalanceFrequency: assetRebalanceFrequency.value,
@@ -338,7 +336,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     initialCapital: initialCapital.value,
     startYear: startYear.value,
     yearsLater: yearsLater.value,
-    simulationCount: simulationCount.value,
     assets: assets.value,
     assetCorrelationMatrix: assetCorrelationMatrix.value,
     assetRebalanceFrequency: assetRebalanceFrequency.value,
@@ -503,7 +500,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     initialCapital.value = params.initialCapital
     startYear.value = params.startYear
     yearsLater.value = params.yearsLater
-    simulationCount.value = params.simulationCount
     assets.value = params.assets
     assetCorrelationMatrix.value = params.assetCorrelationMatrix
     assetRebalanceFrequency.value = params.assetRebalanceFrequency
@@ -557,8 +553,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
                 initialCapital.value = urlParams.initialCapital
               if (urlParams.startYear !== undefined) startYear.value = urlParams.startYear
               if (urlParams.yearsLater !== undefined) yearsLater.value = urlParams.yearsLater
-              if (urlParams.simulationCount !== undefined)
-                simulationCount.value = urlParams.simulationCount
               if (urlParams.assets !== undefined) assets.value = urlParams.assets
               if (urlParams.assetCorrelationMatrix !== undefined)
                 assetCorrelationMatrix.value = urlParams.assetCorrelationMatrix
@@ -624,7 +618,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
         capitalGainsTax,
         startYear,
         yearsLater,
-        simulationCount,
         seed,
       ],
       () => {
@@ -678,7 +671,6 @@ export const useCalculatorStore = defineStore('calculator', () => {
     capitalGainsTax,
     startYear,
     yearsLater,
-    simulationCount,
     seed,
 
     // State

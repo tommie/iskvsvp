@@ -435,7 +435,7 @@ const positionPopover = (popoverId: string, anchorId: string) => {
                 <span class="param-value-group">
                   <span class="param-value">
                     {{ record.parameters.yearsLater }} år,
-                    {{ formatNumber(record.parameters.simulationCount) }} gånger
+                    {{ formatNumber(record.summary.paths) }} gånger
                   </span>
                 </span>
               </div>

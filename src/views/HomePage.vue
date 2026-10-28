@@ -12,7 +12,7 @@ import PortfolioComposition from '../components/PortfolioComposition.vue'
 import SimulationHistory from '../components/SimulationHistory.vue'
 
 const store = useCalculatorStore()
-const { simulationCount, simulationResults, showDetailedStatistics } = storeToRefs(store)
+const { simulationResults, showDetailedStatistics } = storeToRefs(store)
 
 const activeTab = ref('statistics')
 
@@ -177,7 +177,7 @@ watch(simulationResults, (newResults) => {
         Denna sida använder Monte Carlo-metoder för att modellera osäkerhet i avkastning och
         inflation. Årlig avkastning, inflation och förändring i ISK-schabloninkomstsats modelleras som
         normalfördelningar. Resultaten visar statistik över
-        {{ simulationCount.toLocaleString('sv-SE') }} simuleringar. Den kan inte spå i framtiden,
+        många simuleringar, så många som behövs för att överlevnaden ska bli känd. Den kan inte spå i framtiden,
         men kan användas för att jämföra olika investeringsmodeller.
       </p>
     </footer>

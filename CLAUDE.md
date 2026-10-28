@@ -30,6 +30,7 @@ src/
 ├── assets.ts                    - Asset-class catalogue and its correlations
 ├── returns.ts                   - Correlated lognormal annual return sampling
 ├── arva.ts                      - Withdrawal rule: ARVA on the surplus
+├── precision.ts                 - When enough paths have run: survival and scenario-difference intervals
 ├── simulation.ts                - Monte Carlo simulation logic
 ├── types.ts                     - TypeScript interfaces
 └── utils/
@@ -75,6 +76,16 @@ src/
 - The surplus is spread in the shape drawn (`annuity[t]` = discounted remaining extra over year t's own), so a flat extra reduces to the plain count of discounted payments.
 - Rebuilding a plan one year later from the balance reached pays what the original would have (tested). The bequest is therefore an absolute amount in today's money, not a share of initial capital, which would rescale on restart.
 - Cross-checked against the planner's density propagation on its default plan (`simulation.spec.ts`, "agreement with the Kapitalplanerare"): need-only survival ~90%, dynamic ~86%, expected spending 7.8 and 10.8 mkr.
+
+### Number of Simulations (`precision.ts`, `simulateAll`)
+
+- There is no setting for the number of paths. `simulateAll` runs all scenarios path by path in batches of 250, and from 500 paths on stops as soon as survival is known to ±1 point in every scenario **and** each scenario's survival difference from the first is known to ±1 point. A wall-clock budget of 5 s (`DEFAULT_TIME_BUDGET_MS`) stops it regardless, so a limit on paths would only be a second way to stop short.
+- **Survival** is the share of paths in which the need was paid in full every year (`needFunded`). Ending at zero having paid it is surviving, because the rule aims at that; the old "ended above zero" measure would have counted the rule's own target as failure.
+- Intervals are for proportions, not a t-interval: Wilson for each scenario's survival (Wald collapses to zero at 0 and 1, where a comfortable plan sits), and for the difference the paired per-path outcomes (-1, 0, +1). Scenarios share seeds (`seed + i`), so path i meets the same returns in every scenario and the paired variance is far below the unpaired. One discordant path is added to the count before forming the variance, otherwise "none seen yet" reads as "perfectly measured".
+- A t-test was considered and rejected for these outputs; it fits means and paired differences of continuous quantities (use log wealth), not 0/1 outcomes. Percentiles would need an order-statistic interval or a bootstrap; not done.
+- The difference target is ±1 point, not ±0.5: half a point took more than 20 000 paths on a 3-point ISK/VP gap, for no change in what anyone would do. Default ISK vs VP stops at about 6 000 paths in 1.3 s; a harder plan (65% survival) at about 15 000 in 3 s.
+- `convergence` on the results says how it stopped (`precision` | `time`) and the achieved half-widths; the statistics tab warns when `converged` is false. Stopping on precision is deterministic in the seed, so a shared link reproduces it; stopping on time is not.
+- The budget covers the path loop; the percentile statistics computed afterwards are extra.
 
 ### Tax Model (`simulation.ts`, step 5)
 

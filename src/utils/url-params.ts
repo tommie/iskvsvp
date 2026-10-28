@@ -15,7 +15,6 @@ const PARAM_KEYS: Record<string, string> = {
   initialCapital: 'ic',
   startYear: 'sy',
   yearsLater: 'yl',
-  simulationCount: 'sc',
   assets: 'pa',
   assetCorrelationMatrix: 'cm',
   assetRebalanceFrequency: 'rb',
@@ -495,7 +494,6 @@ export function encodeParamsToUrl(
   query.ir = params.inflationRate.toString()
   query.is = params.inflationStdDev.toString()
   query.vft = params.vpWealthTaxRate.toString()
-  query.sc = params.simulationCount.toString()
 
   // Encode assets as multiple pa= parameters
   if (params.assets.length > 0) {
@@ -592,7 +590,6 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   const ir = parseNum('ir')
   const is = parseNum('is')
   const vft = parseNum('vft')
-  const sc = parseNum('sc')
   const seed = getString('s')
 
   if (ic !== undefined) params.initialCapital = ic
@@ -601,7 +598,6 @@ export function decodeParamsFromUrl(query: LocationQuery): Partial<InputParamete
   if (ir !== undefined) params.inflationRate = ir
   if (is !== undefined) params.inflationStdDev = is
   if (vft !== undefined) params.vpWealthTaxRate = vft
-  if (sc !== undefined) params.simulationCount = sc
   if (seed) params.seed = seed
 
   // Parse assets from multiple pa= parameters

@@ -34,7 +34,6 @@ const parameterLabels: Record<string, string> = {
   initialCapital: 'Startkapital',
   startYear: 'Ålder vid start',
   yearsLater: 'Antal år',
-  simulationCount: 'Antal simuleringar',
   assetRebalanceFrequency: 'Ombalansering',
   withdrawalNeed: 'Behov',
   withdrawalExtra: 'Extra',
@@ -135,7 +134,6 @@ function parseValue(param: ScenarioParameter, inputValue: string): ScenarioValue
     param === 'initialCapital' ||
     param === 'startYear' ||
     param === 'yearsLater' ||
-    param === 'simulationCount' ||
     param === 'withdrawalNeed' ||
     param === 'withdrawalExtra' ||
     param === 'bequestAmount'
