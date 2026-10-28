@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import seedrandom from 'seedrandom'
 
 import { normalQuadrature } from '../planner/quadrature'
-import { portfolioMoments, runPlanner } from '../planner/propagate'
+import { bequestTarget, portfolioMoments, runPlanner } from '../planner/propagate'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
 import { planYears } from '../planner/types'
 import type { CashflowYear, PlannerParameters, WealthDistribution } from '../planner/types'
@@ -465,6 +465,16 @@ describe('runPlanner', () => {
       expect(result.needRun.outcomes[0]!.yearLabel).toBe(2026)
       expect(result.needRun.outcomes[15]!.yearLabel).toBe(2041)
       expect(result.adaptiveRun.withdrawals[3]!.yearLabel).toBe(2029)
+    })
+
+    it('keeps a bequest target the same sum when the plan is restarted from another balance', () => {
+      // Advancing the start and entering the balance reached must not turn a
+      // sum chosen to be left behind into a different one, which a share of the
+      // starting capital would.
+      const p = params({ bequestAmount: 2_000_000, initialCapital: 5_000_000 })
+      expect(bequestTarget(p)).toBe(2_000_000)
+      expect(bequestTarget({ ...p, initialCapital: 3_100_000 })).toBe(2_000_000)
+      expect(bequestTarget({ ...p, bequestAmount: -5 })).toBe(0)
     })
 
     it('refuses an end that is not a whole number of years after the start', () => {

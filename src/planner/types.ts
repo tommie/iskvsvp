@@ -101,21 +101,20 @@ export interface PlannerParameters {
   inflationRate: number
 
   /**
-   * Real capital the plan should still hold at the horizon, as a fraction of
-   * `initialCapital`. 0 means the plan may be spent down to nothing.
+   * Real capital the plan should still hold at the horizon, in today's money.
+   * 0 means the plan may be spent down to nothing.
    *
-   * A share rather than an amount because that is the question a household
-   * actually has an opinion on — "leave the capital intact", "leave half" —
-   * and because it is the form that survives editing the plan: rescaling the
-   * starting capital, or applying the extra solver's multiplier, leaves the
-   * intent alone instead of turning it into a different target.
+   * An amount rather than a share of `initialCapital`, so that the target means
+   * the same thing when the plan is rebuilt later: advancing `startYear` and
+   * entering the balance reached would otherwise rescale a share-of-start
+   * target to a different number of kronor. The household chose a sum to leave
+   * behind, and that sum does not move with where the plan starts.
    *
    * Measured **net of the deferred capital gains tax**, like the Slutkapital
    * table's default view: an AF balance owes its heirs' tax bill, so only the
    * after-tax figure is what is actually left behind, and only on that basis is
    * the same target the same thing in an ISK and an AF. Both sides are real, so
-   * "100%" means preserving the purchasing power of the starting capital, not
-   * its kronor.
+   * the target keeps its purchasing power rather than its kronor.
    *
    * It changes what the *adaptive* run spends and nothing else. The rule holds
    * the target back as a commitment alongside the need, so only the
@@ -124,7 +123,7 @@ export interface PlannerParameters {
    * the need". `PropagationRun.bequestProbability` reports how often each run
    * reaches it, which is what makes the cost of the target visible.
    */
-  bequestRatio: number
+  bequestAmount: number
 
   /**
    * Consumption units the plan's household is worth, on SCB's scale: 1 for a

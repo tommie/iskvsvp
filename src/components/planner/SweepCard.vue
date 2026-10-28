@@ -166,7 +166,7 @@ watch(
 const planRate = computed(() => planExtraRate(parameters.value))
 
 /** Whether the plan set a bequest target, which decides what the second curve is. */
-const hasBequest = computed(() => parameters.value.bequestRatio > 0)
+const hasBequest = computed(() => parameters.value.bequestAmount > 0)
 
 /**
  * What the second probability curve measures.

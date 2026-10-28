@@ -21,7 +21,7 @@ const {
   afSchablonRate,
   initialCostBasisRatio,
   inflationRate,
-  bequestRatio,
+  bequestAmount,
   consumptionUnits,
   results,
 } = storeToRefs(store)
@@ -141,25 +141,25 @@ const portfolioSummary = computed(() => {
                 inkomstfördelningen läser startåret som ålder.
               </small>
             </div>
-            <!-- A share of startkapitalet rather than an amount: "behåll
-                 kapitalet" and "lämna hälften" is what a household has an
-                 opinion about, and a share survives att planen skalas om. -->
+            <!-- An amount rather than a share of startkapitalet, so it stays the
+                 same sum when the start year is moved and the balance reached
+                 is entered. -->
             <div class="col-6">
-              <label class="form-label" for="planner-bequest">Arvsmål (% av start)</label>
+              <label class="form-label" for="planner-bequest">Arvsmål (kr)</label>
               <input
                 id="planner-bequest"
                 type="number"
-                step="10"
+                step="100000"
                 min="0"
                 class="form-control"
-                :value="(bequestRatio * 100).toFixed(0)"
-                @change="onNumber($event, (v) => (bequestRatio = v), 100)"
+                :value="bequestAmount"
+                @change="onNumber($event, (v) => (bequestAmount = v))"
               />
               <div class="form-text">
-                <template v-if="bequestRatio > 0">
-                  Andel av startkapitalet som ska finnas kvar vid slutet, i dagens
-                  penningvärde<template v-if="isAF"> och efter latent skatt</template>. Bara det
-                  extra uttaget bromsas.
+                <template v-if="bequestAmount > 0">
+                  Kapital som ska finnas kvar vid slutet, i dagens penningvärde<template v-if="isAF">
+                    och efter latent skatt</template
+                  >. Bara det extra uttaget bromsas.
                 </template>
                 <template v-else>Planen får tömmas helt.</template>
               </div>

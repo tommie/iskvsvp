@@ -103,14 +103,11 @@ interface YearPolicy {
 }
 
 /**
- * The bequest target as an amount of real capital.
- *
- * Entered as a share of the starting capital, so this is the one place the two
- * are tied together. Both sides are real, so the target keeps its purchasing
- * power rather than its kronor.
+ * The bequest target as an amount of real capital. Entered in today's money, so
+ * it is the same sum wherever the plan starts and needs no conversion.
  */
 export function bequestTarget(params: PlannerParameters): number {
-  return Math.max(0, params.bequestRatio) * Math.max(0, params.initialCapital)
+  return Math.max(0, params.bequestAmount)
 }
 
 /**

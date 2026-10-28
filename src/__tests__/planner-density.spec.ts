@@ -119,7 +119,7 @@ describe('why the final-distribution marker is the median', () => {
       ...defaultPlannerParameters(),
       iskAllowance: 0,
       endYear: START_YEAR + years,
-      bequestRatio: 0.5,
+      bequestAmount: 4_500_000,
       initialCapital: 9_000_000,
       cashflow: buildCashflow(years, 200_000, 100_000),
     }

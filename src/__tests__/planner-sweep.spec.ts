@@ -284,7 +284,7 @@ describe('sweepPoints', () => {
     expect(without.bequestProbability).toBeUndefined()
     expect(keepProbability(without)).toBe(without.preservationProbability)
 
-    const withTarget = sweepPoints(plan({ bequestRatio: 0.5 })).next().value!
+    const withTarget = sweepPoints(plan({ bequestAmount: 3_000_000 })).next().value!
     expect(withTarget.bequestProbability).toBeDefined()
     expect(keepProbability(withTarget)).toBe(withTarget.bequestProbability)
     // Half the capital is an easier threshold than all of it, which is what
@@ -452,7 +452,7 @@ describe('levelMarks', () => {
     const comfortable = plan({
       initialCapital: 30_000_000,
       endYear: START_YEAR + 40,
-      bequestRatio: 0.3,
+      bequestAmount: 9_000_000,
       cashflow: buildCashflow(40, 300_000, 300_000),
     })
     const points = [...sweepPoints(comfortable)]

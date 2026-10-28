@@ -22,12 +22,12 @@ describe('planner URL encoding', () => {
 
   it('round-trips a bequest target', () => {
     const original = defaultPlannerParameters()
-    original.bequestRatio = 0.6
+    original.bequestAmount = 2_500_000
 
-    expect(decodePlan(encodePlan(original)).bequestRatio).toBe(0.6)
+    expect(decodePlan(encodePlan(original)).bequestAmount).toBe(2_500_000)
     // A link written before the target existed has to keep meaning what it did,
     // which is a plan that may be spent down to nothing.
-    expect(decodePlan('c=5000000').bequestRatio).toBe(0)
+    expect(decodePlan('c=5000000').bequestAmount).toBe(0)
   })
 
   it('round-trips a multi-phase cash flow', () => {

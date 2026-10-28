@@ -12,10 +12,10 @@ import { ADAPTIVE_COLOR, EXTRA_COLOR, NEED_COLOR } from './charts/shared'
 import { formatKr, formatPercent, formatRelative } from '../../planner/format'
 
 const store = usePlannerStore()
-const { results, cashflow, initialCapital, bequestRatio } = storeToRefs(store)
+const { results, cashflow, initialCapital, bequestAmount } = storeToRefs(store)
 
 /** The bequest target as an amount; 0 when the plan sets none. */
-const bequestTarget = computed(() => Math.max(0, bequestRatio.value) * initialCapital.value)
+const bequestTarget = computed(() => Math.max(0, bequestAmount.value))
 
 const logScale = ref(true)
 

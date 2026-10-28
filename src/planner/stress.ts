@@ -51,9 +51,8 @@ function scaleCashflow(
  * A negative need is a deposit, and stressing the need upward doubles the
  * deposit too — the dimension asks "what if I have this wrong by a factor of
  * two", and flipping the sign for deposits would ask something else. The
- * bequest target is not on the list: it is a share of the starting capital, and
- * stressing a target the household chose is stressing its preferences rather
- * than its assumptions.
+ * bequest target is not on the list: stressing a target the household chose is
+ * stressing its preferences rather than its assumptions.
  */
 export const STRESS_DIMENSIONS: StressDimension[] = [
   {

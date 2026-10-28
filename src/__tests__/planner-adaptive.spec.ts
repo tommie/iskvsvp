@@ -352,7 +352,7 @@ describe('adaptive extra withdrawals', () => {
         plan({
           startYear: 45,
           endYear: 45 + years,
-          bequestRatio,
+          bequestAmount: bequestRatio * 30_000_000,
           initialCapital: 30_000_000,
           iskTaxRate: 0.0355,
           cashflow: buildCashflow(years, 500_000, 500_000),
@@ -386,7 +386,7 @@ describe('adaptive extra withdrawals', () => {
       const result = runPlanner(
         plan({
           endYear: START_YEAR + years,
-          bequestRatio: 1,
+          bequestAmount: 30_000_000,
           initialCapital: 30_000_000,
           iskTaxRate: 0.0355,
           cashflow: buildCashflow(years, 500_000, 500_000),
@@ -453,7 +453,7 @@ describe('adaptive extra withdrawals', () => {
       runPlanner(
         plan({
           endYear: START_YEAR + years,
-          bequestRatio,
+          bequestAmount: bequestRatio * 1_000_000,
           initialCapital: 1_000_000,
           iskTaxRate: 0,
           cashflow: buildCashflow(years, 50_000, 100_000),
@@ -496,7 +496,7 @@ describe('adaptive extra withdrawals', () => {
         const run = runPlanner(
           plan({
             endYear: START_YEAR + 10,
-            bequestRatio: 0.5,
+            bequestAmount: 500_000,
             initialCapital: 1_000_000,
             iskTaxRate: 0,
             cashflow: buildCashflow(10, 50_000, 100_000),
@@ -534,7 +534,7 @@ describe('adaptive extra withdrawals', () => {
           plan({
             endYear: START_YEAR + years,
             gridNodes,
-            bequestRatio: 0.5,
+            bequestAmount: 500_000,
             initialCapital: 1_000_000,
             iskTaxRate: 0,
             cashflow: buildCashflow(years, 50_000, 100_000),
@@ -576,7 +576,7 @@ describe('adaptive extra withdrawals', () => {
         runPlanner(
           plan({
             endYear: START_YEAR + 30,
-            bequestRatio,
+            bequestAmount: bequestRatio * 6_000_000,
             initialCapital: 6_000_000,
             cashflow: buildCashflow(30, 250_000, 0),
           }),
@@ -602,7 +602,7 @@ describe('adaptive extra withdrawals', () => {
         runPlanner(
           plan({
             endYear: START_YEAR + years,
-            bequestRatio,
+            bequestAmount: bequestRatio * 6_000_000,
             initialCapital: 6_000_000,
             cashflow: buildCashflow(years, 200_000, 100_000),
           }),
@@ -627,7 +627,7 @@ describe('adaptive extra withdrawals', () => {
         plan({
           endYear: START_YEAR + years,
           accountType: 'AF',
-          bequestRatio: 0.5,
+          bequestAmount: 500_000,
           initialCapital: 1_000_000,
           initialCostBasisRatio: 0.5,
           afSchablonRate: 0,
