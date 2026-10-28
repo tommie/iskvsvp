@@ -141,6 +141,13 @@ export interface SimulationResults {
 
   // The constant withdrawal that survives, for comparison with the need
   bengen: BengenRate[]
+
+  // Accumulated real withdrawal over the whole plan, with a plan that failed
+  // counted as zero: what can be counted on, not what was received. A path that
+  // fails late still keeps most of its total, so counted as it was received the
+  // lower percentiles cannot tell it from a success. Unconditional, like the
+  // planner's percentiles, where ruined outcomes sit at zero.
+  withdrawalFailureAsZero: SimulationStatistics<number>[]
 }
 
 // Asset property parameter format: "assets.weight.0", etc.

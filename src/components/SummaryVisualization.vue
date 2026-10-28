@@ -43,7 +43,7 @@ const buildSeriesFromStats = (
     | 'totalValue'
     | 'liquidValue'
     | 'realWithdrawal'
-    | 'accumulatedRealWithdrawal'
+    | 'averageRealWithdrawal'
     | 'paidTax'
     | 'taxationDegree'
     | 'maxDrawdown'
@@ -54,16 +54,23 @@ const buildSeriesFromStats = (
   const labels = simulationResults.value.labels
   const finalPeriod = simulationResults.value.statistics[0]!.median.snapshots.liquidValue.length - 1
 
-  const getFieldValue = (stats: SimulationStatistics<SimulationResult<number>>, field: string) => {
+  // Years the average is taken over, as in the results table.
+  const withdrawalYears = Math.max(1, yearsLater.value - depositYears.value)
+
+  const getFieldValue = (
+    stats: SimulationStatistics<SimulationResult<number>>,
+    field: string,
+    counted: SimulationStatistics<number> | undefined,
+  ) => {
     switch (field) {
+      case 'averageRealWithdrawal':
+        return (counted?.median ?? 0) / withdrawalYears
       case 'totalValue':
         return stats.median.snapshots.totalValue[finalPeriod] ?? 0
       case 'liquidValue':
         return stats.median.snapshots.liquidValue[finalPeriod] ?? 0
       case 'realWithdrawal':
         return stats.median.periodData.withdrawalReal[finalPeriod] ?? 0
-      case 'accumulatedRealWithdrawal':
-        return stats.median.snapshots.withdrawalReal[finalPeriod] ?? 0
       case 'paidTax':
         return stats.median.snapshots.tax[finalPeriod] ?? 0
       case 'taxationDegree':
@@ -81,6 +88,7 @@ const buildSeriesFromStats = (
   const createDistributionFromStats = (
     stats: SimulationStatistics<SimulationResult<number>>,
     field: string,
+    counted: SimulationStatistics<number> | undefined,
   ) => {
     // Get percentile values for the field
     const getPercentileValue = (
@@ -88,14 +96,14 @@ const buildSeriesFromStats = (
       field: string,
     ) => {
       switch (field) {
+        case 'averageRealWithdrawal':
+          return (counted?.[percentile] ?? 0) / withdrawalYears
         case 'totalValue':
           return stats[percentile].snapshots.totalValue[finalPeriod] ?? 0
         case 'liquidValue':
           return stats[percentile].snapshots.liquidValue[finalPeriod] ?? 0
         case 'realWithdrawal':
           return stats[percentile].periodData.withdrawalReal[finalPeriod] ?? 0
-        case 'accumulatedRealWithdrawal':
-          return stats[percentile].snapshots.withdrawalReal[finalPeriod] ?? 0
         case 'paidTax':
           return stats[percentile].snapshots.tax[finalPeriod] ?? 0
         case 'taxationDegree':
@@ -109,9 +117,22 @@ const buildSeriesFromStats = (
       }
     }
 
-    const p10 = getPercentileValue('percentile10', field)
-    const median = getPercentileValue('median', field)
+    let p10 = getPercentileValue('percentile10', field)
+    let median = getPercentileValue('median', field)
     const p90 = getPercentileValue('percentile90', field)
+
+    // A failed plan counts as zero, so the lower percentiles of the average
+    // withdrawal are zero whenever more than that share of plans fail. The
+    // scale is logarithmic, so a zero cannot be drawn, and interpolating from
+    // it to the next percentile would invent a spread of positive values where
+    // the mass is actually at zero. Prune it: a percentile at zero takes the
+    // next one up, and what is left to draw is the part of the distribution
+    // that exists. If everything is zero there is nothing to draw, and
+    // drawChart says so rather than leaving the chart blank.
+    if (field === 'averageRealWithdrawal') {
+      if (median <= 0) median = p90
+      if (p10 <= 0) p10 = median
+    }
 
     // Create density distribution (more points near median, fewer at tails)
     const points: Array<{ value: number; density: number }> = []
@@ -143,7 +164,8 @@ const buildSeriesFromStats = (
   }
 
   return simulationResults.value.statistics.map((stats, i) => {
-    const dist = createDistributionFromStats(stats, field)
+    const counted = simulationResults.value?.withdrawalFailureAsZero[i]
+    const dist = createDistributionFromStats(stats, field, counted)
 
     // For withdrawal chart, include first year median as reference
     const firstYearMedian =
@@ -155,7 +177,7 @@ const buildSeriesFromStats = (
       label: labels[i] ?? `${i + 1}`,
       values: dist.map((p) => p.value),
       densities: dist.map((p) => p.density),
-      median: getFieldValue(stats, field),
+      median: getFieldValue(stats, field, counted),
       color: COLORS[i % COLORS.length]!,
       firstYearMedian,
     }
@@ -206,7 +228,27 @@ const drawChart = (
     allValues.push(referenceValue)
   }
 
-  if (allValues.length === 0) return
+  if (allValues.length === 0) {
+    // Nothing above zero to put on the scale. Say so under the title; a chart
+    // that silently renders blank reads as a bug.
+    svg
+      .append('text')
+      .attr('x', width / 2)
+      .attr('y', -20)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '16px')
+      .style('font-weight', 'bold')
+      .text(title)
+    svg
+      .append('text')
+      .attr('x', width / 2)
+      .attr('y', (series.length * rowHeight) / 2)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '13px')
+      .style('fill', '#6c757d')
+      .text('Inget utfall över noll att visa.')
+    return
+  }
 
   const xExtent = d3.extent(allValues) as [number, number]
 
@@ -353,10 +395,16 @@ const renderWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) =>
   drawChart(svg, container, series, 'Uttag reellt (sista året)', (d) => d3.format('.3s')(d) + ' kr')
 }
 
-const renderAccumulatedWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
+const renderAverageWithdrawalChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
   if (!simulationResults.value) return
-  const series = buildSeriesFromStats('accumulatedRealWithdrawal')
-  drawChart(svg, container, series, 'Ackumulerat uttag reellt', (d) => d3.format('.3s')(d) + ' kr')
+  const series = buildSeriesFromStats('averageRealWithdrawal')
+  drawChart(
+    svg,
+    container,
+    series,
+    'Genomsnittligt uttag reellt per år',
+    (d) => d3.format('.3s')(d) + ' kr',
+  )
 }
 
 const renderMaxDrawdownChart = (svg: SVGSVGElement, container: HTMLDivElement) => {
@@ -412,9 +460,9 @@ const renderTaxationDegreeChart = (svg: SVGSVGElement, container: HTMLDivElement
       <D3Chart :renderChart="renderWithdrawalChart" :data="chartData" />
     </div>
 
-    <!-- Accumulated Withdrawal -->
+    <!-- Average Withdrawal, a failed plan counted as zero -->
     <div class="mb-4">
-      <D3Chart :renderChart="renderAccumulatedWithdrawalChart" :data="chartData" />
+      <D3Chart :renderChart="renderAverageWithdrawalChart" :data="chartData" />
     </div>
 
     <!-- Max Drawdown -->

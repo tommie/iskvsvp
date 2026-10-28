@@ -548,6 +548,29 @@ describe('how many paths simulateAll runs', () => {
   })
 })
 
+describe('withdrawalFailureAsZero', () => {
+  const flat = (overrides: Partial<InputParameters> = {}) =>
+    makeParams({ ...makePayload(0), yearsLater: 10, ...overrides })
+
+  it('is the plain total when the plan survives', () => {
+    // 1 000 000 flat, 50 000 a year for 10 years: 500 000 over the plan.
+    const r = simulateAll([flat({ withdrawalNeed: 50_000 })], ['a'], undefined)
+    expect(r.withdrawalFailureAsZero[0]!.percentile10).toBeCloseTo(500_000, 6)
+    expect(r.withdrawalFailureAsZero[0]!.median).toBeCloseTo(500_000, 6)
+  })
+
+  it('is zero when the plan fails, even though most of the money was paid before it did', () => {
+    // 150 000 a year out of 1 000 000: nine years are paid, the tenth is not.
+    // Received, that is 900 000; counted as a failure it is nothing.
+    const r = simulateAll([flat({ withdrawalNeed: 150_000 })], ['a'], undefined)
+    expect(r.outcomeProbabilities[0]!.survivalRate).toBe(0)
+    expect(r.withdrawalFailureAsZero[0]!.percentile10).toBe(0)
+    expect(r.withdrawalFailureAsZero[0]!.median).toBe(0)
+    // The received total is untouched for everything else that reads it.
+    expect(r.statistics[0]!.median.snapshots.withdrawalReal[9]!).toBeGreaterThan(800_000)
+  })
+})
+
 describe('bengenRate', () => {
   const flat = (annualReturn: number, overrides: Partial<InputParameters> = {}) =>
     makeParams({

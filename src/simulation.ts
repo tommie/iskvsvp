@@ -815,6 +815,7 @@ export function simulateAll(
   const medianSamples: SimulationResult<number>[] = []
   const finalAssetWeightsStats: FinalAssetWeights[] = []
   const outcomeProbabilities: { survivalRate: number; breakEvenRate: number }[] = []
+  const withdrawalFailureAsZero: SimulationStatistics<number>[] = []
 
   for (let setIdx = 0; setIdx < allResults.length; setIdx++) {
     const results = allResults[setIdx]!
@@ -1127,6 +1128,19 @@ export function simulateAll(
       weights: weightStats,
     })
 
+    // Accumulated real withdrawal, a failed plan counted as zero
+    const counted = results.map((r) =>
+      r.needFunded ? (r.snapshots.withdrawalReal[r.snapshots.withdrawalReal.length - 1] ?? 0) : 0,
+    )
+    const countedStats = calculateStats(counted)
+    withdrawalFailureAsZero.push({
+      mean: countedStats.mean,
+      stdDev: countedStats.stdDev,
+      percentile10: countedStats.percentile10,
+      median: countedStats.median,
+      percentile90: countedStats.percentile90,
+    })
+
     // Calculate outcome probabilities
     const initialCapital = params.initialCapital
     let survivalCount = 0
@@ -1161,5 +1175,6 @@ export function simulateAll(
     outcomeProbabilities,
     convergence,
     bengen: paramSets.map((p) => bengenRate(p)),
+    withdrawalFailureAsZero,
   }
 }

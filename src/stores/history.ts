@@ -32,7 +32,9 @@ function buildSummary(results: SimulationResults): HistorySummary {
       label: results.labels[i] ?? '',
       totalValue: stats.median.snapshots.totalValue[finalPeriod] ?? 0,
       liquidValue: stats.median.snapshots.liquidValue[finalPeriod] ?? 0,
-      accumulatedRealWithdrawal: stats.median.snapshots.withdrawalReal[finalPeriod] ?? 0,
+      // Median over paths with a failed plan counted as zero, the same figure as
+      // the average-withdrawal row of the results, which this is labelled as.
+      accumulatedRealWithdrawal: results.withdrawalFailureAsZero[i]?.median ?? 0,
       taxationDegree: stats.median.snapshots.taxationDegree[finalPeriod] ?? 0,
       maxDrawdown: stats.median.snapshots.maxDrawdown[finalPeriod] ?? 0,
     }

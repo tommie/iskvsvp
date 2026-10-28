@@ -60,7 +60,8 @@ const getValue = (
     case 'withdrawalReal':
       return stat.periodData.withdrawalReal[period] ?? 0
     case 'withdrawalRealSnapshot':
-      return stat.snapshots.withdrawalReal[period] ?? 0
+      // Over the whole plan, with a failed plan counted as zero; see the type.
+      return simulationResults.value?.withdrawalFailureAsZero[scenarioIdx]?.[statKey] ?? 0
     case 'withdrawal':
       return stat.snapshots.withdrawal[period] ?? 0
     case 'maxDrawdown':
@@ -431,6 +432,9 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
             <tr>
               <th v-if="idx === 0" :rowspan="labels.length" class="align-middle" scope="row">
                 Genomsnittligt uttag reellt per år
+                <small class="d-block fw-normal text-muted"
+                  >misslyckad plan räknas som noll</small
+                >
               </th>
               <th scope="row">{{ label }}</th>
               <td :style="getCellStyle('percentile10', idx, 'withdrawalRealSnapshot', true)">

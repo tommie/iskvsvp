@@ -95,6 +95,11 @@ src/
 - Cross-checked against the planner's fixed-rule sweep: on its default plan 80% survival allows 252 000 kr/yr (200 000 need plus 52 000 extra); this gives 251 000 (2.79%).
 - Tests pin the zero-return case (capital over years) and the certain-return case (the ordinary annuity, since withdrawals follow the year's return).
 
+### Average Withdrawal Row (`withdrawalFailureAsZero`)
+
+- The "Genomsnittligt uttag reellt per år" percentiles are over each path's total real withdrawal with a **failed plan counted as zero**, unconditional like the planner's percentiles. Counted as received, a plan that fails in year 38 of 40 keeps almost all of its average and is indistinguishable from a success, so P10 could not answer Bengen's question.
+- The consequence is a cliff: the P10 is 0 whenever more than 10% of paths fail, and at least the need otherwise. That is the point: it reads "what you can count on at the 90% level". The history summary's "Genomsnittligt uttag reellt per år" uses the same figure (median), so the label means one thing everywhere. The chart of the same name (`renderAverageWithdrawalChart`) draws the same statistic, divided by the same years, under the same title: one label, one metric. Its spread is interpolated between P10, median and P90, and the scale is logarithmic, so a percentile at zero is replaced by the next one up (a zero cannot be drawn, and interpolating from it would invent positive values where the mass is at zero); if everything is zero it says so instead of rendering blank. `withdrawalFailureAsZero` is a separate statistic from `snapshots.withdrawalReal`, which stays as received; no label reads that any more.
+
 ### Tax Model (`simulation.ts`, step 5)
 
 - **ISK**: schablon on the balance, `amount * iskTaxRate * capitalGainsTaxRate`. No CGT on withdrawals or rebalancing.
