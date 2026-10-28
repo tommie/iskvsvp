@@ -10,8 +10,8 @@ import { formatPercent } from '../../planner/format'
 const store = usePlannerStore()
 const {
   initialCapital,
-  startAge,
-  years,
+  startYear,
+  endYear,
   assets,
   correlations,
   accountType,
@@ -116,26 +116,30 @@ const portfolioSummary = computed(() => {
               </select>
             </div>
             <div class="col-6">
-              <label class="form-label" for="planner-age">Startålder</label>
+              <label class="form-label" for="planner-start-year">Startår</label>
               <input
-                id="planner-age"
-                v-model.number="startAge"
+                id="planner-start-year"
+                v-model.number="startYear"
                 type="number"
-                min="0"
-                max="120"
                 class="form-control"
               />
             </div>
             <div class="col-6">
-              <label class="form-label" for="planner-years">Tidsperiod (år)</label>
+              <label class="form-label" for="planner-end-year">Slutår</label>
               <input
-                id="planner-years"
-                v-model.number="years"
+                id="planner-end-year"
+                v-model.number="endYear"
                 type="number"
-                min="1"
-                max="100"
+                :min="startYear + 1"
+                :max="startYear + 100"
                 class="form-control"
               />
+            </div>
+            <div class="col-12">
+              <small class="form-text text-muted">
+                Ålder eller årtal, som du föredrar: bara skillnaden används. Jämförelsen med
+                inkomstfördelningen läser startåret som ålder.
+              </small>
             </div>
             <!-- A share of startkapitalet rather than an amount: "behåll
                  kapitalet" and "lämna hälften" is what a household has an

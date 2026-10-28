@@ -9,8 +9,8 @@ describe('planner URL encoding', () => {
     const restored = decodePlan(encodePlan(original))
 
     expect(restored.initialCapital).toBe(original.initialCapital)
-    expect(restored.startAge).toBe(original.startAge)
-    expect(restored.years).toBe(original.years)
+    expect(restored.startYear).toBe(original.startYear)
+    expect(restored.endYear).toBe(original.endYear)
     expect(restored.accountType).toBe(original.accountType)
     expect(restored.inflationRate).toBe(original.inflationRate)
     expect(restored.consumptionUnits).toBe(original.consumptionUnits)
@@ -32,7 +32,7 @@ describe('planner URL encoding', () => {
 
   it('round-trips a multi-phase cash flow', () => {
     const original = defaultPlannerParameters()
-    original.years = 30
+    original.endYear = original.startYear + 30
     original.cashflow = [
       ...buildCashflow(5, -150_000, 0),
       ...buildCashflow(10, 300_000, 120_000),
@@ -45,7 +45,7 @@ describe('planner URL encoding', () => {
 
   it('run-length encodes repeated years', () => {
     const params = defaultPlannerParameters()
-    params.years = 40
+    params.endYear = params.startYear + 40
     params.cashflow = buildCashflow(40, 200_000, 100_000)
 
     const encoded = new URLSearchParams(encodePlan(params)).get('f')
@@ -60,13 +60,13 @@ describe('planner URL encoding', () => {
   it('keeps the cash flow the same length as the horizon when it fails to decode', () => {
     // A hand-edited URL where the schedule and the horizon disagree must not
     // produce parameters the engine will reject outright.
-    const restored = decodePlan('y=25&f=40*200000|100000')
-    expect(restored.years).toBe(25)
+    const restored = decodePlan('s=60&e=85&f=40*200000|100000')
+    expect(restored.endYear - restored.startYear).toBe(25)
     expect(restored.cashflow).toHaveLength(25)
   })
 
   it('rejects a cash flow that would allocate an absurd number of years', () => {
-    const restored = decodePlan('y=30&f=999999*1000|0')
+    const restored = decodePlan('s=60&e=90&f=999999*1000|0')
     expect(restored.cashflow).toHaveLength(30)
   })
 

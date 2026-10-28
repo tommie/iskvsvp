@@ -97,8 +97,8 @@ function decodeCorrelations(raw: string | null, size: number): number[][] | null
 export function encodePlan(params: PlannerParameters): string {
   const query = new URLSearchParams()
   query.set('c', String(params.initialCapital))
-  query.set('a', String(params.startAge))
-  query.set('y', String(params.years))
+  query.set('s', String(params.startYear))
+  query.set('e', String(params.endYear))
   query.set('f', encodeCashflow(params.cashflow))
   query.set('n', params.assets.map((asset) => asset.name).join(','))
   // Preset ids ride along so correlations for assets added after a reload
@@ -175,9 +175,16 @@ export function decodePlan(search: string): PlannerParameters {
         })
       : defaults.assets
 
-  const yearsRaw = parseInt(query.get('y') ?? '', 10)
-  const years =
-    Number.isInteger(yearsRaw) && yearsRaw >= 1 && yearsRaw <= 100 ? yearsRaw : defaults.years
+  const startYear = parsePositive(query.get('s'), defaults.startYear)
+  const endRaw = parseInt(query.get('e') ?? '', 10)
+  const rawYears = endRaw - startYear
+  // An end that does not leave one to a hundred whole years falls back to the
+  // default horizon from the start that was given, not to the default's end.
+  const endYear =
+    Number.isInteger(rawYears) && rawYears >= 1 && rawYears <= 100
+      ? endRaw
+      : startYear + (defaults.endYear - defaults.startYear)
+  const years = endYear - startYear
 
   const encodedCashflow = query.get('f')
   const cashflow = encodedCashflow ? decodeCashflow(encodedCashflow, years) : null
@@ -187,8 +194,8 @@ export function decodePlan(search: string): PlannerParameters {
   return {
     ...defaults,
     initialCapital: parsePositive(query.get('c'), defaults.initialCapital),
-    startAge: parsePositive(query.get('a'), defaults.startAge),
-    years,
+    startYear,
+    endYear,
     // A cash flow that failed to decode falls back to a schedule of the right
     // length rather than the default's, which would be the wrong horizon.
     cashflow:

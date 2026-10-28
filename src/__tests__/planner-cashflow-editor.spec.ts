@@ -7,6 +7,9 @@ import { usePlannerStore } from '../stores/planner'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
 import { formatKrExact } from '../planner/format'
 
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 60
+
 /** D3Chart observes visibility to decide when to draw; jsdom has no such API. */
 beforeAll(() => {
   globalThis.IntersectionObserver = class {
@@ -32,7 +35,7 @@ function mountEditor() {
   const store = usePlannerStore()
   store.$patch({
     ...defaultPlannerParameters(),
-    years: YEARS,
+    endYear: START_YEAR + YEARS,
     cashflow: buildCashflow(YEARS, NEED, EXTRA),
   })
 

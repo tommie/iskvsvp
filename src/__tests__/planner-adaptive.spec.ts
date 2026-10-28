@@ -4,6 +4,9 @@ import { runPlanner } from '../planner/propagate'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
 import type { PlannerParameters } from '../planner/types'
 
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 60
+
 function plan(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
   return { ...defaultPlannerParameters(), iskAllowance: 0, ...overrides }
 }
@@ -24,7 +27,7 @@ describe('adaptive extra withdrawals', () => {
     const years = 40
     const result = runPlanner(
       plan({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 6_000_000,
         cashflow: buildCashflow(years, 200_000, 100_000),
       }),
@@ -46,7 +49,7 @@ describe('adaptive extra withdrawals', () => {
     const years = 40
     const result = runPlanner(
       plan({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 6_000_000,
         cashflow: buildCashflow(years, 200_000, 100_000),
       }),
@@ -70,7 +73,7 @@ describe('adaptive extra withdrawals', () => {
     const years = 40
     const result = runPlanner(
       plan({
-        years,
+        endYear: START_YEAR + years,
         iskAllowance: 300_000,
         initialCapital: 9_000_000,
         cashflow: buildCashflow(years, 200_000, 100_000),
@@ -95,7 +98,7 @@ describe('adaptive extra withdrawals', () => {
     const years = 30
     const result = runPlanner(
       plan({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 5_000_000,
         cashflow: buildCashflow(years, 250_000, 0),
       }),
@@ -117,7 +120,7 @@ describe('adaptive extra withdrawals', () => {
     // unconditionally.
     const result = runPlanner(
       plan({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 100_000_000,
         cashflow: buildCashflow(years, 200_000, 100_000),
         ...singleAsset(0.05, 0.1),
@@ -143,7 +146,7 @@ describe('adaptive extra withdrawals', () => {
     const oneYear = (initialCapital: number) =>
       runPlanner(
         plan({
-          years,
+          endYear: START_YEAR + years,
           initialCapital,
           iskTaxRate: 0,
           cashflow: buildCashflow(years, 200_000, 100_000),
@@ -185,7 +188,7 @@ describe('adaptive extra withdrawals', () => {
     const spent = () =>
       runPlanner(
         plan({
-          years,
+          endYear: START_YEAR + years,
           initialCapital: 1_000_000,
           iskTaxRate: 0,
           cashflow: buildCashflow(years, 50_000, 100_000),
@@ -223,7 +226,7 @@ describe('adaptive extra withdrawals', () => {
         const horizon = 30
         const outcomes = runPlanner(
           plan({
-            years: horizon,
+            endYear: START_YEAR + horizon,
             accountType,
             initialCapital: 6_000_000,
             cashflow: buildCashflow(horizon, 200_000, 100_000),
@@ -242,7 +245,7 @@ describe('adaptive extra withdrawals', () => {
     const result = () =>
       runPlanner(
         plan({
-          years,
+          endYear: START_YEAR + years,
           initialCapital: 6_000_000,
           cashflow: buildCashflow(years, 200_000, 100_000),
         }),
@@ -281,7 +284,7 @@ describe('adaptive extra withdrawals', () => {
     const run = (initialCapital: number) =>
       runPlanner(
         plan({
-          years: front.length,
+          endYear: START_YEAR + front.length,
           initialCapital,
           iskTaxRate: 0,
           cashflow: front.map((extra) => ({ need: 0, extra })),
@@ -325,7 +328,7 @@ describe('adaptive extra withdrawals', () => {
       // and 50 000 of extra every year.
       const flat = runPlanner(
         plan({
-          years: 10,
+          endYear: START_YEAR + 10,
           initialCapital: 1_000_000,
           iskTaxRate: 0,
           cashflow: buildCashflow(10, 50_000, 100_000),
@@ -347,9 +350,9 @@ describe('adaptive extra withdrawals', () => {
     const withBequest = (bequestRatio: number) =>
       runPlanner(
         plan({
-          years,
+          startYear: 45,
+          endYear: 45 + years,
           bequestRatio,
-          startAge: 45,
           initialCapital: 30_000_000,
           iskTaxRate: 0.0355,
           cashflow: buildCashflow(years, 500_000, 500_000),
@@ -382,7 +385,7 @@ describe('adaptive extra withdrawals', () => {
     it('discounts the target at the median and the need below it', () => {
       const result = runPlanner(
         plan({
-          years,
+          endYear: START_YEAR + years,
           bequestRatio: 1,
           initialCapital: 30_000_000,
           iskTaxRate: 0.0355,
@@ -404,7 +407,11 @@ describe('adaptive extra withdrawals', () => {
       // mass, so the two rates are one number and the split cannot be observed.
       // That is what makes the deterministic tests below meaningful for both.
       const result = runPlanner(
-        plan({ years: 10, cashflow: buildCashflow(10, 50_000, 100_000), ...singleAsset(0.04, 0) }),
+        plan({
+          endYear: START_YEAR + 10,
+          cashflow: buildCashflow(10, 50_000, 100_000),
+          ...singleAsset(0.04, 0),
+        }),
       )
       expect(result.bequestReturn).toBeCloseTo(result.reserveReturn, 12)
     })
@@ -426,7 +433,7 @@ describe('adaptive extra withdrawals', () => {
       // 50 000 need pays 50 000 of need and 50 000 of extra every year.
       const flat = runPlanner(
         plan({
-          years: 10,
+          endYear: START_YEAR + 10,
           initialCapital: 1_000_000,
           iskTaxRate: 0,
           cashflow: buildCashflow(10, 50_000, 100_000),
@@ -445,7 +452,7 @@ describe('adaptive extra withdrawals', () => {
     const deterministic = (bequestRatio: number) =>
       runPlanner(
         plan({
-          years,
+          endYear: START_YEAR + years,
           bequestRatio,
           initialCapital: 1_000_000,
           iskTaxRate: 0,
@@ -488,7 +495,7 @@ describe('adaptive extra withdrawals', () => {
       for (const rate of [0.02, 0.04, 0.08]) {
         const run = runPlanner(
           plan({
-            years: 10,
+            endYear: START_YEAR + 10,
             bequestRatio: 0.5,
             initialCapital: 1_000_000,
             iskTaxRate: 0,
@@ -525,7 +532,7 @@ describe('adaptive extra withdrawals', () => {
       const meanAt = (gridNodes: number) =>
         runPlanner(
           plan({
-            years,
+            endYear: START_YEAR + years,
             gridNodes,
             bequestRatio: 0.5,
             initialCapital: 1_000_000,
@@ -568,7 +575,7 @@ describe('adaptive extra withdrawals', () => {
       const build = (bequestRatio: number) =>
         runPlanner(
           plan({
-            years: 30,
+            endYear: START_YEAR + 30,
             bequestRatio,
             initialCapital: 6_000_000,
             cashflow: buildCashflow(30, 250_000, 0),
@@ -594,7 +601,7 @@ describe('adaptive extra withdrawals', () => {
       const build = (bequestRatio: number) =>
         runPlanner(
           plan({
-            years,
+            endYear: START_YEAR + years,
             bequestRatio,
             initialCapital: 6_000_000,
             cashflow: buildCashflow(years, 200_000, 100_000),
@@ -618,7 +625,7 @@ describe('adaptive extra withdrawals', () => {
       const years = 10
       const run = runPlanner(
         plan({
-          years,
+          endYear: START_YEAR + years,
           accountType: 'AF',
           bequestRatio: 0.5,
           initialCapital: 1_000_000,
@@ -643,7 +650,7 @@ describe('adaptive extra withdrawals', () => {
   })
 
   it('derives the reserve return from the plan rather than asking for one', () => {
-    const params = plan({ years: 25, cashflow: buildCashflow(25, 200_000, 50_000) })
+    const params = plan({ endYear: START_YEAR + 25, cashflow: buildCashflow(25, 200_000, 50_000) })
     const result = runPlanner(params)
 
     // The 25th percentile of the annualised compound return over the horizon,
@@ -663,7 +670,7 @@ describe('adaptive extra withdrawals', () => {
     const build = (expectedRealReturn: number) =>
       runPlanner(
         plan({
-          years,
+          endYear: START_YEAR + years,
           initialCapital: 6_000_000,
           cashflow: buildCashflow(years, 200_000, 100_000),
           ...singleAsset(expectedRealReturn, 0.12),
@@ -685,7 +692,7 @@ describe('adaptive extra withdrawals', () => {
     const years = 30
     const result = runPlanner(
       plan({
-        years,
+        endYear: START_YEAR + years,
         accountType: 'AF',
         initialCapital: 6_000_000,
         cashflow: buildCashflow(years, 200_000, 100_000),
@@ -709,7 +716,7 @@ describe('actual versus planned withdrawals', () => {
     // need and the whole extra, and no path ruins.
     const result = runPlanner(
       plan({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 200_000_000,
         cashflow: buildCashflow(years, 200_000, 100_000),
         ...singleAsset(0.04, 0),
@@ -726,7 +733,7 @@ describe('actual versus planned withdrawals', () => {
     // cannot be paid, so exactly five are ever taken.
     const result = runPlanner(
       plan({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 1_000_000,
         iskTaxRate: 0,
         cashflow: buildCashflow(years, 190_000, 0),
@@ -740,7 +747,7 @@ describe('actual versus planned withdrawals', () => {
     const years = 40
     const result = runPlanner(
       plan({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 6_000_000,
         cashflow: buildCashflow(years, 200_000, 100_000),
       }),
@@ -764,7 +771,7 @@ describe('actual versus planned withdrawals', () => {
     const years = 10
     const result = runPlanner(
       plan({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 0,
         iskTaxRate: 0,
         cashflow: buildCashflow(years, -100_000, 0),

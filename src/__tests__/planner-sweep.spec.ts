@@ -29,6 +29,9 @@ import {
 } from '../planner/sweep'
 import type { PlannerParameters } from '../planner/types'
 
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 60
+
 /**
  * D3Chart observes its container to render only when it is on screen, and jsdom
  * has no IntersectionObserver. A stub that never reports intersection leaves
@@ -53,7 +56,7 @@ function plan(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
   return {
     ...defaultPlannerParameters(),
     iskAllowance: 0,
-    years: 20,
+    endYear: START_YEAR + 20,
     initialCapital: 6_000_000,
     cashflow: buildCashflow(20, 200_000, 100_000),
     ...overrides,
@@ -329,7 +332,7 @@ describe('sweepPoints', () => {
     // type whose tax depends on a basis the withdrawal itself moves.
     const params = plan({
       accountType: 'AF',
-      years: 12,
+      endYear: START_YEAR + 12,
       basisNodes: 8,
       gridNodes: 200,
       initialCostBasisRatio: 0.5,
@@ -448,7 +451,7 @@ describe('levelMarks', () => {
     // applied to the kept-capital curve are what fit here.
     const comfortable = plan({
       initialCapital: 30_000_000,
-      years: 40,
+      endYear: START_YEAR + 40,
       bequestRatio: 0.3,
       cashflow: buildCashflow(40, 300_000, 300_000),
     })
@@ -550,7 +553,11 @@ async function openCard(wrapper: Wrapper) {
 describe('SweepCard', () => {
   // Short, because every test here pays for a whole sweep.
   const short = () =>
-    plan({ years: 10, initialCapital: 6_000_000, cashflow: buildCashflow(10, 300_000, 50_000) })
+    plan({
+      endYear: START_YEAR + 10,
+      initialCapital: 6_000_000,
+      cashflow: buildCashflow(10, 300_000, 50_000),
+    })
 
   it('computes nothing until it is opened', async () => {
     const { wrapper } = mountCard(short())
@@ -678,7 +685,11 @@ describe('SweepCard', () => {
 
   it('says so when the plan has no capital to take a share of', async () => {
     const { wrapper } = mountCard(
-      plan({ years: 10, initialCapital: 0, cashflow: buildCashflow(10, -200_000, 0) }),
+      plan({
+        endYear: START_YEAR + 10,
+        initialCapital: 0,
+        cashflow: buildCashflow(10, -200_000, 0),
+      }),
     )
     await openCard(wrapper)
     expect(wrapper.text()).toContain('andel av startkapitalet')

@@ -25,8 +25,12 @@ export const usePlannerStore = defineStore('planner', () => {
   const defaults = defaultPlannerParameters()
 
   const initialCapital = ref(defaults.initialCapital)
-  const startAge = ref(defaults.startAge)
-  const years = ref(defaults.years)
+  const startYear = ref(defaults.startYear)
+  const endYear = ref(defaults.endYear)
+  // Years the plan runs. Not validated here: while an end is being typed it can
+  // pass through values the engine refuses, and the watcher below only follows
+  // the ones it accepts.
+  const years = computed(() => endYear.value - startYear.value)
   const assets = ref<PlannerAsset[]>(defaults.assets)
   const correlations = ref<number[][]>(defaults.correlations)
   const accountType = ref<PlannerAccountType>(defaults.accountType)
@@ -55,8 +59,8 @@ export const usePlannerStore = defineStore('planner', () => {
 
   const parameters = computed<PlannerParameters>(() => ({
     initialCapital: initialCapital.value,
-    startAge: startAge.value,
-    years: years.value,
+    startYear: startYear.value,
+    endYear: endYear.value,
     assets: assets.value,
     correlations: correlations.value,
     accountType: accountType.value,
@@ -93,8 +97,8 @@ export const usePlannerStore = defineStore('planner', () => {
 
   function loadParameters(params: PlannerParameters) {
     initialCapital.value = params.initialCapital
-    startAge.value = params.startAge
-    years.value = params.years
+    startYear.value = params.startYear
+    endYear.value = params.endYear
     assets.value = params.assets.map((asset) => ({ ...asset }))
     correlations.value = params.correlations.map((row) => [...row])
     accountType.value = params.accountType
@@ -231,7 +235,7 @@ export const usePlannerStore = defineStore('planner', () => {
   // engine enforces by throwing, so fix it up here rather than letting an
   // in-progress edit produce an error banner.
   watch(years, (next) => {
-    if (cashflow.value.length !== next) {
+    if (Number.isInteger(next) && next >= 1 && cashflow.value.length !== next) {
       cashflow.value = resizeCashflow(cashflow.value, next)
     }
   })
@@ -244,7 +248,8 @@ export const usePlannerStore = defineStore('planner', () => {
   return {
     // State
     initialCapital,
-    startAge,
+    startYear,
+    endYear,
     years,
     assets,
     correlations,

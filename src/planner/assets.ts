@@ -158,6 +158,7 @@ export function resizeCashflow(cashflow: CashflowYear[], years: number): Cashflo
 
 export function defaultPlannerParameters(): PlannerParameters {
   const years = 40
+  const startYear = 60
   return {
     // Withdrawing 2.2% of capital as need and up to 3.3% with the extra, over
     // forty years. The need alone survives about 90%, which puts it inside the
@@ -167,8 +168,8 @@ export function defaultPlannerParameters(): PlannerParameters {
     // separates the three runs enough that each says something: roughly 90%,
     // 81% and 69%.
     initialCapital: 9_000_000,
-    startAge: 60,
-    years,
+    startYear,
+    endYear: startYear + years,
     assets: DEFAULT_ASSET_CLASSES.map((asset) => ({ ...asset })),
     correlations: DEFAULT_CORRELATIONS.map((row) => [...row]),
     accountType: 'ISK',

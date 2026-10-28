@@ -50,10 +50,15 @@ export interface CashflowYear {
 
 export interface PlannerParameters {
   initialCapital: number
-  /** Age at the start of year 0. Used for axis labels only. */
-  startAge: number
-  /** Number of years to propagate. `cashflow` has one entry per year. */
-  years: number
+  /**
+   * First year of the plan, and the year the plan ends at. The planner only uses
+   * the difference (see `planYears`); the numbers themselves are labels on the
+   * axes, so an age or a calendar year works equally. `cashflow` has one entry
+   * per year. The group median in the income comparison is the exception: it
+   * needs a real age and reads `startYear` as one (see `medianForHousehold`).
+   */
+  startYear: number
+  endYear: number
 
   assets: PlannerAsset[]
   /** Symmetric correlation matrix of real returns, diagonal 1. */
@@ -197,7 +202,8 @@ export interface WealthDistribution {
 export interface YearOutcome {
   /** 0 = the starting position, before any return or cash flow. */
   year: number
-  age: number
+  /** `startYear + year`: the plan's own label for this point on the axis. */
+  yearLabel: number
   /** Cumulative probability of having failed to fund a need withdrawal. */
   ruinProbability: number
   /** Unconditional mean; ruined outcomes contribute zero. */
@@ -222,7 +228,8 @@ export interface YearOutcome {
 export interface WithdrawalOutcome {
   /** Index into `cashflow`, so a chart lines up with the schedule as entered. */
   index: number
-  age: number
+  /** `startYear + index`, the plan's own label for this year. */
+  yearLabel: number
   /** Probability-weighted amount paid; the year's share of `expectedWithdrawn`. */
   mean: number
   percentile10: number
@@ -348,4 +355,19 @@ export interface PlannerResults {
    * without them the payout is unexplainable from the outputs alone.
    */
   schedule: ReserveSchedule
+}
+
+/**
+ * How many years the plan runs: `endYear - startYear`. It has to be a whole
+ * number of at least one year, and anything else is a mistake in the input
+ * rather than something to round, so it throws.
+ */
+export function planYears(plan: Pick<PlannerParameters, 'startYear' | 'endYear'>): number {
+  const years = plan.endYear - plan.startYear
+  if (!Number.isInteger(years) || years < 1) {
+    throw new Error(
+      `planner: endYear (${plan.endYear}) must be a whole number of years after startYear (${plan.startYear})`,
+    )
+  }
+  return years
 }

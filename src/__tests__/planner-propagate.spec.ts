@@ -4,7 +4,11 @@ import seedrandom from 'seedrandom'
 import { normalQuadrature } from '../planner/quadrature'
 import { portfolioMoments, runPlanner } from '../planner/propagate'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
+import { planYears } from '../planner/types'
 import type { CashflowYear, PlannerParameters, WealthDistribution } from '../planner/types'
+
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 60
 
 function params(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
   const base = defaultPlannerParameters()
@@ -12,8 +16,8 @@ function params(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
   // the propagation mechanics against closed forms that assume a flat
   // proportional tax, so switch it off unless a test asks for it.
   const merged = { ...base, iskAllowance: 0, ...overrides }
-  if (overrides.years !== undefined && overrides.cashflow === undefined) {
-    merged.cashflow = buildCashflow(overrides.years, 0, 0)
+  if (overrides.endYear !== undefined && overrides.cashflow === undefined) {
+    merged.cashflow = buildCashflow(overrides.endYear, 0, 0)
   }
   return merged
 }
@@ -125,7 +129,7 @@ describe('runPlanner', () => {
   it('conserves probability mass', () => {
     const result = runPlanner(
       params({
-        years: 30,
+        endYear: START_YEAR + 30,
         cashflow: buildCashflow(30, 300_000, 100_000),
       }),
     )
@@ -138,7 +142,7 @@ describe('runPlanner', () => {
     const build = () =>
       runPlanner(
         params({
-          years,
+          endYear: START_YEAR + years,
           initialCapital: 5_000_000,
           cashflow: buildCashflow(years, 250_000, 100_000),
         }),
@@ -161,7 +165,7 @@ describe('runPlanner', () => {
       const withdrawals = result.needRun.withdrawals
       expect(withdrawals).toHaveLength(years)
       expect(withdrawals[0]!.index).toBe(0)
-      expect(withdrawals[0]!.age).toBe(result.needRun.outcomes[0]!.age)
+      expect(withdrawals[0]!.yearLabel).toBe(result.needRun.outcomes[0]!.yearLabel)
       expect(withdrawals[years - 1]!.index).toBe(years - 1)
     })
 
@@ -179,7 +183,7 @@ describe('runPlanner', () => {
       const horizon = 12
       const result = runPlanner(
         params({
-          years: horizon,
+          endYear: START_YEAR + horizon,
           initialCapital: 1_000_000,
           iskTaxRate: 0,
           cashflow: buildCashflow(horizon, 190_000, 0),
@@ -199,7 +203,7 @@ describe('runPlanner', () => {
     const years = 30
     const result = runPlanner(
       params({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 1_000_000,
         iskTaxRate: 0,
         cashflow: buildCashflow(years, 0, 0),
@@ -220,7 +224,7 @@ describe('runPlanner', () => {
     const years = 25
     const result = runPlanner(
       params({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 1_000_000,
         iskTaxRate: 0,
         cashflow: buildCashflow(years, 0, 0),
@@ -236,7 +240,7 @@ describe('runPlanner', () => {
     const years = 20
     const flow = 200_000
     const p = params({
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 4_000_000,
       cashflow: buildCashflow(years, flow, 0),
       ...singleAsset(0.04, 0),
@@ -257,7 +261,7 @@ describe('runPlanner', () => {
   it('pays the schablon out of the portfolio, so the withdrawal is net', () => {
     const flow = 300_000
     const p = params({
-      years: 1,
+      endYear: START_YEAR + 1,
       initialCapital: 5_000_000,
       cashflow: buildCashflow(1, flow, 0),
       // No growth, so the year's arithmetic is exact and the two deductions
@@ -279,7 +283,7 @@ describe('runPlanner', () => {
 
   it('charges the schablon only above the allowance', () => {
     const p = params({
-      years: 1,
+      endYear: START_YEAR + 1,
       initialCapital: 1_000_000,
       iskAllowance: 300_000,
       inflationRate: 0,
@@ -297,7 +301,11 @@ describe('runPlanner', () => {
 
   it('applies the ISK schablon as a proportional drag', () => {
     const years = 10
-    const shared = { years, initialCapital: 1_000_000, cashflow: buildCashflow(years, 0, 0) }
+    const shared = {
+      endYear: START_YEAR + years,
+      initialCapital: 1_000_000,
+      cashflow: buildCashflow(years, 0, 0),
+    }
     const untaxed = runPlanner(params({ ...shared, iskTaxRate: 0, ...singleAsset(0.05, 0) }))
     const taxed = runPlanner(params({ ...shared, iskTaxRate: 0.03, ...singleAsset(0.05, 0) }))
 
@@ -309,7 +317,7 @@ describe('runPlanner', () => {
   it('deflates a nominal ISK allowance, so inflation reduces its worth', () => {
     const years = 30
     const shared = {
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 2_000_000,
       cashflow: buildCashflow(years, 0, 0),
       iskAllowance: 300_000,
@@ -328,7 +336,7 @@ describe('runPlanner', () => {
   it('leaves the real result untouched by inflation when no allowance applies', () => {
     const years = 30
     const shared = {
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 2_000_000,
       cashflow: buildCashflow(years, 150_000, 0),
       iskAllowance: 0,
@@ -343,7 +351,7 @@ describe('runPlanner', () => {
   it('ruins with certainty at the year a zero-volatility plan runs dry', () => {
     const years = 12
     const p = params({
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 1_000_000,
       iskTaxRate: 0,
       cashflow: buildCashflow(years, 190_000, 0),
@@ -366,7 +374,7 @@ describe('runPlanner', () => {
 
     const result = runPlanner(
       params({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 1_000_000,
         iskTaxRate: 0,
         cashflow,
@@ -380,7 +388,11 @@ describe('runPlanner', () => {
   it('makes ruin probability non-decreasing over time', () => {
     const years = 40
     const result = runPlanner(
-      params({ years, initialCapital: 3_000_000, cashflow: buildCashflow(years, 250_000, 0) }),
+      params({
+        endYear: START_YEAR + years,
+        initialCapital: 3_000_000,
+        cashflow: buildCashflow(years, 250_000, 0),
+      }),
     )
     const outcomes = result.needRun.outcomes
     for (let i = 1; i < outcomes.length; i++) {
@@ -396,7 +408,7 @@ describe('runPlanner', () => {
     // both medians are zero and the comparison says nothing.
     const result = runPlanner(
       params({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 12_000_000,
         cashflow: buildCashflow(years, 250_000, 120_000),
       }),
@@ -414,7 +426,7 @@ describe('runPlanner', () => {
     const years = 20
     const result = runPlanner(
       params({
-        years,
+        endYear: START_YEAR + years,
         initialCapital: 0,
         iskTaxRate: 0,
         cashflow: buildCashflow(years, -100_000, 0),
@@ -428,15 +440,52 @@ describe('runPlanner', () => {
     expect(result.needRun.outcomes[years]!.mean / expected).toBeCloseTo(1, 5)
   })
 
+  describe('start and end year', () => {
+    const plan = (startYear: number) =>
+      params({
+        startYear,
+        endYear: startYear + 15,
+        initialCapital: 4_000_000,
+        cashflow: buildCashflow(15, 150_000, 50_000),
+      })
+
+    it('uses only the difference, so an age and a calendar year give the same plan', () => {
+      const asAge = runPlanner(plan(60))
+      const asCalendar = runPlanner(plan(2026))
+      for (let t = 0; t <= 15; t++) {
+        expect(asCalendar.adaptiveRun.outcomes[t]!.mean).toBe(asAge.adaptiveRun.outcomes[t]!.mean)
+        expect(asCalendar.adaptiveRun.outcomes[t]!.ruinProbability).toBe(
+          asAge.adaptiveRun.outcomes[t]!.ruinProbability,
+        )
+      }
+    })
+
+    it("labels each point with the plan's own year, start plus the index", () => {
+      const result = runPlanner(plan(2026))
+      expect(result.needRun.outcomes[0]!.yearLabel).toBe(2026)
+      expect(result.needRun.outcomes[15]!.yearLabel).toBe(2041)
+      expect(result.adaptiveRun.withdrawals[3]!.yearLabel).toBe(2029)
+    })
+
+    it('refuses an end that is not a whole number of years after the start', () => {
+      expect(() => planYears({ startYear: 60, endYear: 60 })).toThrow(/whole number/)
+      expect(() => planYears({ startYear: 60, endYear: 59 })).toThrow(/whole number/)
+      expect(() => planYears({ startYear: 60, endYear: 70.5 })).toThrow(/whole number/)
+      expect(planYears({ startYear: 2026, endYear: 2066 })).toBe(40)
+    })
+  })
+
   describe('input validation', () => {
     it('rejects a cashflow whose length does not match the horizon', () => {
-      expect(() => runPlanner(params({ years: 10, cashflow: buildCashflow(9, 0, 0) }))).toThrow(
-        /cashflow has 9 entries/,
-      )
+      expect(() =>
+        runPlanner(params({ endYear: START_YEAR + 10, cashflow: buildCashflow(9, 0, 0) })),
+      ).toThrow(/cashflow has 9 entries/)
     })
 
     it('rejects a non-positive horizon', () => {
-      expect(() => runPlanner(params({ years: 0, cashflow: [] }))).toThrow(/positive integer/)
+      expect(() => runPlanner(params({ endYear: START_YEAR + 0, cashflow: [] }))).toThrow(
+        /whole number of years/,
+      )
     })
   })
 })
@@ -459,7 +508,7 @@ describe('runPlanner against Monte Carlo', () => {
     for (let path = 0; path < paths; path++) {
       let wealth = p.initialCapital
       let alive = true
-      for (let year = 0; year < p.years; year++) {
+      for (let year = 0; year < p.endYear - p.startYear; year++) {
         // Box-Muller, one draw per year.
         const u1 = Math.max(rng(), Number.MIN_VALUE)
         const u2 = rng()
@@ -495,7 +544,7 @@ describe('runPlanner against Monte Carlo', () => {
     // A 4% withdrawal rate: enough failures that the ruin probability is worth
     // comparing, but not so many that the lower percentiles collapse to zero.
     const p = params({
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 7_500_000,
       iskTaxRate: 0.0296,
       cashflow: buildCashflow(years, 300_000, 0),

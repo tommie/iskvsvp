@@ -54,14 +54,14 @@ const renderWithdrawals = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   const planned = series.map((entry) => {
     const year = props.cashflow[entry.index]
     const need = year?.need ?? 0
-    return { age: entry.age, need, total: need + Math.max(0, year?.extra ?? 0) }
+    return { yearLabel: entry.yearLabel, need, total: need + Math.max(0, year?.extra ?? 0) }
   })
 
   // A year's amount covers the year, so the axis runs to the end of the last
   // one. Without the extra unit the final step would have no width to stand on.
   const x = d3
     .scaleLinear()
-    .domain([series[0]!.age, series[series.length - 1]!.age + 1])
+    .domain([series[0]!.yearLabel, series[series.length - 1]!.yearLabel + 1])
     .range([0, innerWidth])
 
   const highest = Math.max(
@@ -93,7 +93,7 @@ const renderWithdrawals = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   // were never scheduled.
   const band = d3
     .area<(typeof series)[number]>()
-    .x((o) => x(o.age))
+    .x((o) => x(o.yearLabel))
     .y0((o) => y(o.percentile10))
     .y1((o) => y(o.percentile90))
     .curve(d3.curveStepAfter)
@@ -108,12 +108,12 @@ const renderWithdrawals = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   const stroke = <T,>(
     data: T[],
     value: (entry: T) => number,
-    age: (entry: T) => number,
+    yearLabel: (entry: T) => number,
     width: number,
   ) => {
     const line = d3
       .line<T>()
-      .x((entry) => x(age(entry)))
+      .x((entry) => x(yearLabel(entry)))
       .y((entry) => y(value(entry)))
       .curve(d3.curveStepAfter)
     return plot
@@ -127,7 +127,7 @@ const renderWithdrawals = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   stroke(
     series,
     (o) => o.median,
-    (o) => o.age,
+    (o) => o.yearLabel,
     2,
   ).attr('stroke', ADAPTIVE_COLOR)
 
@@ -137,7 +137,7 @@ const renderWithdrawals = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   stroke(
     planned,
     (p) => p.total,
-    (p) => p.age,
+    (p) => p.yearLabel,
     1.5,
   )
     .attr('stroke', EXTRA_COLOR)
@@ -145,7 +145,7 @@ const renderWithdrawals = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   stroke(
     planned,
     (p) => p.need,
-    (p) => p.age,
+    (p) => p.yearLabel,
     1.5,
   )
     .attr('stroke', NEED_COLOR)

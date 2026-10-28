@@ -160,6 +160,9 @@ export function deflateToReferenceYear(
  * and putting those in front of a reader means an ASCII hyphen where Swedish
  * wants an en dash, and a bare "+" where it wants words.
  */
+/** The oldest start the group median reads as an age; anything above is a calendar year. */
+const MAX_PLAUSIBLE_AGE = 120
+
 const AGE_BANDS: { upTo: number; code: string; label: string }[] = [
   { upTo: 49, code: '20+', label: '20 år och äldre' },
   { upTo: 64, code: '50-64', label: '50–64 år' },
@@ -187,10 +190,14 @@ function householdTypeFor(consumptionUnits: number): string {
  */
 export function medianForHousehold(
   reference: IncomeReference,
-  startAge: number,
+  startYear: number,
   consumptionUnits: number,
 ): GroupMedian | null {
-  const band = AGE_BANDS.find((candidate) => startAge <= candidate.upTo) ?? AGE_BANDS[0]!
+  // The plan's start is only a label, and may be a calendar year. SCB's medians
+  // are by age, so a start that cannot be an age gets no group rather than the
+  // oldest band's median, which would look like an answer.
+  if (!(startYear >= 0 && startYear <= MAX_PLAUSIBLE_AGE)) return null
+  const band = AGE_BANDS.find((candidate) => startYear <= candidate.upTo) ?? AGE_BANDS[0]!
   const householdType = householdTypeFor(consumptionUnits)
   const entry = reference.medianByAge.find(
     (candidate) => candidate.age === band.code && candidate.householdType === householdType,
@@ -220,7 +227,9 @@ export interface GroupMedian {
  * its percentiles would place every plan at the same spot, which reads as an
  * answer rather than as a missing file.
  */
-export async function loadIncomeReference(baseUrl = import.meta.env.BASE_URL): Promise<IncomeReference> {
+export async function loadIncomeReference(
+  baseUrl = import.meta.env.BASE_URL,
+): Promise<IncomeReference> {
   const url = `${baseUrl}${INCOME_REFERENCE_FILE}`
   const response = await fetch(url)
   if (!response.ok) {

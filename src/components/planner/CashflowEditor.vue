@@ -17,7 +17,7 @@ import {
 } from '../../planner/income'
 
 const store = usePlannerStore()
-const { cashflow, startAge, consumptionUnits, inflationRate } = storeToRefs(store)
+const { cashflow, startYear, consumptionUnits, inflationRate } = storeToRefs(store)
 
 const NEED_COLOR = '#0d6efd'
 const EXTRA_COLOR = '#9ec5fe'
@@ -36,10 +36,10 @@ const selectionLabel = computed(() => {
   const { from, to } = selection.value
   const lo = Math.min(from, to)
   const hi = Math.max(from, to)
-  const ageLo = startAge.value + lo
-  const ageHi = startAge.value + hi
-  if (lo === hi) return `År ${lo + 1} (ålder ${ageLo})`
-  return `År ${lo + 1}–${hi + 1} (ålder ${ageLo}–${ageHi})`
+  const labelLo = startYear.value + lo
+  const labelHi = startYear.value + hi
+  if (lo === hi) return `År ${lo + 1} (${labelLo})`
+  return `År ${lo + 1}–${hi + 1} (${labelLo}–${labelHi})`
 })
 
 // The inputs show the first selected year's values. Editing one applies it to
@@ -139,13 +139,13 @@ const incomePlacement = computed(() => {
 const groupMedian = computed(() => {
   const reference = incomeReference.value
   if (!reference) return null
-  return medianForHousehold(reference, startAge.value, consumptionUnits.value)
+  return medianForHousehold(reference, startYear.value, consumptionUnits.value)
 })
 
 const chartData = computed(() => ({
   cashflow: cashflow.value,
   selection: selection.value,
-  startAge: startAge.value,
+  startYear: startYear.value,
 }))
 
 const renderChart = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
@@ -188,7 +188,7 @@ const renderChart = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
       d3
         .axisBottom(x)
         .tickValues(entries.map((_, index) => index).filter((index) => index % 5 === 0))
-        .tickFormat((index) => String(startAge.value + Number(index))),
+        .tickFormat((index) => String(startYear.value + Number(index))),
     )
 
   plot.append('g').call(

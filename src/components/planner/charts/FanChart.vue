@@ -42,7 +42,7 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   const outcomes = props.runs[0]!.outcomes
   const x = d3
     .scaleLinear()
-    .domain([outcomes[0]!.age, outcomes[outcomes.length - 1]!.age])
+    .domain([outcomes[0]!.yearLabel, outcomes[outcomes.length - 1]!.yearLabel])
     .range([0, innerWidth])
 
   const upper = d3.max(props.runs, (entry) => d3.max(entry.outcomes, (o) => o.percentile90)) ?? 1
@@ -102,7 +102,7 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   for (const { outcomes: series, color, dashed } of props.runs) {
     const band = d3
       .area<(typeof series)[number]>()
-      .x((o) => x(o.age))
+      .x((o) => x(o.yearLabel))
       .y0((o) => y(Math.max(lowerBound, o.percentile10)))
       .y1((o) => y(Math.max(lowerBound, o.percentile90)))
 
@@ -110,7 +110,7 @@ const renderFan = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
 
     const line = d3
       .line<(typeof series)[number]>()
-      .x((o) => x(o.age))
+      .x((o) => x(o.yearLabel))
       .y((o) => y(Math.max(lowerBound, o.median)))
 
     plot

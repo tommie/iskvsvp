@@ -5,6 +5,9 @@ import { portfolioMoments, runPlanner } from '../planner/propagate'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
 import type { PlannerParameters, PropagationRun, YearOutcome } from '../planner/types'
 
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 60
+
 const LOSS_CREDIT_THRESHOLD = 100_000
 const LOSS_CREDIT_UPPER_QUOTA = 0.7
 
@@ -18,8 +21,8 @@ function af(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
     inflationRate: 0,
     ...overrides,
   }
-  if (overrides.years !== undefined && overrides.cashflow === undefined) {
-    merged.cashflow = buildCashflow(overrides.years, 0, 0)
+  if (overrides.endYear !== undefined && overrides.cashflow === undefined) {
+    merged.cashflow = buildCashflow(overrides.endYear, 0, 0)
   }
   return merged
 }
@@ -104,7 +107,9 @@ function afYear(
 
 describe('AF propagation', () => {
   it('produces a result instead of refusing, and reports a liquidation value', () => {
-    const result = runPlanner(af({ years: 20, cashflow: buildCashflow(20, 200_000, 0) }))
+    const result = runPlanner(
+      af({ endYear: START_YEAR + 20, cashflow: buildCashflow(20, 200_000, 0) }),
+    )
     expect(result.needRun.liquidOutcomes).toBeDefined()
     expect(result.needRun.outcomes).toHaveLength(21)
   })
@@ -112,14 +117,16 @@ describe('AF propagation', () => {
   it('leaves ISK without a liquidation value, having no deferred tax', () => {
     const result = runPlanner({
       ...defaultPlannerParameters(),
-      years: 10,
+      endYear: START_YEAR + 10,
       cashflow: buildCashflow(10, 100_000, 0),
     })
     expect(result.needRun.liquidOutcomes).toBeUndefined()
   })
 
   it('conserves probability mass', () => {
-    const run = runPlanner(af({ years: 25, cashflow: buildCashflow(25, 250_000, 100_000) }))
+    const run = runPlanner(
+      af({ endYear: START_YEAR + 25, cashflow: buildCashflow(25, 250_000, 100_000) }),
+    )
     for (const propagation of [run.needRun, run.extraRun]) {
       // Three places a path can end: failed, spent out, or holding capital.
       let total =
@@ -134,7 +141,7 @@ describe('AF propagation', () => {
     const years = 15
     const flow = 100_000
     const p = af({
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 1_000_000,
       initialCostBasisRatio: 1,
       cashflow: buildCashflow(years, flow, 0),
@@ -172,7 +179,7 @@ describe('AF propagation', () => {
   it('values a fully taxed holding below its balance, and an untaxed one at par', () => {
     const years = 20
     const shared = {
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 3_000_000,
       cashflow: buildCashflow(years, 0, 0),
       ...singleAsset(0, 0),
@@ -194,7 +201,7 @@ describe('AF propagation', () => {
     const build = (years: number) =>
       runPlanner(
         af({
-          years,
+          endYear: START_YEAR + years,
           initialCapital: 1_000_000,
           initialCostBasisRatio: 1,
           cashflow: buildCashflow(years, 0, 0),
@@ -216,7 +223,7 @@ describe('AF propagation', () => {
   it('raises the cost basis when money is deposited', () => {
     const years = 10
     const shared = {
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 1_000_000,
       initialCostBasisRatio: 0.2,
       ...singleAsset(0.05, 0),
@@ -248,7 +255,7 @@ describe('AF propagation', () => {
       ],
     })
     const shared = {
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 4_000_000,
       initialCostBasisRatio: 1,
       cashflow: buildCashflow(years, 100_000, 0),
@@ -274,7 +281,7 @@ describe('AF propagation', () => {
     // A deep loss with a fresh basis: the realised loss on the withdrawal
     // swamps the schablon, so the net capital income is negative.
     const p = af({
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 2_000_000,
       initialCostBasisRatio: 1,
       cashflow: buildCashflow(years, 500_000, 0),
@@ -300,7 +307,7 @@ describe('AF propagation', () => {
     const oneYear = (flow: number) =>
       runPlanner(
         af({
-          years: 1,
+          endYear: START_YEAR + 1,
           initialCapital: capital,
           initialCostBasisRatio: 0,
           afSchablonRate: 0,
@@ -338,7 +345,7 @@ describe('AF propagation', () => {
       // 500 000, pay out 100 000 a year, and run the account dry in year seven.
       const run = runPlanner(
         af({
-          years: 10,
+          endYear: START_YEAR + 10,
           initialCapital: capital,
           initialCostBasisRatio: 0,
           afSchablonRate: 0,
@@ -366,7 +373,7 @@ describe('AF propagation', () => {
       // rather than spend into a tax bill and fail.
       const run = runPlanner(
         af({
-          years: 1,
+          endYear: START_YEAR + 1,
           initialCapital: capital,
           initialCostBasisRatio: 0,
           afSchablonRate: 0,
@@ -385,7 +392,7 @@ describe('AF propagation', () => {
     const years = 20
     const inflation = 0.02
     const p = af({
-      years,
+      endYear: START_YEAR + years,
       inflationRate: inflation,
       initialCapital: 1_000_000,
       initialCostBasisRatio: 1,
@@ -433,7 +440,7 @@ describe('AF propagation', () => {
   it('deflates the nominal loss-credit threshold', () => {
     const years = 30
     const shared = {
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 2_000_000,
       cashflow: buildCashflow(years, 150_000, 0),
       ...singleAsset(0.02, 0.18),
@@ -469,7 +476,7 @@ describe('AF against Monte Carlo', () => {
     const years = 25
     const inflation = 0.02
     const p = af({
-      years,
+      endYear: START_YEAR + years,
       inflationRate: inflation,
       initialCapital: 5_000_000,
       initialCostBasisRatio: 0.7,

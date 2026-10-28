@@ -8,10 +8,13 @@ import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
 import { formatKr } from '../planner/format'
 import type { PlannerParameters } from '../planner/types'
 
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 60
+
 function plan(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
   return {
     ...defaultPlannerParameters(),
-    years: 12,
+    endYear: START_YEAR + 12,
     initialCapital: 9_000_000,
     cashflow: buildCashflow(12, 200_000, 100_000),
     ...overrides,

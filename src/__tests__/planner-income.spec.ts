@@ -114,6 +114,14 @@ describe('the checked-in income reference', () => {
     }
   })
 
+  it('gives no group for a start that is a calendar year rather than an age', () => {
+    // The start is only a label, so it may be 2026. SCB's medians are by age,
+    // and a calendar year must not fall into the oldest band as if it were 90.
+    expect(medianForHousehold(reference, 2026, 1.51)).toBeNull()
+    expect(medianForHousehold(reference, 121, 1.51)).toBeNull()
+    expect(medianForHousehold(reference, 120, 1.51)).not.toBeNull()
+  })
+
   it('puts retirees below the working-age median, which is why the band matters', () => {
     const working = medianForHousehold(reference, 55, 1.51)!
     const retired = medianForHousehold(reference, 70, 1.51)!

@@ -7,6 +7,9 @@ import { usePlannerStore } from '../stores/planner'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
 import { formatKr, formatRelative } from '../planner/format'
 
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 60
+
 /**
  * D3Chart observes its container to render only when it is on screen, and jsdom
  * has no IntersectionObserver. A stub that never reports intersection leaves the
@@ -38,7 +41,7 @@ function mountOutcome() {
   store.$patch({
     ...defaultPlannerParameters(),
     iskAllowance: 0,
-    years: YEARS,
+    endYear: START_YEAR + YEARS,
     initialCapital: INITIAL_CAPITAL,
     cashflow: buildCashflow(YEARS, NEED, EXTRA),
   })
@@ -159,7 +162,7 @@ describe('the planned total', () => {
     const store = usePlannerStore()
     store.$patch({
       ...defaultPlannerParameters(),
-      years: 3,
+      endYear: START_YEAR + 3,
       cashflow: [
         { need: 100_000, extra: 50_000 },
         { need: 100_000, extra: -20_000 },

@@ -16,11 +16,14 @@ import {
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
 import type { PlannerParameters } from '../planner/types'
 
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 60
+
 function plan(overrides: Partial<PlannerParameters> = {}): PlannerParameters {
   return {
     ...defaultPlannerParameters(),
     iskAllowance: 0,
-    years: 20,
+    endYear: START_YEAR + 20,
     initialCapital: 6_000_000,
     cashflow: buildCashflow(20, 200_000, 100_000),
     ...overrides,
@@ -83,7 +86,7 @@ describe('stressedParams', () => {
     // A negative need is money going in. The dimension asks "what if this is
     // wrong by a factor of two"; flipping the sign for deposits asks something
     // else entirely.
-    const params = plan({ years: 4, cashflow: buildCashflow(4, -100_000, 0) })
+    const params = plan({ endYear: START_YEAR + 4, cashflow: buildCashflow(4, -100_000, 0) })
     expect(stressedParams(params, at('need', 1), 'bad').cashflow[0]!.need).toBeCloseTo(-200_000, 6)
   })
 

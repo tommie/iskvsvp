@@ -9,6 +9,7 @@ import type {
   WithdrawalOutcome,
   YearOutcome,
 } from './types'
+import { planYears } from './types'
 
 /** Headroom above the drift used to size the top of the wealth grid. */
 const GRID_HEADROOM_SIGMAS = 6
@@ -191,7 +192,7 @@ function reserveSchedule(
   rateFor: (horizon: number) => number,
   keepRate: number,
 ) {
-  const years = params.years
+  const years = planYears(params)
   const reserve = new Float64Array(years + 1)
   const annuity = new Float64Array(years + 1)
   const keep = new Float64Array(years + 1)
@@ -672,8 +673,9 @@ function gridBounds(params: PlannerParameters, moments: PortfolioMoments) {
     scale = Math.max(scale, Math.abs(year.need) + Math.max(0, year.extra))
   }
 
-  const drift = Math.max(0, moments.logMean) * params.years
-  const spread = moments.logStdDev * Math.sqrt(params.years) * GRID_HEADROOM_SIGMAS
+  const years = planYears(params)
+  const drift = Math.max(0, moments.logMean) * years
+  const spread = moments.logStdDev * Math.sqrt(years) * GRID_HEADROOM_SIGMAS
   const high = (Math.max(params.initialCapital, 0) + deposits + scale) * Math.exp(drift + spread)
   const low = Math.max(1e-6, scale * GRID_LOW_FRACTION)
 
@@ -1070,7 +1072,7 @@ function quantileOf(grid: Float64Array, mass: Float64Array, atZero: number, p: n
 
 function summarize(
   year: number,
-  startAge: number,
+  startYear: number,
   grid: Float64Array,
   mass: Float64Array,
   ruin: number,
@@ -1088,7 +1090,7 @@ function summarize(
 
   return {
     year,
-    age: startAge + year,
+    yearLabel: startYear + year,
     ruinProbability: ruin,
     mean,
     percentile5: quantileOf(grid, mass, atZero, 0.05),
@@ -1151,7 +1153,7 @@ function flowQuantile(histogram: FlowHistogram, p: number): number {
  */
 function summarizeWithdrawal(
   index: number,
-  startAge: number,
+  startYear: number,
   histogram: FlowHistogram,
 ): WithdrawalOutcome {
   let mean = 0
@@ -1161,7 +1163,7 @@ function summarizeWithdrawal(
 
   return {
     index,
-    age: startAge + index,
+    yearLabel: startYear + index,
     mean,
     percentile10: flowQuantile(histogram, 0.1),
     median: flowQuantile(histogram, 0.5),
@@ -1222,12 +1224,10 @@ function liquidDistribution(
 }
 
 function validate(params: PlannerParameters): void {
-  if (!Number.isInteger(params.years) || params.years < 1) {
-    throw new Error(`planner: years must be a positive integer, got ${params.years}`)
-  }
-  if (params.cashflow.length !== params.years) {
+  const years = planYears(params)
+  if (params.cashflow.length !== years) {
     throw new Error(
-      `planner: cashflow has ${params.cashflow.length} entries but the horizon is ${params.years} years`,
+      `planner: cashflow has ${params.cashflow.length} entries but the horizon is ${years} years`,
     )
   }
   if (!(params.initialCapital >= 0)) {
@@ -1274,6 +1274,7 @@ function propagate(
   }
 
   const isAF = params.accountType === 'AF'
+  const years = planYears(params)
   const ctx: StepContext = {
     spec,
     basis,
@@ -1329,7 +1330,7 @@ function propagate(
       : params.initialCapital
     return {
       year: 0,
-      age: params.startAge,
+      yearLabel: params.startYear,
       ruinProbability: 0,
       mean: value,
       percentile5: value,
@@ -1350,7 +1351,7 @@ function propagate(
   const liquidOutcomes: YearOutcome[] = isAF ? [startOutcome(true)] : []
   let liquidMass: Float64Array | null = null
 
-  for (let year = 0; year < params.years; year++) {
+  for (let year = 0; year < years; year++) {
     const entry = params.cashflow[year]!
     const extra = Math.max(0, entry.extra)
     const policy: YearPolicy =
@@ -1433,7 +1434,7 @@ function propagate(
     addFlow(flows, 0, ruin + depleted)
 
     const stepped = step(ctx, values, mass, policy, allowanceReal, lossThresholdReal, flows)
-    withdrawals.push(summarizeWithdrawal(year, params.startAge, flows))
+    withdrawals.push(summarizeWithdrawal(year, params.startYear, flows))
 
     // Ruin is absorbing. A deposit scheduled after the plan already failed to
     // cover its need does not undo that failure, so the ruined mass is never
@@ -1448,7 +1449,7 @@ function propagate(
     outcomes.push(
       summarize(
         year + 1,
-        params.startAge,
+        params.startYear,
         spec.grid,
         marginalOverBasis(mass, spec, basis),
         ruin,
@@ -1462,7 +1463,7 @@ function propagate(
       // which lets the charts follow the same toggle as the table.
       liquidMass = liquidDistribution(mass, spec, basis, params.capitalGainsTaxRate)
       liquidOutcomes.push(
-        summarize(year + 1, params.startAge, spec.grid, liquidMass, ruin, depleted),
+        summarize(year + 1, params.startYear, spec.grid, liquidMass, ruin, depleted),
       )
     }
   }
@@ -1529,6 +1530,7 @@ function setup(params: PlannerParameters, sharedSpec?: GridSpec) {
   // pays none of its cost.
   const basis = buildBasisGrid(params.accountType === 'AF' ? params.basisNodes : 1)
 
+  const years = planYears(params)
   const rateFor = (horizon: number) => reserveReturnFor(params, portfolio, horizon)
   const bequestReturn = bequestReturnFor(params, portfolio)
   return {
@@ -1538,7 +1540,7 @@ function setup(params: PlannerParameters, sharedSpec?: GridSpec) {
     basis,
     // Reported at the plan's full horizon, which is the least conservative point
     // on the curve: a commitment nearer than that discounts lower.
-    reserveReturn: rateFor(params.years),
+    reserveReturn: rateFor(years),
     bequestReturn,
     schedule: reserveSchedule(params, rateFor, bequestReturn),
   }
@@ -1644,11 +1646,12 @@ export function runSummary(
     if (year === 0 || wanted < plannedLow) plannedLow = wanted
     if (year === 0 || wanted > plannedHigh) plannedHigh = wanted
   }
+  const years = planYears(params)
   return {
     survival: 1 - run.finalDistribution.ruinProbability,
     plannedWithdrawn: run.plannedWithdrawn,
     expectedWithdrawn: run.expectedWithdrawn,
-    years: params.years,
+    years,
     minWithdrawal: lowest,
     maxWithdrawal: highest,
     plannedMin: plannedLow,

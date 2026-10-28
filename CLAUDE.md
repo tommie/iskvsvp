@@ -172,6 +172,12 @@ Per year, mirroring `simulation.ts`'s ordering: `w' = (w·G − c_t) − tax`.
 - `c_t` is the year's real cash flow; negative means a deposit.
 - Mass is scattered onto the two bracketing grid nodes, **linearly in value space**. That conserves total mass *and* the arithmetic mean exactly; log-space weights would preserve the geometric mean instead and let the reported mean drift over a long horizon.
 
+### Start and end year
+
+- The plan runs from `startYear` to `endYear` and the engine uses only the **difference** (`planYears`, which throws unless it is a whole number of at least one year). They are labels: an age or a calendar year works equally, which is why the names are generic, and the results carry `yearLabel = startYear + index` for the axes. Deriving the horizon rather than storing it means advancing the start by one with the end fixed shortens the plan by one year, which with the adaptive rule's dependence on balance and years left alone gives next year's budget.
+- **The income comparison is the one place the number means something.** SCB's group medians are by age band, so `medianForHousehold` reads `startYear` as an age and returns no group for a start above 120 (a calendar year). Without that a 2026 would fall through to the oldest band and look like an answer. The percentile ladder itself does not depend on age and still shows.
+- URL keys are `s` and `e`.
+
 ### Invariants worth preserving
 
 - **Ruin is absorbing**, and is defined as failing to fund the *need* withdrawal in full. A later deposit does not revive a failed plan.
@@ -363,7 +369,7 @@ The Slutkapital table can restate its figures as changes rather than amounts (`f
 **planner.ts**:
 - Planner parameters as refs, debounced recompute (runs on the main thread; a 40-year plan is ~50 ms)
 - URL sync via `src/planner/url.ts`; the cashflow is run-length encoded so a multi-phase plan stays short
-- `years` and `cashflow.length` are kept equal by a watcher, since the engine throws if they disagree
+- `years` is `endYear - startYear` (a computed), and `cashflow.length` is kept equal to it by a watcher that only follows whole, positive values, since the engine throws if they disagree
 - Two watchers, not one: `engineParameters` (everything the propagation reads) triggers the recompute, the full `parameters` only the URL push. See "The income comparison"
 - Actions: run(), setCashflowRange(), addAsset(), removeAsset(), setCorrelation(), initUrlSync()
 

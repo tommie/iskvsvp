@@ -22,7 +22,7 @@ const renderSurvival = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   const outcomes = props.runs[0]!.outcomes
   const x = d3
     .scaleLinear()
-    .domain([outcomes[0]!.age, outcomes[outcomes.length - 1]!.age])
+    .domain([outcomes[0]!.yearLabel, outcomes[outcomes.length - 1]!.yearLabel])
     .range([0, innerWidth])
   // The full probability scale, not a zoomed one: truncating the axis would
   // exaggerate the distance between two plans that both mostly hold.
@@ -45,7 +45,7 @@ const renderSurvival = (svgEl: SVGSVGElement, container: HTMLDivElement) => {
   for (const { outcomes: series, color, dashed } of props.runs) {
     const line = d3
       .line<(typeof series)[number]>()
-      .x((o) => x(o.age))
+      .x((o) => x(o.yearLabel))
       .y((o) => y(survival(o)))
     plot
       .append('path')

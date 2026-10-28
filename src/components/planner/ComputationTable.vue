@@ -7,7 +7,7 @@ import { formatKr, formatKrExact, formatPercent } from '../../planner/format'
 import CollapsibleCard from './CollapsibleCard.vue'
 
 const store = usePlannerStore()
-const { results, cashflow, startAge } = storeToRefs(store)
+const { results, cashflow, startYear } = storeToRefs(store)
 
 /**
  * One spreadsheet column: what it is called, what it computes, and the prose
@@ -37,10 +37,10 @@ const columns = computed<Column[]>(() => {
 
   return [
     {
-      label: 'Ålder',
-      formula: 'startålder + t',
-      note: 'Bara en etikett. Planen räknar i år, inte i kalenderår.',
-      cell: (t) => String(startAge.value + t),
+      label: 'År',
+      formula: 'startår + t',
+      note: 'Bara en etikett: planen räknar bara antal år från start, så det kan vara ålder eller årtal.',
+      cell: (t) => String(startYear.value + t),
       input: true,
     },
     {

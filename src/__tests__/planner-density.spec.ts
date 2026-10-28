@@ -4,6 +4,9 @@ import { densityAt, densityBins } from '../planner/density'
 import { runPlanner } from '../planner/propagate'
 import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
 
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 60
+
 function integrate(bins: ReturnType<typeof densityBins>): number {
   return bins.reduce((sum, bin) => sum + bin.density * bin.decades, 0)
 }
@@ -13,7 +16,7 @@ describe('densityBins', () => {
     const years = 30
     const result = runPlanner({
       ...defaultPlannerParameters(),
-      years,
+      endYear: START_YEAR + years,
       initialCapital: 6_000_000,
       cashflow: buildCashflow(years, 250_000, 0),
     })
@@ -32,7 +35,7 @@ describe('densityBins', () => {
     const years = 20
     const run = runPlanner({
       ...defaultPlannerParameters(),
-      years,
+      endYear: START_YEAR + years,
       cashflow: buildCashflow(years, 150_000, 0),
     }).needRun
 
@@ -115,7 +118,7 @@ describe('why the final-distribution marker is the median', () => {
     const params = {
       ...defaultPlannerParameters(),
       iskAllowance: 0,
-      years,
+      endYear: START_YEAR + years,
       bequestRatio: 0.5,
       initialCapital: 9_000_000,
       cashflow: buildCashflow(years, 200_000, 100_000),
