@@ -102,6 +102,24 @@ export interface OutcomeProbabilities {
   breakEvenRate: number
 }
 
+// The constant real withdrawal a scenario's portfolio, tax and horizon can
+// carry at a given survival, found on the same paths as the main run. This is
+// Bengen's question put to the Monte Carlo: his SAFEMAX is the highest constant
+// rate that survived the worst historical sequence; with sampled paths the
+// worst case is a percentile, so it is the highest constant rate that survives
+// at least `targetSurvival` of them.
+export interface BengenRate {
+  // Annual amount in today's money, held constant (no extra, no bequest, no age curve)
+  amount: number
+  // The same, as a share of the starting capital
+  rate: number
+  targetSurvival: number
+  // Paths it was found on
+  paths: number
+  // True when even the highest amount tried survived, so the real figure is higher
+  atLeast: boolean
+}
+
 export interface SimulationResults {
   // Labels for each scenario (e.g., ["ISK", "VP"])
   labels: string[]
@@ -120,6 +138,9 @@ export interface SimulationResults {
 
   // How many paths were run and how precisely survival is known
   convergence: Convergence
+
+  // The constant withdrawal that survives, for comparison with the need
+  bengen: BengenRate[]
 }
 
 // Asset property parameter format: "assets.weight.0", etc.

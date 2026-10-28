@@ -205,6 +205,7 @@ const getCellStyle = (
 }
 
 const convergence = computed(() => simulationResults.value?.convergence)
+const bengen = computed(() => simulationResults.value?.bengen ?? [])
 
 // An uncertainty, with the % on the number. Below one per cent the exact figure
 // is noise: it would say 0,4 where all anyone should take from it is that the
@@ -257,7 +258,7 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
       <table class="table table-bordered table-hover">
         <thead>
           <tr>
-            <th>Sannolikhet</th>
+            <th>Utfall</th>
             <th v-for="label in labels" :key="label">{{ label }}</th>
           </tr>
         </thead>
@@ -280,6 +281,21 @@ const hasMultipleScenarios = computed(() => statistics.value.length > 1)
             </th>
             <td v-for="(_, idx) in labels" :key="idx">
               {{ formatUncertainty(convergence.survivalHalfWidth[idx] ?? 0) }}
+            </td>
+          </tr>
+          <tr v-if="bengen.length > 0" class="table-group-divider">
+            <th
+              scope="row"
+              :title="`Högsta fasta, inflationsjusterade uttag, utan extra och arvsmål, som klarar sig i minst ${formatPercent(bengen[0]!.targetSurvival)} av banorna med samma portfölj, skatt och tidsperiod. Bengens regel, men med en percentil av simulerade banor i stället för sämsta historiska.`"
+            >
+              Fast uttag som klarar {{ formatPercent(bengen[0]!.targetSurvival) }} (Bengen), per år
+            </th>
+            <td v-for="(_, idx) in labels" :key="idx">
+              <template v-if="bengen[idx]">
+                ({{ formatNumber(bengen[idx]!.amount) }} kr)
+                <template v-if="bengen[idx]!.atLeast">minst </template
+                >{{ formatPercent(bengen[idx]!.rate) }}
+              </template>
             </td>
           </tr>
         </tbody>

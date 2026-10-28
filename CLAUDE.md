@@ -87,6 +87,14 @@ src/
 - `convergence` on the results says how it stopped (`precision` | `time`) and the achieved half-widths; the statistics tab warns when `converged` is false. Stopping on precision is deterministic in the seed, so a shared link reproduces it; stopping on time is not.
 - The budget covers the path loop; the percentile statistics computed afterwards are extra.
 
+### Bengen Comparison (`bengenRate`)
+
+- Each scenario also reports the **highest constant real withdrawal that survives at least 95% of paths**, with the extra, bequest and age curve switched off. It is Bengen's SAFEMAX put to the Monte Carlo: his is the highest rate that survived the worst historical sequence, and with sampled paths the worst case is a percentile (`BENGEN_SURVIVAL`). It says what the portfolio, tax and horizon can carry as a level amount, to read beside the plan's need.
+- Bisection (10 halvings of 0 to 10% of the starting capital) on the first 1 000 paths of the main run, with the same seeds. Survival falls as the amount rises path by path, which is what makes bisection valid. A candidate stops at its first unfunded year (`stopAtFailure`), so only a yes/no is computed. About 0.4 s per scenario; it runs after the path loop and is not inside the 5 s budget.
+- `atLeast` marks a result at the ceiling: even 10% survived, so the real figure is higher.
+- Cross-checked against the planner's fixed-rule sweep: on its default plan 80% survival allows 252 000 kr/yr (200 000 need plus 52 000 extra); this gives 251 000 (2.79%).
+- Tests pin the zero-return case (capital over years) and the certain-return case (the ordinary annuity, since withdrawals follow the year's return).
+
 ### Tax Model (`simulation.ts`, step 5)
 
 - **ISK**: schablon on the balance, `amount * iskTaxRate * capitalGainsTaxRate`. No CGT on withdrawals or rebalancing.

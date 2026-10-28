@@ -5,6 +5,7 @@ import {
   capitalGainsTax,
   quickselect,
   simulateAll,
+  bengenRate,
 } from '../simulation'
 import { DEFAULT_ASSET_CLASSES, DEFAULT_CORRELATIONS } from '../assets'
 import type { InputParameters } from '../types'
@@ -544,6 +545,72 @@ describe('how many paths simulateAll runs', () => {
     expect(r.snapshots.capital[4]!).toBeCloseTo(0, 6)
     // One year more than the money covers is a failure.
     expect(run(certain({ withdrawalNeed: 200_000, yearsLater: 6 })).needFunded).toBe(false)
+  })
+})
+
+describe('bengenRate', () => {
+  const flat = (annualReturn: number, overrides: Partial<InputParameters> = {}) =>
+    makeParams({
+      assets: [{ name: 'A', weight: 1, expectedReturn: annualReturn, volatility: 0 }],
+      assetCorrelationMatrix: [[1]],
+      ...overrides,
+    })
+
+  it('is the capital over the years when nothing grows', () => {
+    // 1 000 000 over 20 years at no return: 50 000 a year empties it exactly.
+    const b = bengenRate(flat(0, { yearsLater: 20 }), 20)
+    expect(b.atLeast).toBe(false)
+    expect(b.amount).toBeLessThanOrEqual(50_000 + 1e-6)
+    expect(b.amount).toBeGreaterThan(50_000 - 150)
+    expect(b.rate).toBeCloseTo(0.05, 3)
+  })
+
+  it('is the level annuity when the return is certain', () => {
+    // Withdrawals come after the year's return, so this is an ordinary annuity:
+    // P = C·r / (1 - (1 + r)^-n).
+    const r = 0.05
+    const n = 30
+    const annuity = (1_000_000 * r) / (1 - Math.pow(1 + r, -n))
+    const b = bengenRate(flat(r, { yearsLater: n }), 20)
+    expect(b.amount).toBeLessThanOrEqual(annuity + 1e-6)
+    expect(b.amount).toBeGreaterThan(annuity - 150)
+  })
+
+  it('ignores the extra, the bequest and the age curve, which are not Bengen’s rule', () => {
+    const plain = bengenRate(flat(0.03, { yearsLater: 25 }), 20)
+    const decorated = bengenRate(
+      flat(0.03, {
+        yearsLater: 25,
+        withdrawalExtra: 80_000,
+        bequestAmount: 500_000,
+        ageAdjustedSpending: true,
+      }),
+      20,
+    )
+    expect(decorated.amount).toBe(plain.amount)
+  })
+
+  it('reports a lower bound when even the ceiling survives', () => {
+    const b = bengenRate(flat(0.5, { yearsLater: 10 }), 20)
+    expect(b.atLeast).toBe(true)
+    expect(b.rate).toBeCloseTo(0.1, 12)
+  })
+
+  it('asks for less when it must survive more of the paths', () => {
+    const volatile = flat(0.04, {
+      assets: [{ name: 'A', weight: 1, expectedReturn: 0.04, volatility: 0.18 }],
+      yearsLater: 30,
+      seed: 'bengen',
+    })
+    const lenient = bengenRate(volatile, 400, 0.8)
+    const strict = bengenRate(volatile, 400, 0.99)
+    expect(strict.amount).toBeLessThan(lenient.amount)
+  })
+
+  it('is reported once per scenario by simulateAll', () => {
+    const r = simulateAll([flat(0.03), flat(0.03, { iskTaxRate: 0.04 })], ['VP', 'ISK'], undefined)
+    expect(r.bengen).toHaveLength(2)
+    for (const b of r.bengen) expect(b.targetSurvival).toBe(0.95)
   })
 })
 

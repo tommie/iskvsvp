@@ -1,5 +1,6 @@
 import { alea } from 'seedrandom'
 import type {
+  BengenRate,
   InputParameters,
   SimulationResult,
   SimulationResults,
@@ -118,7 +119,19 @@ export function spendingMultiplier(age: number, enabled: boolean): number {
  * Run a single simulation for a single scenario (ISK or VP).
  * Returns period-by-period data, cumulative snapshots, and final asset weights.
  */
-export function runSingleSimulation(params: InputParameters): SingleSimulationResult {
+export interface SingleSimulationOptions {
+  /**
+   * Stop at the first year the need is not paid in full. The arrays in the
+   * result are then short and only `needFunded` means anything; it is for
+   * callers that ask a yes/no question of many paths.
+   */
+  stopAtFailure?: boolean
+}
+
+export function runSingleSimulation(
+  params: InputParameters,
+  options: SingleSimulationOptions = {},
+): SingleSimulationResult {
   const rng = alea(params.seed)
   const isISK = params.iskTaxRate !== undefined
 
@@ -519,6 +532,7 @@ export function runSingleSimulation(params: InputParameters): SingleSimulationRe
     snapshotTaxationDegrees.push(taxationDegree)
     snapshotIskTaxRates.push(currentIskTaxRate)
 
+    if (options.stopAtFailure && !needFunded) break
   }
 
   // Handle final drawdown period if still in drawdown
@@ -660,6 +674,70 @@ function calculateStats(values: number[]): {
  * Run Monte Carlo simulations for multiple parameter sets.
  * Returns aggregated statistics and median samples.
  */
+/** Survival the constant withdrawal has to reach: the 5th percentile path. */
+export const BENGEN_SURVIVAL = 0.95
+// Paths the search runs on. Each step re-runs all of them, so this sets the
+// cost; a thousand put the survival it is judged on within about 0.7 points.
+const BENGEN_PATHS = 1000
+// Halvings of the search interval: the answer is exact to 1/1024 of the ceiling.
+const BENGEN_STEPS = 10
+// Highest withdrawal tried, as a share of the starting capital. Past anything a
+// plan carries; if even this survives the answer is reported as a lower bound.
+const BENGEN_CEILING = 0.1
+
+/**
+ * The highest constant real withdrawal that survives at least `target` of the
+ * paths, by bisection.
+ *
+ * Runs on the same seeds as the main run (path i is `seed + i`), so the paths
+ * are the ones the rest of the table describes. Survival falls as the amount
+ * rises, path by path as well as on average, which is what makes bisection
+ * valid. A candidate stops at its first failed year, since all that matters is
+ * whether it survives.
+ *
+ * The extra, the bequest and the age curve are switched off: Bengen's rule is a
+ * level amount, and with no extra the bequest has nothing to act on anyway.
+ */
+export function bengenRate(
+  params: InputParameters,
+  paths: number = BENGEN_PATHS,
+  target: number = BENGEN_SURVIVAL,
+): BengenRate {
+  // A plan that is only deposits has no starting capital to take a share of.
+  const base = Math.max(params.initialCapital, params.depositAmount * params.depositYears)
+  const level = {
+    ...params,
+    withdrawalExtra: 0,
+    bequestAmount: 0,
+    ageAdjustedSpending: false,
+  }
+  const survival = (amount: number): number => {
+    let survived = 0
+    for (let i = 0; i < paths; i++) {
+      const path = { ...level, withdrawalNeed: amount, seed: params.seed + i.toString() }
+      if (runSingleSimulation(path, { stopAtFailure: true }).needFunded) survived++
+    }
+    return survived / paths
+  }
+  const result = (amount: number, atLeast: boolean): BengenRate => ({
+    amount,
+    rate: base > 0 ? amount / base : 0,
+    targetSurvival: target,
+    paths,
+    atLeast,
+  })
+
+  let low = 0
+  let high = base * BENGEN_CEILING
+  if (survival(high) >= target) return result(high, true)
+  for (let step = 0; step < BENGEN_STEPS; step++) {
+    const mid = (low + high) / 2
+    if (survival(mid) >= target) low = mid
+    else high = mid
+  }
+  return result(low, false)
+}
+
 export interface SimulateOptions {
   /** Wall-clock budget in milliseconds; the run stops and says so when it is spent. */
   timeBudgetMs?: number
@@ -1082,5 +1160,6 @@ export function simulateAll(
     finalAssetWeights: finalAssetWeightsStats,
     outcomeProbabilities,
     convergence,
+    bengen: paramSets.map((p) => bengenRate(p)),
   }
 }
