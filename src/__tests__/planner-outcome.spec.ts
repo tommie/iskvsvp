@@ -1,0 +1,183 @@
+import { describe, it, expect, beforeAll } from 'vitest'
+import { mount } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+
+import PlannerOutcome from '../components/planner/PlannerOutcome.vue'
+import { usePlannerStore } from '../stores/planner'
+import { buildCashflow, defaultPlannerParameters } from '../planner/assets'
+import { formatKr, formatRelative } from '../planner/format'
+
+// Plans in these tests start here and run for a stated number of years.
+const START_YEAR = 60
+
+/**
+ * D3Chart observes its container to render only when it is on screen, and jsdom
+ * has no IntersectionObserver. A stub that never reports intersection leaves the
+ * charts unrendered, which is what this file wants: the subject is the table.
+ */
+beforeAll(() => {
+  globalThis.IntersectionObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return []
+    }
+    readonly root = null
+    readonly rootMargin = ''
+    readonly thresholds: readonly number[] = []
+  } as unknown as typeof IntersectionObserver
+})
+
+const INITIAL_CAPITAL = 6_000_000
+const NEED = 200_000
+const EXTRA = 100_000
+const YEARS = 40
+
+function mountOutcome() {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const store = usePlannerStore()
+  store.$patch({
+    ...defaultPlannerParameters(),
+    iskAllowance: 0,
+    endYear: START_YEAR + YEARS,
+    initialCapital: INITIAL_CAPITAL,
+    cashflow: buildCashflow(YEARS, NEED, EXTRA),
+  })
+  store.run()
+
+  const wrapper = mount(PlannerOutcome, { global: { plugins: [pinia] } })
+  return { wrapper, store }
+}
+
+/** Cells of one body row of the summary table, by its row header. */
+function row(wrapper: ReturnType<typeof mountOutcome>['wrapper'], header: string) {
+  const tr = wrapper.findAll('.summary-table tbody tr').find((r) => r.get('th').text() === header)
+  if (!tr) throw new Error(`no row headed "${header}"`)
+  return tr.findAll('td').map((cell) => cell.text())
+}
+
+async function toggleRelative(wrapper: ReturnType<typeof mountOutcome>['wrapper']) {
+  await wrapper.get('#planner-relative').setValue(true)
+}
+
+describe('PlannerOutcome layout', () => {
+  it('names the curves exactly as it names the columns', () => {
+    const { wrapper } = mountOutcome()
+    const legend = wrapper
+      .findAll('.run-legend .swatch')
+      .map((swatch) => swatch.element.parentElement!.textContent!.trim())
+    // The header row leads with an empty corner cell for the row labels.
+    const columns = wrapper
+      .findAll('.summary-table thead th')
+      .map((th) => th.text())
+      .filter((text) => text !== '')
+
+    expect(legend).toEqual(columns)
+  })
+
+  it('gives every legend swatch the colour and stroke of its curve', () => {
+    // The swatches are drawn by CSS on classes the component owns, and Vue
+    // scopes styles to the component that declares them. Splitting the charts
+    // out of this file moved the markup into the children and left the rules
+    // behind here, so for a while every swatch on the page rendered as an empty
+    // gap — visible to a reader, invisible to a test that only read the labels.
+    const { wrapper } = mountOutcome()
+    const swatches = wrapper.findAll('.run-legend .swatch')
+    expect(swatches.length).toBeGreaterThan(0)
+    for (const swatch of swatches) {
+      // The colour arrives as a custom property so the dashed variant can paint
+      // with it too; without it the swatch has nothing to draw.
+      expect(swatch.attributes('style')).toMatch(/--line-color:\s*#[0-9a-f]{6}/i)
+    }
+    // And the two runs the charts draw dashed are the two marked dashed here,
+    // so the encoding survives between the chart, the legend and the table.
+    expect(wrapper.findAll('.run-legend .swatch.dashed')).toHaveLength(2)
+  })
+})
+
+describe('PlannerOutcome relative view', () => {
+  it('shows amounts in kronor until it is turned on', () => {
+    const { wrapper } = mountOutcome()
+    for (const cell of row(wrapper, 'Median slutkapital')) expect(cell).toContain('kr')
+    for (const cell of row(wrapper, 'Förväntat faktiskt uttag')) expect(cell).toContain('kr')
+  })
+
+  it('keeps the planned withdrawal in kronor, since it is what the rest is measured against', async () => {
+    const { wrapper } = mountOutcome()
+    await toggleRelative(wrapper)
+
+    // The need column plans the need alone; the other two add the extra.
+    const planned = row(wrapper, 'Totalt planerat uttag')
+    expect(planned[0]).toBe(formatKr(YEARS * NEED))
+    expect(planned[1]).toBe(formatKr(YEARS * (NEED + EXTRA)))
+    expect(planned[2]).toBe(formatKr(YEARS * (NEED + EXTRA)))
+  })
+
+  it('states the expected withdrawal against what that column planned', async () => {
+    const { wrapper, store } = mountOutcome()
+    await toggleRelative(wrapper)
+
+    const expected = [
+      formatRelative(store.results!.needRun.expectedWithdrawn, YEARS * NEED),
+      formatRelative(store.results!.adaptiveRun.expectedWithdrawn, YEARS * (NEED + EXTRA)),
+      formatRelative(store.results!.extraRun.expectedWithdrawn, YEARS * (NEED + EXTRA)),
+    ]
+    expect(row(wrapper, 'Förväntat faktiskt uttag')).toEqual(expected)
+    // A plan can only fall short of its own schedule, never exceed it.
+    for (const cell of expected) expect(cell.startsWith('+')).toBe(false)
+  })
+
+  it('states final capital against the capital paid in', async () => {
+    const { wrapper } = mountOutcome()
+    const absolute = row(wrapper, 'Median slutkapital')
+    await toggleRelative(wrapper)
+    const shown = row(wrapper, 'Median slutkapital')
+
+    expect(shown).not.toEqual(absolute)
+    for (const cell of shown) expect(cell).toContain('%')
+
+    // Recovering the amount from the percentage has to land back on the median
+    // the absolute view printed, which pins the reference to the start capital.
+    const percent = Number(shown[0]!.replace('−', '-').replace('+', '').replace(/[\s%]/g, ''))
+    expect(formatKr(INITIAL_CAPITAL * (1 + percent / 100))).toBe(absolute[0])
+  })
+
+  it('leaves the survival probability alone', async () => {
+    const { wrapper } = mountOutcome()
+    const before = row(wrapper, 'Sannolikhet att planen håller')
+    await toggleRelative(wrapper)
+    expect(row(wrapper, 'Sannolikhet att planen håller')).toEqual(before)
+  })
+})
+
+describe('the planned total', () => {
+  it("is the engine's figure, not a second count of the same cash flow", () => {
+    // A negative extra is clamped away everywhere the engine reads one, but the
+    // table used to sum the cash flow itself and did not clamp — so a
+    // hand-edited URL could print a planned total the plan never planned.
+    const pinia = createPinia()
+    setActivePinia(pinia)
+    const store = usePlannerStore()
+    store.$patch({
+      ...defaultPlannerParameters(),
+      endYear: START_YEAR + 3,
+      cashflow: [
+        { need: 100_000, extra: 50_000 },
+        { need: 100_000, extra: -20_000 },
+        { need: 100_000, extra: 50_000 },
+      ],
+    })
+    store.run()
+
+    expect(store.results!.extraRun.plannedWithdrawn).toBe(400_000)
+    // The need run plans the need alone, whatever the extra says.
+    expect(store.results!.needRun.plannedWithdrawn).toBe(300_000)
+
+    const wrapper = mount(PlannerOutcome, { global: { plugins: [pinia] } })
+    const cells = wrapper.findAll('tbody tr')[0]!
+    expect(cells.text()).toContain('Totalt planerat uttag')
+    expect(cells.findAll('td')[2]!.text()).toBe(formatKr(400_000))
+  })
+})

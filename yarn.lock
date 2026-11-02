@@ -626,6 +626,11 @@
   resolved "https://registry.yarnpkg.com/@polka/url/-/url-1.0.0-next.29.tgz#5a40109a1ab5f84d6fd8fc928b19f367cbe7e7b1"
   integrity sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==
 
+"@popperjs/core@^2.9.2":
+  version "2.11.8"
+  resolved "https://registry.yarnpkg.com/@popperjs/core/-/core-2.11.8.tgz#6b79032e760a0899cd4204710beede972a3a185f"
+  integrity sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==
+
 "@rolldown/pluginutils@1.0.0-beta.50":
   version "1.0.0-beta.50"
   resolved "https://registry.yarnpkg.com/@rolldown/pluginutils/-/pluginutils-1.0.0-beta.50.tgz#a12f07e9095b8901debcc17d98b4350f0cc64633"
@@ -750,6 +755,13 @@
   version "24.0.3"
   resolved "https://registry.yarnpkg.com/@tsconfig/node24/-/node24-24.0.3.tgz#168b7ac691e9fcfc23ec75a25c8d3c44df981681"
   integrity sha512-vcERKtKQKHgzt/vfS3Gjasd8SUI2a0WZXpgJURdJsMySpS5+ctgbPfuLj2z/W+w4lAfTWxoN4upKfu2WzIRYnw==
+
+"@types/bootstrap@^5.2.11":
+  version "5.2.11"
+  resolved "https://registry.yarnpkg.com/@types/bootstrap/-/bootstrap-5.2.11.tgz#65916c7b3520e10e732802756414a16b5db9cd80"
+  integrity sha512-69ykbLiNzQxi6Q/y/aYJLrlzI5QkLQjhIYW2U+cxujBxAmaBtmXKtxnFes59Ttfpt936as6xJU0dYnmVpcwIwg==
+  dependencies:
+    "@popperjs/core" "^2.9.2"
 
 "@types/chai@^5.2.2":
   version "5.2.3"
